@@ -44,6 +44,28 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server });
 
+// Helper to broadcast message to all active sockets for a given pair code
+function forwardToTarget(targetCode, messageObj) {
+  if (!targetCode) return false;
+  const targetEntry = clients.get(targetCode.toUpperCase().trim());
+  if (!targetEntry || !targetEntry.sockets || targetEntry.sockets.size === 0) {
+    return false;
+  }
+  const payload = JSON.stringify(messageObj);
+  let sentCount = 0;
+  for (const socket of targetEntry.sockets) {
+    if (socket.readyState === WebSocket.OPEN) {
+      try {
+        socket.send(payload);
+        sentCount++;
+      } catch (err) {
+        console.error(`Failed to send to socket of #${targetCode}:`, err.message);
+      }
+    }
+  }
+  return sentCount > 0;
+}
+
 wss.on("connection", (ws, req) => {
   let registeredCode = null;
 
@@ -59,16 +81,24 @@ wss.on("connection", (ws, req) => {
           if (!code) return;
 
           registeredCode = code;
-          clients.set(code, { ws, partnerCode, connectedAt: Date.now() });
+          let entry = clients.get(code);
+          if (!entry) {
+            entry = { sockets: new Set(), partnerCode, connectedAt: Date.now() };
+            clients.set(code, entry);
+          }
+          entry.sockets.add(ws);
+          if (partnerCode) {
+            entry.partnerCode = partnerCode;
+          }
 
-          console.log(`[+] Device registered with code #${code}. Target partner: #${partnerCode}`);
+          console.log(`[+] Device connected for code #${code} (Total open sockets: ${entry.sockets.size}). Target partner: #${partnerCode}`);
 
-          // Notify self of registration success
+          // Notify self of registration confirmation
           ws.send(JSON.stringify({ type: "registered", pairCode: code }));
 
           // Check if partner is currently online
-          const partnerSession = clients.get(partnerCode);
-          const isPartnerOnline = !!(partnerSession && partnerSession.ws.readyState === WebSocket.OPEN);
+          const partnerEntry = clients.get(partnerCode);
+          const isPartnerOnline = !!(partnerEntry && partnerEntry.sockets && partnerEntry.sockets.size > 0);
 
           ws.send(JSON.stringify({
             type: "partner_status",
@@ -77,19 +107,19 @@ wss.on("connection", (ws, req) => {
           }));
 
           if (isPartnerOnline) {
-            partnerSession.ws.send(JSON.stringify({
+            forwardToTarget(partnerCode, {
               type: "partner_status",
               isOnline: true,
               partnerCode: code
-            }));
+            });
           }
           break;
         }
 
         case "check_partner": {
           const target = (data.partnerCode || "").toUpperCase().trim();
-          const targetSession = clients.get(target);
-          const isOnline = !!(targetSession && targetSession.ws.readyState === WebSocket.OPEN);
+          const targetEntry = clients.get(target);
+          const isOnline = !!(targetEntry && targetEntry.sockets && targetEntry.sockets.size > 0);
           ws.send(JSON.stringify({
             type: "partner_status",
             isOnline,
@@ -100,22 +130,19 @@ wss.on("connection", (ws, req) => {
 
         case "call_initiate": {
           const target = (data.to || "").toUpperCase().trim();
-          const targetSession = clients.get(target);
-
           console.log(`[CALL] ${data.from} calling ${target} (${data.callType})`);
 
-          if (targetSession && targetSession.ws.readyState === WebSocket.OPEN) {
-            targetSession.ws.send(JSON.stringify({
-              type: "call_incoming",
-              from: data.from,
-              callerName: data.callerName || "My Love",
-              callType: data.callType || "VOICE"
-            }));
-          } else {
-            // Partner not connected right now
+          const delivered = forwardToTarget(target, {
+            type: "call_incoming",
+            from: data.from,
+            callerName: data.callerName || "My Love",
+            callType: data.callType || "VOICE"
+          });
+
+          if (!delivered) {
             ws.send(JSON.stringify({
               type: "call_unavailable",
-              reason: "Partner is currently offline or unlinked."
+              reason: "Partner is currently offline or unreachable."
             }));
           }
           break;
@@ -123,67 +150,69 @@ wss.on("connection", (ws, req) => {
 
         case "call_accept": {
           const target = (data.to || "").toUpperCase().trim();
-          const targetSession = clients.get(target);
-
-          if (targetSession && targetSession.ws.readyState === WebSocket.OPEN) {
-            targetSession.ws.send(JSON.stringify({
-              type: "call_accepted",
-              from: data.from
-            }));
-          }
+          forwardToTarget(target, {
+            type: "call_accepted",
+            from: data.from
+          });
           break;
         }
 
         case "call_decline": {
           const target = (data.to || "").toUpperCase().trim();
-          const targetSession = clients.get(target);
-
-          if (targetSession && targetSession.ws.readyState === WebSocket.OPEN) {
-            targetSession.ws.send(JSON.stringify({
-              type: "call_declined",
-              from: data.from
-            }));
-          }
+          forwardToTarget(target, {
+            type: "call_declined",
+            from: data.from
+          });
           break;
         }
 
         case "call_end": {
           const target = (data.to || "").toUpperCase().trim();
-          const targetSession = clients.get(target);
+          forwardToTarget(target, {
+            type: "call_ended",
+            from: data.from
+          });
+          break;
+        }
 
-          if (targetSession && targetSession.ws.readyState === WebSocket.OPEN) {
-            targetSession.ws.send(JSON.stringify({
-              type: "call_ended",
-              from: data.from
-            }));
-          }
+        case "audio_chunk": {
+          // Relay real voice audio PCM chunk to partner with minimal latency
+          const target = (data.to || "").toUpperCase().trim();
+          forwardToTarget(target, {
+            type: "audio_chunk",
+            from: data.from,
+            audioData: data.audioData
+          });
+          break;
+        }
+
+        case "video_frame": {
+          // Relay real camera video frame to partner
+          const target = (data.to || "").toUpperCase().trim();
+          forwardToTarget(target, {
+            type: "video_frame",
+            from: data.from,
+            frameData: data.frameData
+          });
           break;
         }
 
         case "heart_reaction": {
           const target = (data.to || "").toUpperCase().trim();
-          const targetSession = clients.get(target);
-
-          if (targetSession && targetSession.ws.readyState === WebSocket.OPEN) {
-            targetSession.ws.send(JSON.stringify({
-              type: "heart_reaction",
-              from: data.from
-            }));
-          }
+          forwardToTarget(target, {
+            type: "heart_reaction",
+            from: data.from
+          });
           break;
         }
 
         case "webrtc_signal": {
           const target = (data.to || "").toUpperCase().trim();
-          const targetSession = clients.get(target);
-
-          if (targetSession && targetSession.ws.readyState === WebSocket.OPEN) {
-            targetSession.ws.send(JSON.stringify({
-              type: "webrtc_signal",
-              from: data.from,
-              payload: data.payload
-            }));
-          }
+          forwardToTarget(target, {
+            type: "webrtc_signal",
+            from: data.from,
+            payload: data.payload
+          });
           break;
         }
 
@@ -202,20 +231,22 @@ wss.on("connection", (ws, req) => {
 
   ws.on("close", () => {
     if (registeredCode) {
-      console.log(`[-] Device #${registeredCode} disconnected.`);
-      const current = clients.get(registeredCode);
-      if (current) {
-        const partnerCode = current.partnerCode;
-        clients.delete(registeredCode);
+      const entry = clients.get(registeredCode);
+      if (entry) {
+        entry.sockets.delete(ws);
+        console.log(`[-] Socket closed for #${registeredCode}. Remaining sockets: ${entry.sockets.size}`);
 
-        // Notify partner if online
-        const partnerSession = clients.get(partnerCode);
-        if (partnerSession && partnerSession.ws.readyState === WebSocket.OPEN) {
-          partnerSession.ws.send(JSON.stringify({
+        if (entry.sockets.size === 0) {
+          console.log(`[-] Device #${registeredCode} fully disconnected.`);
+          const partnerCode = entry.partnerCode;
+          clients.delete(registeredCode);
+
+          // Notify partner if online
+          forwardToTarget(partnerCode, {
             type: "partner_status",
             isOnline: false,
             partnerCode: registeredCode
-          }));
+          });
         }
       }
     }
@@ -225,6 +256,22 @@ wss.on("connection", (ws, req) => {
     console.error(`WebSocket error for ${registeredCode}:`, err.message);
   });
 });
+
+// Keep-alive heartbeat: ping all open connections every 25 seconds
+setInterval(() => {
+  const pingPayload = JSON.stringify({ type: "ping" });
+  for (const entry of clients.values()) {
+    if (entry.sockets) {
+      for (const socket of entry.sockets) {
+        if (socket.readyState === WebSocket.OPEN) {
+          try {
+            socket.send(pingPayload);
+          } catch (_) {}
+        }
+      }
+    }
+  }
+}, 25000);
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 AmourCall Signaling Server listening on port ${PORT}`);

@@ -1,12 +1,17 @@
 package com.example.viewmodel
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.calling.AudioStreamManager
 import com.example.calling.CallAudioHaptics
 import com.example.calling.CallForegroundService
 import com.example.calling.CallNotificationHelper
 import com.example.data.CoupleRepository
+import com.example.model.AppTheme
 import com.example.model.CallRecord
 import com.example.model.CallSession
 import com.example.model.CallStatus
@@ -17,6 +22,7 @@ import com.example.model.MemoryPhoto
 import com.example.network.ServerConnectionState
 import com.example.network.SignalingClient
 import com.example.network.SignalingEvent
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +33,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import kotlin.random.Random
 
 enum class AppScreen {
@@ -41,7 +49,8 @@ enum class AppScreen {
 class LoveCallViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = CoupleRepository(application)
     private val audioHaptics = CallAudioHaptics(application)
-    private val signalingClient = SignalingClient()
+    private val signalingClient = SignalingClient.getInstance()
+    private val audioStreamManager = AudioStreamManager(application)
 
     val profile: StateFlow<CoupleProfile> = repository.profile
     val memories: StateFlow<List<MemoryPhoto>> = repository.memories
@@ -54,6 +63,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
 
     private val _callSession = MutableStateFlow(CallSession())
     val callSession: StateFlow<CallSession> = _callSession.asStateFlow()
+
+    private val _remoteVideoBitmap = MutableStateFlow<Bitmap?>(null)
+    val remoteVideoBitmap: StateFlow<Bitmap?> = _remoteVideoBitmap.asStateFlow()
 
     private val _floatingHearts = MutableStateFlow<List<FloatingHeart>>(emptyList())
     val floatingHearts: StateFlow<List<FloatingHeart>> = _floatingHearts.asStateFlow()
@@ -104,6 +116,18 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     is SignalingEvent.PartnerStatus -> {
                         val status = if (event.isOnline) "Partner Online ❤️" else "Thinking of you always ❤️"
                         repository.saveProfile(profile.value.copy(partnerStatus = status))
+                    }
+                    is SignalingEvent.AudioChunk -> {
+                        audioStreamManager.playAudioChunk(event.audioData)
+                    }
+                    is SignalingEvent.VideoFrame -> {
+                        try {
+                            val bytes = Base64.decode(event.frameData, Base64.NO_WRAP)
+                            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            if (decoded != null) {
+                                _remoteVideoBitmap.value = decoded
+                            }
+                        } catch (_: Exception) {}
                     }
                     is SignalingEvent.HeartReaction -> {
                         spawnFloatingHeart()
@@ -239,12 +263,16 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         audioHaptics.playConnectedChime()
 
         val currentType = _callSession.value.type
+        val speakerDefault = currentType == CallType.VIDEO
         _callSession.value = _callSession.value.copy(
             status = CallStatus.CONNECTED,
             durationSeconds = 0,
-            isSpeakerOn = currentType == CallType.VIDEO
+            isSpeakerOn = speakerDefault
         )
-        audioHaptics.setSpeakerphone(currentType == CallType.VIDEO)
+        audioHaptics.setSpeakerphone(speakerDefault)
+
+        // Start real VoIP audio streaming
+        audioStreamManager.start(profile.value.partnerPairCode, initialSpeakerOn = speakerDefault)
 
         if (!isOutgoingInitiated) {
             signalingClient.sendCallAccept(profile.value.partnerPairCode)
@@ -266,6 +294,8 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         callTimerJob?.cancel()
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.stopAll()
+        audioStreamManager.stop()
+        _remoteVideoBitmap.value = null
 
         if (notifyPartner) {
             signalingClient.sendCallDecline(profile.value.partnerPairCode)
@@ -286,6 +316,8 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.playEndCallTone()
         audioHaptics.stopAll()
+        audioStreamManager.stop()
+        _remoteVideoBitmap.value = null
 
         if (notifyPartner) {
             signalingClient.sendCallEnd(profile.value.partnerPairCode)
@@ -310,12 +342,14 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         val next = !_callSession.value.isMuted
         _callSession.value = _callSession.value.copy(isMuted = next)
         audioHaptics.setMicrophoneMute(next)
+        audioStreamManager.setMuted(next)
     }
 
     fun toggleSpeaker() {
         val next = !_callSession.value.isSpeakerOn
         _callSession.value = _callSession.value.copy(isSpeakerOn = next)
         audioHaptics.setSpeakerphone(next)
+        audioStreamManager.setSpeakerphone(next)
     }
 
     fun toggleVideo() {
@@ -328,6 +362,41 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         _callSession.value = _callSession.value.copy(
             isFrontCamera = !_callSession.value.isFrontCamera
         )
+    }
+
+    fun sendVideoFrame(bitmap: Bitmap) {
+        if (_callSession.value.status != CallStatus.CONNECTED || _callSession.value.type != CallType.VIDEO) return
+        val partnerCode = profile.value.partnerPairCode
+        if (partnerCode.isBlank()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Downsample bitmap for fast real-time transmission over WebSocket
+                val scaled = if (bitmap.width > 360 || bitmap.height > 480) {
+                    val scaleFactor = 360f / maxOf(bitmap.width, bitmap.height)
+                    Bitmap.createScaledBitmap(
+                        bitmap,
+                        (bitmap.width * scaleFactor).toInt(),
+                        (bitmap.height * scaleFactor).toInt(),
+                        true
+                    )
+                } else {
+                    bitmap
+                }
+                val stream = ByteArrayOutputStream()
+                scaled.compress(Bitmap.CompressFormat.JPEG, 45, stream)
+                val base64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+                signalingClient.sendVideoFrame(partnerCode, base64)
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun setAppTheme(theme: AppTheme) {
+        repository.setAppTheme(theme)
+    }
+
+    fun updateUserName(name: String) {
+        repository.updateUserName(name)
     }
 
     fun sendFloatingHeart() {
@@ -405,6 +474,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         callTimerJob?.cancel()
         simulatedAnswerJob?.cancel()
         audioHaptics.release()
-        signalingClient.disconnect()
+        audioStreamManager.stop()
+        // DO NOT disconnect singleton signalingClient here so CallForegroundService stays connected 24/7!
     }
 }

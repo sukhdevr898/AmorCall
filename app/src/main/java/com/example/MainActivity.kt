@@ -41,10 +41,11 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
 
         setContent {
-            AmourCallTheme {
+            val profile by viewModel.profile.collectAsState()
+            AmourCallTheme(theme = profile.appTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = LoveDarkBg
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.background
                 ) {
                     AppNavigation(
                         viewModel = viewModel,

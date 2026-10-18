@@ -36,6 +36,7 @@ class CoupleRepository(context: Context) {
     }
 
     private fun loadProfile(): CoupleProfile {
+        val userName = prefs.getString("user_name", "You") ?: "You"
         val partnerName = prefs.getString("partner_name", "My Love") ?: "My Love"
         val partnerNickname = prefs.getString("partner_nickname", "Sweetheart") ?: "Sweetheart"
 
@@ -64,8 +65,15 @@ class CoupleRepository(context: Context) {
         val serverUrl = prefs.getString("server_url", "ws://10.0.2.2:3000") ?: "ws://10.0.2.2:3000"
         val isOnboardingCompleted = prefs.getBoolean("is_onboarding_completed", false)
         val isNotificationsMuted = prefs.getBoolean("is_notifications_muted", false)
+        val themeStr = prefs.getString("app_theme", com.example.model.AppTheme.LOVE.name) ?: com.example.model.AppTheme.LOVE.name
+        val appTheme = try {
+            com.example.model.AppTheme.valueOf(themeStr)
+        } catch (_: Exception) {
+            com.example.model.AppTheme.LOVE
+        }
 
         return CoupleProfile(
+            userName = userName,
             partnerName = partnerName,
             partnerNickname = partnerNickname,
             myPairCode = myPairCode,
@@ -76,7 +84,8 @@ class CoupleRepository(context: Context) {
             avatarUri = avatarUri,
             serverUrl = serverUrl,
             isOnboardingCompleted = isOnboardingCompleted,
-            isNotificationsMuted = isNotificationsMuted
+            isNotificationsMuted = isNotificationsMuted,
+            appTheme = appTheme
         )
     }
 
@@ -95,6 +104,16 @@ class CoupleRepository(context: Context) {
         saveProfile(updated)
     }
 
+    fun setAppTheme(theme: com.example.model.AppTheme) {
+        val updated = _profile.value.copy(appTheme = theme)
+        saveProfile(updated)
+    }
+
+    fun updateUserName(name: String) {
+        val updated = _profile.value.copy(userName = name.ifBlank { "You" })
+        saveProfile(updated)
+    }
+
     fun saveProfile(profile: CoupleProfile) {
         val cleanPartnerCode = if (profile.partnerPairCode.equals("ROSE99", ignoreCase = true) ||
             profile.partnerPairCode.equals(profile.myPairCode, ignoreCase = true)) {
@@ -105,6 +124,7 @@ class CoupleRepository(context: Context) {
         val actualIsPaired = cleanPartnerCode.isNotBlank()
 
         prefs.edit()
+            .putString("user_name", profile.userName)
             .putString("partner_name", profile.partnerName)
             .putString("partner_nickname", profile.partnerNickname)
             .putString("my_pair_code", profile.myPairCode)
@@ -116,6 +136,7 @@ class CoupleRepository(context: Context) {
             .putString("server_url", profile.serverUrl)
             .putBoolean("is_onboarding_completed", profile.isOnboardingCompleted)
             .putBoolean("is_notifications_muted", profile.isNotificationsMuted)
+            .putString("app_theme", profile.appTheme.name)
             .apply()
         _profile.value = profile.copy(
             partnerPairCode = cleanPartnerCode,

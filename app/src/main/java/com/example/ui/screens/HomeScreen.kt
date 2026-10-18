@@ -1,5 +1,11 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,56 +23,61 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import androidx.core.content.ContextCompat
+import com.example.model.AppTheme
+import com.example.model.CallRecord
 import com.example.model.CallType
-import com.example.model.MemoryPhoto
-import com.example.ui.components.MemoryBackground
+import com.example.network.ServerConnectionState
 import com.example.ui.theme.LoveAccentGreen
 import com.example.ui.theme.LoveBlush
-import com.example.ui.theme.LoveCardBorder
-import com.example.ui.theme.LoveCardSurface
 import com.example.ui.theme.LoveCrimson
 import com.example.ui.theme.LoveGold
 import com.example.ui.theme.LoveRose
-import com.example.ui.theme.LoveTextMuted
 import com.example.ui.theme.LoveWhite
 import com.example.viewmodel.AppScreen
 import com.example.viewmodel.LoveCallViewModel
@@ -76,82 +87,252 @@ fun HomeScreen(
     viewModel: LoveCallViewModel,
     onRequestPermissions: (() -> Unit) -> Unit
 ) {
+    val context = LocalContext.current
     val profile by viewModel.profile.collectAsState()
-    val memories by viewModel.memories.collectAsState()
-    val activeWallpaper by viewModel.activeWallpaper.collectAsState()
     val callHistory by viewModel.callHistory.collectAsState()
+    val serverState by viewModel.serverConnectionState.collectAsState()
 
-    val daysTogether = ((System.currentTimeMillis() - profile.relationshipStartDateEpochMs) /
-            (1000L * 60 * 60 * 24)).coerceAtLeast(1)
+    var showThemeDialog by remember { mutableStateOf(false) }
+    var showPermissionsModal by remember { mutableStateOf(false) }
 
-    MemoryBackground(memory = activeWallpaper, dimAmount = 0.72f) {
+    fun checkMissingPermissions(): Boolean {
+        val permissions = mutableListOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        return permissions.any {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        showPermissionsModal = checkMissingPermissions()
+    }
+
+    // Permission Modal Dialog
+    if (showPermissionsModal) {
+        AlertDialog(
+            onDismissRequest = { showPermissionsModal = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = LoveRose,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Permissions Required",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = "AmourCall requires Microphone, Camera, and Notification permissions to provide real-time voice and video calls and receive incoming calls while the app is in the background.\n\nPlease allow these permissions to ensure full hotline functionality.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onRequestPermissions {
+                            showPermissionsModal = checkMissingPermissions()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                    modifier = Modifier.testTag("modal_grant_permissions_button")
+                ) {
+                    Text("Grant Permissions", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(
+                        onClick = {
+                            val intent = Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", context.packageName, null)
+                            )
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Text("App Settings", color = LoveGold)
+                    }
+                    TextButton(
+                        onClick = { showPermissionsModal = false }
+                    ) {
+                        Text("Later", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    // Theme Selector Dialog
+    if (showThemeDialog) {
+        AlertDialog(
+            onDismissRequest = { showThemeDialog = false },
+            title = {
+                Text(
+                    text = "Select App Theme",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ThemeOptionRow(
+                        title = "Love Theme (Romantic Dark)",
+                        subtitle = "Deep wine, romantic rose & gold accents",
+                        icon = Icons.Default.Favorite,
+                        iconTint = LoveRose,
+                        isSelected = profile.appTheme == AppTheme.LOVE,
+                        onClick = {
+                            viewModel.setAppTheme(AppTheme.LOVE)
+                            showThemeDialog = false
+                        }
+                    )
+                    ThemeOptionRow(
+                        title = "Dark Theme (Slate AMOLED)",
+                        subtitle = "Sleek pitch dark for battery saving",
+                        icon = Icons.Default.DarkMode,
+                        iconTint = Color(0xFF60A5FA),
+                        isSelected = profile.appTheme == AppTheme.DARK,
+                        onClick = {
+                            viewModel.setAppTheme(AppTheme.DARK)
+                            showThemeDialog = false
+                        }
+                    )
+                    ThemeOptionRow(
+                        title = "Light Theme (Clean White)",
+                        subtitle = "Bright, high-contrast, modern clean look",
+                        icon = Icons.Default.LightMode,
+                        iconTint = Color(0xFFF59E0B),
+                        isSelected = profile.appTheme == AppTheme.LIGHT,
+                        onClick = {
+                            viewModel.setAppTheme(AppTheme.LIGHT)
+                            showThemeDialog = false
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showThemeDialog = false }) {
+                    Text("Done", color = LoveRose)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
         ) {
-            // Top Bar
+            // Top Bar: Branding, Connection, Theme, Mute, Pairing, Dev
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                    .padding(horizontal = 18.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Title & connection status
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "AmourCall",
-                            fontSize = 24.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
-                            color = LoveWhite
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Default.Favorite,
                             contentDescription = "Love Icon",
                             tint = LoveRose,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                    val serverState by viewModel.serverConnectionState.collectAsState()
+
+                    // Real-time server connection indicator
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.clickable { viewModel.navigateTo(AppScreen.PAIRING) }
                     ) {
-                        val pairStatusText = if (profile.isPaired && profile.partnerPairCode.isNotBlank()) {
-                            "#${profile.myPairCode} ⇄ #${profile.partnerPairCode}"
+                        val isConnected = serverState == ServerConnectionState.CONNECTED
+                        val statusLabel = if (isConnected) {
+                            if (profile.isPaired) "Hotline Online" else "Server Connected"
                         } else {
-                            "#${profile.myPairCode} • Not Linked"
+                            "Connecting..."
                         }
-                        Text(
-                            text = pairStatusText,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (profile.isPaired) LoveGold else LoveRose
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
-                                .size(6.dp)
+                                .size(7.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    if (profile.isPaired && serverState == com.example.network.ServerConnectionState.CONNECTED)
-                                        LoveAccentGreen else LoveRose
-                                )
+                                .background(if (isConnected) LoveAccentGreen else LoveRose)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = statusLabel,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isConnected) LoveAccentGreen else LoveRose
                         )
                     }
                 }
 
+                // Important Top Action Icons
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Theme Switcher Button
+                    IconButton(
+                        onClick = { showThemeDialog = true },
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                            .testTag("theme_selector_button")
+                    ) {
+                        val themeIcon = when (profile.appTheme) {
+                            AppTheme.LOVE -> Icons.Default.Favorite
+                            AppTheme.DARK -> Icons.Default.DarkMode
+                            AppTheme.LIGHT -> Icons.Default.LightMode
+                        }
+                        Icon(
+                            imageVector = themeIcon,
+                            contentDescription = "Change Theme",
+                            tint = LoveRose,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // Notification Mute Toggle
                     IconButton(
                         onClick = { viewModel.toggleMuteNotifications() },
                         modifier = Modifier
                             .size(42.dp)
                             .clip(CircleShape)
-                            .background(LoveCardSurface.copy(alpha = 0.85f))
-                            .border(1.dp, LoveCardBorder, CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                             .testTag("toggle_notification_mute_button")
                     ) {
                         Icon(
@@ -159,58 +340,43 @@ fun HomeScreen(
                                 Icons.Default.NotificationsOff else Icons.Default.NotificationsActive,
                             contentDescription = if (profile.isNotificationsMuted) "Unmute Alerts" else "Mute Alerts",
                             tint = if (profile.isNotificationsMuted) LoveRose else LoveGold,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
-                    IconButton(
-                        onClick = { viewModel.navigateTo(AppScreen.MEMORIES) },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(LoveCardSurface.copy(alpha = 0.85f))
-                            .border(1.dp, LoveCardBorder, CircleShape)
-                            .testTag("nav_memories_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhotoLibrary,
-                            contentDescription = "Memories",
-                            tint = LoveBlush,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
+                    // Partner Pairing Settings
                     IconButton(
                         onClick = { viewModel.navigateTo(AppScreen.PAIRING) },
                         modifier = Modifier
                             .size(42.dp)
                             .clip(CircleShape)
-                            .background(LoveCardSurface.copy(alpha = 0.85f))
-                            .border(1.dp, LoveCardBorder, CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                             .testTag("nav_pairing_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Link,
-                            contentDescription = "Pairing",
+                            contentDescription = "Pairing Settings",
                             tint = LoveGold,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
+                    // Developer Screen Info
                     IconButton(
                         onClick = { viewModel.navigateTo(AppScreen.DEVELOPER) },
                         modifier = Modifier
                             .size(42.dp)
                             .clip(CircleShape)
-                            .background(LoveCardSurface.copy(alpha = 0.85f))
-                            .border(1.dp, LoveCardBorder, CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                             .testTag("nav_developer_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Info,
                             contentDescription = "Developer Info",
-                            tint = LoveWhite,
-                            modifier = Modifier.size(20.dp)
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(19.dp)
                         )
                     }
                 }
@@ -220,90 +386,39 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Partner Profile Hero
+                // 1. Couple Connection Card (User Name & Partner Name)
                 item {
-                    PartnerHeroCard(
+                    CoupleHeroCard(
+                        userName = profile.userName,
+                        userCode = profile.myPairCode,
                         partnerName = profile.partnerName,
                         partnerNickname = profile.partnerNickname,
+                        partnerCode = profile.partnerPairCode,
                         partnerStatus = profile.partnerStatus,
-                        pairCode = profile.partnerPairCode,
-                        daysTogether = daysTogether,
-                        avatarUri = profile.avatarUri
+                        isPaired = profile.isPaired && profile.partnerPairCode.isNotBlank(),
+                        isServerConnected = serverState == ServerConnectionState.CONNECTED,
+                        onLinkClick = { viewModel.navigateTo(AppScreen.PAIRING) }
                     )
                 }
 
-                if (!profile.isPaired || profile.partnerPairCode.isBlank()) {
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { viewModel.navigateTo(AppScreen.PAIRING) }
-                                .testTag("unpaired_alert_card"),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0x33F43F5E)),
-                            border = androidx.compose.foundation.BorderStroke(1.5.dp, LoveRose.copy(alpha = 0.7f))
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .clip(CircleShape)
-                                        .background(LoveRose.copy(alpha = 0.3f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Link,
-                                        contentDescription = "Link Partner",
-                                        tint = LoveGold,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Link Partner's Code to Call ❤️",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = LoveWhite
-                                    )
-                                    Text(
-                                        text = "Your Code is #${profile.myPairCode}. Tap here to share and link devices.",
-                                        fontSize = 11.sp,
-                                        color = LoveBlush
-                                    )
-                                }
-                                Button(
-                                    onClick = { viewModel.navigateTo(AppScreen.PAIRING) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text("Link", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Quick Call Actions (Voice & Video)
+                // 2. Calling Features: One-Tap Voice & Video Calls
                 item {
                     Text(
-                        text = "Quick One-Tap Call",
+                        text = "Direct Hotline Calling",
                         fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = LoveBlush,
-                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.padding(start = 2.dp, top = 2.dp)
                     )
+
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         // Voice Call Button
                         Button(
@@ -318,7 +433,7 @@ fun HomeScreen(
                                 .testTag("one_tap_voice_call_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                            shape = RoundedCornerShape(20.dp)
+                            shape = RoundedCornerShape(18.dp)
                         ) {
                             Box(
                                 modifier = Modifier
@@ -349,7 +464,7 @@ fun HomeScreen(
                                             color = Color.White
                                         )
                                         Text(
-                                            text = "Direct Hotline",
+                                            text = "Real VoIP Audio",
                                             fontSize = 11.sp,
                                             color = Color.White.copy(alpha = 0.85f)
                                         )
@@ -371,7 +486,7 @@ fun HomeScreen(
                                 .testTag("one_tap_video_call_button"),
                             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                            shape = RoundedCornerShape(20.dp)
+                            shape = RoundedCornerShape(18.dp)
                         ) {
                             Box(
                                 modifier = Modifier
@@ -402,7 +517,7 @@ fun HomeScreen(
                                             color = Color.White
                                         )
                                         Text(
-                                            text = "See My Love",
+                                            text = "Live Camera Feed",
                                             fontSize = 11.sp,
                                             color = Color.White.copy(alpha = 0.85f)
                                         )
@@ -413,100 +528,79 @@ fun HomeScreen(
                     }
                 }
 
-                // Memories Horizontal Carousel
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Our Best Memories",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = LoveBlush
-                        )
-                        Text(
-                            text = "View All (${memories.size})",
-                            fontSize = 12.sp,
-                            color = LoveRose,
-                            modifier = Modifier.clickable { viewModel.navigateTo(AppScreen.MEMORIES) }
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(memories) { memory ->
-                            MemoryThumbnailCard(
-                                memory = memory,
-                                isCurrentWallpaper = memory.isSelectedWallpaper,
-                                onClick = { viewModel.setWallpaper(memory.id) }
-                            )
-                        }
-                    }
-                }
-
-                // Call Logs Summary with Clear Call Logs feature
+                // 3. Recent Calls Section with Clear Button
                 item {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp),
+                            .padding(top = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Recent Moments",
+                            text = "Recent Calls",
                             fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = LoveBlush
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
                         )
+
                         if (callHistory.isNotEmpty()) {
-                            Text(
-                                text = "Clear Logs",
-                                fontSize = 12.sp,
-                                color = LoveRose,
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .clickable { viewModel.clearCallHistory() }
                                     .testTag("clear_call_logs_button")
-                            )
+                                    .padding(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteSweep,
+                                    contentDescription = "Clear All",
+                                    tint = LoveRose,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Clear Logs",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = LoveRose
+                                )
+                            }
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     if (callHistory.isEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = LoveCardSurface.copy(alpha = 0.5f)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LoveCardBorder)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(20.dp),
+                                    .padding(24.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Favorite,
-                                    contentDescription = "Love",
+                                    imageVector = Icons.Default.Call,
+                                    contentDescription = "No Calls",
                                     tint = LoveRose.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(32.dp)
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Text(
                                     text = "No call logs yet",
-                                    color = LoveWhite,
-                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "One-tap voice or video call above to connect directly with ${profile.partnerName} ❤️",
-                                    color = LoveTextMuted,
+                                    text = "Tap Voice Call or Video Call above to connect instantly with ${profile.partnerName} ❤️",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontSize = 12.sp,
                                     textAlign = TextAlign.Center
                                 )
@@ -514,11 +608,15 @@ fun HomeScreen(
                         }
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            callHistory.take(6).forEach { record ->
-                                CallRecordRow(record = record, partnerName = profile.partnerName)
+                            callHistory.take(8).forEach { record ->
+                                CallRecordRow(
+                                    record = record,
+                                    partnerName = profile.partnerName
+                                )
                             }
                         }
                     }
+
                     Spacer(modifier = Modifier.height(24.dp))
                 }
             }
@@ -527,216 +625,187 @@ fun HomeScreen(
 }
 
 @Composable
-private fun PartnerHeroCard(
+private fun CoupleHeroCard(
+    userName: String,
+    userCode: String,
     partnerName: String,
     partnerNickname: String,
+    partnerCode: String,
     partnerStatus: String,
-    pairCode: String,
-    daysTogether: Long,
-    avatarUri: String?
+    isPaired: Boolean,
+    isServerConnected: Boolean,
+    onLinkClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = LoveCardSurface.copy(alpha = 0.85f)),
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, LoveCardBorder)
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Avatar with glowing ring
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(CircleShape)
-                    .border(3.dp, LoveRose, CircleShape)
-                    .background(Color(0xFF3B0B2E)),
-                contentAlignment = Alignment.Center
+            // Two Partners side by side connected by glowing Heart
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                if (!avatarUri.isNullOrBlank()) {
-                    AsyncImage(
-                        model = avatarUri,
-                        contentDescription = "Partner Avatar",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = "Heart Avatar",
-                        tint = LoveRose,
-                        modifier = Modifier.size(52.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = "$partnerName ❤️",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = LoveWhite
-            )
-
-            Text(
-                text = "“$partnerNickname”",
-                fontSize = 14.sp,
-                color = LoveGold,
-                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Status chip
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0x3310B981),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LoveAccentGreen.copy(alpha = 0.5f))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // User Side
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(7.dp)
+                            .size(58.dp)
                             .clip(CircleShape)
-                            .background(LoveAccentGreen)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
+                            .background(LoveCrimson.copy(alpha = 0.2f))
+                            .border(2.dp, LoveRose, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = userName.take(1).uppercase(),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LoveRose
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = partnerStatus,
+                        text = userName,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "#$userCode",
                         fontSize = 11.sp,
-                        color = LoveWhite
+                        color = LoveGold,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                // Center Connection Heart Icon
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(if (isPaired) LoveRose.copy(alpha = 0.2f) else Color.Gray.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Connection Heart",
+                            tint = if (isPaired) LoveRose else Color.Gray,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (isPaired) (if (isServerConnected) "Connected" else "Linked") else "Not Linked",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isPaired) LoveAccentGreen else LoveRose
+                    )
+                }
+
+                // Partner Side
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .clip(CircleShape)
+                            .background(LoveGold.copy(alpha = 0.2f))
+                            .border(2.dp, if (isPaired) LoveGold else Color.Gray, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = partnerName.take(1).uppercase(),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isPaired) LoveGold else Color.Gray
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = partnerName,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = if (isPaired) "#$partnerCode" else "No code",
+                        fontSize = 11.sp,
+                        color = if (isPaired) LoveGold else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Days Together Banner
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(LoveCrimson.copy(alpha = 0.2f))
-                    .border(1.dp, LoveCrimson.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                    .padding(vertical = 10.dp, horizontal = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "💖", fontSize = 16.sp)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Days in Love:",
-                        fontSize = 13.sp,
-                        color = LoveBlush
-                    )
-                }
-                Text(
-                    text = "$daysTogether Days",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = LoveGold
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun MemoryThumbnailCard(
-    memory: MemoryPhoto,
-    isCurrentWallpaper: Boolean,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .size(width = 150.dp, height = 110.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            if (isCurrentWallpaper) 2.dp else 1.dp,
-            if (isCurrentWallpaper) LoveGold else LoveCardBorder
-        )
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (!memory.uriString.isNullOrBlank()) {
-                AsyncImage(
-                    model = memory.uriString,
-                    contentDescription = memory.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                listOf(
-                                    Color(memory.gradientStartHex),
-                                    Color(memory.gradientEndHex)
-                                )
-                            )
-                        )
-                )
-            }
-
-            // Dark gradient overlay
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            listOf(Color.Transparent, Color(0xCC0E0712))
-                        )
-                    )
-            )
-
-            if (isCurrentWallpaper) {
+            // Partner status line or link button
+            if (isPaired) {
                 Surface(
-                    shape = RoundedCornerShape(bottomEnd = 10.dp),
-                    color = LoveGold,
-                    modifier = Modifier.align(Alignment.TopStart)
+                    shape = RoundedCornerShape(12.dp),
+                    color = LoveAccentGreen.copy(alpha = 0.15f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LoveAccentGreen.copy(alpha = 0.4f))
                 ) {
-                    Text(
-                        text = "Active Wallpaper",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(LoveAccentGreen)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = partnerStatus,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
-            }
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(8.dp)
-            ) {
-                Text(
-                    text = memory.title,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1
-                )
-                Text(
-                    text = memory.dateStr,
-                    fontSize = 9.sp,
-                    color = LoveBlush
-                )
+            } else {
+                OutlinedButton(
+                    onClick = onLinkClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("unpaired_link_button"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = LoveRose),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Link,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Link Partner Code Now", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CallRecordRow(record: com.example.model.CallRecord, partnerName: String) {
+private fun CallRecordRow(record: CallRecord, partnerName: String) {
     val durationText = if (record.durationSeconds > 0) {
         val mins = record.durationSeconds / 60
         val secs = record.durationSeconds % 60
@@ -747,36 +816,46 @@ private fun CallRecordRow(record: com.example.model.CallRecord, partnerName: Str
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = LoveCardSurface.copy(alpha = 0.7f)),
-        border = androidx.compose.foundation.BorderStroke(1.dp, LoveCardBorder)
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = if (record.type == CallType.VIDEO) Icons.Default.Videocam else Icons.Default.Call,
-                    contentDescription = "Call Icon",
-                    tint = if (record.type == CallType.VIDEO) LoveRose else LoveAccentGreen,
-                    modifier = Modifier.size(20.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (record.durationSeconds > 0) LoveAccentGreen.copy(alpha = 0.2f) else LoveRose.copy(alpha = 0.2f)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (record.type == CallType.VIDEO) Icons.Default.Videocam else Icons.Default.Call,
+                        contentDescription = "Call Icon",
+                        tint = if (record.durationSeconds > 0) LoveAccentGreen else LoveRose,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
                         text = if (record.isOutgoing) "Outgoing to $partnerName" else "Incoming from $partnerName",
                         fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = LoveWhite
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = if (record.type == CallType.VIDEO) "Video Call" else "Voice Call",
                         fontSize = 11.sp,
-                        color = LoveTextMuted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -785,8 +864,71 @@ private fun CallRecordRow(record: com.example.model.CallRecord, partnerName: Str
                 text = durationText,
                 fontSize = 12.sp,
                 color = if (record.durationSeconds > 0) LoveGold else LoveRose,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+@Composable
+private fun ThemeOptionRow(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconTint: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (isSelected) LoveRose.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(
+            if (isSelected) 1.5.dp else 1.dp,
+            if (isSelected) LoveRose else MaterialTheme.colorScheme.outline
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(iconTint.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = "Selected",
+                    tint = LoveRose,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }

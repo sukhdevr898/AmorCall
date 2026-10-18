@@ -1,10 +1,13 @@
 package com.example.calling
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.example.data.CoupleRepository
 import com.example.model.CallType
@@ -19,7 +22,7 @@ import kotlinx.coroutines.launch
 class CallForegroundService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Main + Job())
     private lateinit var repository: CoupleRepository
-    private val signalingClient = SignalingClient()
+    private val signalingClient = SignalingClient.getInstance()
 
     override fun onCreate() {
         super.onCreate()
@@ -36,7 +39,7 @@ class CallForegroundService : Service() {
             startForeground(CallNotificationHelper.SERVICE_NOTIFICATION_ID, notification)
         } catch (_: Exception) {}
 
-        // Keep WebSocket active in background
+        // Keep WebSocket active in background 24/7
         signalingClient.connect(profile.serverUrl, profile.myPairCode, profile.partnerPairCode)
 
         serviceScope.launch {
@@ -68,12 +71,34 @@ class CallForegroundService : Service() {
         try {
             startForeground(CallNotificationHelper.SERVICE_NOTIFICATION_ID, notification)
         } catch (_: Exception) {}
+
+        // Reconnect if needed
+        signalingClient.connect(profile.serverUrl, profile.myPairCode, profile.partnerPairCode)
+
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        try {
+            val restartIntent = Intent(applicationContext, CallForegroundService::class.java).also {
+                it.setPackage(packageName)
+            }
+            val pendingIntent = PendingIntent.getService(
+                this, 101, restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
+            alarmManager?.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + 1500,
+                pendingIntent
+            )
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        signalingClient.disconnect()
         serviceScope.cancel()
     }
 

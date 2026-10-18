@@ -3,6 +3,8 @@ package com.example.network
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -31,37 +33,77 @@ sealed class SignalingEvent {
     data class CallEnded(val from: String) : SignalingEvent()
     data class CallUnavailable(val reason: String) : SignalingEvent()
     data class PartnerStatus(val isOnline: Boolean) : SignalingEvent()
+    data class AudioChunk(val from: String, val audioData: String) : SignalingEvent()
+    data class VideoFrame(val from: String, val frameData: String) : SignalingEvent()
     object HeartReaction : SignalingEvent()
 }
 
-class SignalingClient {
+class SignalingClient private constructor() {
+    companion object {
+        @Volatile
+        private var instance: SignalingClient? = null
+
+        fun getInstance(): SignalingClient {
+            return instance ?: synchronized(this) {
+                instance ?: SignalingClient().also { instance = it }
+            }
+        }
+    }
+
     private val client = OkHttpClient.Builder()
-        .pingInterval(25, TimeUnit.SECONDS)
+        .pingInterval(20, TimeUnit.SECONDS)
         .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
     private var webSocket: WebSocket? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    private var reconnectJob: Job? = null
 
     private val _connectionState = MutableStateFlow(ServerConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ServerConnectionState> = _connectionState.asStateFlow()
 
-    private val _events = MutableSharedFlow<SignalingEvent>(extraBufferCapacity = 16)
+    private val _events = MutableSharedFlow<SignalingEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<SignalingEvent> = _events.asSharedFlow()
 
+    private var currentServerUrl: String = ""
     private var currentMyCode: String = ""
     private var currentPartnerCode: String = ""
+    private var isExplicitDisconnect = false
 
     fun connect(serverUrl: String, myCode: String, partnerCode: String) {
-        disconnect()
+        if (myCode.isBlank()) return
 
+        currentServerUrl = serverUrl
         currentMyCode = myCode.uppercase().trim()
         currentPartnerCode = partnerCode.uppercase().trim()
+        isExplicitDisconnect = false
 
-        val cleanUrl = if (!serverUrl.startsWith("ws://") && !serverUrl.startsWith("wss://")) {
-            "ws://$serverUrl"
+        if (webSocket != null && _connectionState.value == ServerConnectionState.CONNECTED) {
+            // Already connected, send updated registration if needed
+            val regMsg = JSONObject().apply {
+                put("type", "register")
+                put("pairCode", currentMyCode)
+                put("partnerPairCode", currentPartnerCode)
+            }
+            send(regMsg)
+            return
+        }
+
+        reconnectJob?.cancel()
+        performConnect()
+    }
+
+    private fun performConnect() {
+        try {
+            webSocket?.close(1000, "Reconnecting")
+            webSocket = null
+        } catch (_: Exception) {}
+
+        val cleanUrl = if (!currentServerUrl.startsWith("ws://") && !currentServerUrl.startsWith("wss://")) {
+            "ws://$currentServerUrl"
         } else {
-            serverUrl
+            currentServerUrl
         }
 
         _connectionState.value = ServerConnectionState.CONNECTING
@@ -69,8 +111,9 @@ class SignalingClient {
         val request = try {
             Request.Builder().url(cleanUrl).build()
         } catch (e: Exception) {
-            Log.e("SignalingClient", "Invalid URL: $serverUrl", e)
+            Log.e("SignalingClient", "Invalid URL: $currentServerUrl", e)
             _connectionState.value = ServerConnectionState.DISCONNECTED
+            scheduleReconnect()
             return
         }
 
@@ -99,12 +142,28 @@ class SignalingClient {
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.w("SignalingClient", "WebSocket connection issue: ${t.message}")
                 _connectionState.value = ServerConnectionState.DISCONNECTED
+                scheduleReconnect()
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 _connectionState.value = ServerConnectionState.DISCONNECTED
+                if (!isExplicitDisconnect) {
+                    scheduleReconnect()
+                }
             }
         })
+    }
+
+    private fun scheduleReconnect() {
+        if (isExplicitDisconnect || currentMyCode.isBlank()) return
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            delay(3000)
+            if (_connectionState.value != ServerConnectionState.CONNECTED && !isExplicitDisconnect) {
+                Log.d("SignalingClient", "Attempting automatic reconnection to $currentServerUrl...")
+                performConnect()
+            }
+        }
     }
 
     private fun handleMessage(text: String) {
@@ -144,6 +203,24 @@ class SignalingClient {
                     val isOnline = json.optBoolean("isOnline", false)
                     scope.launch {
                         _events.emit(SignalingEvent.PartnerStatus(isOnline))
+                    }
+                }
+                "audio_chunk" -> {
+                    val from = json.optString("from")
+                    val audioData = json.optString("audioData", "")
+                    if (audioData.isNotBlank()) {
+                        scope.launch {
+                            _events.emit(SignalingEvent.AudioChunk(from, audioData))
+                        }
+                    }
+                }
+                "video_frame" -> {
+                    val from = json.optString("from")
+                    val frameData = json.optString("frameData", "")
+                    if (frameData.isNotBlank()) {
+                        scope.launch {
+                            _events.emit(SignalingEvent.VideoFrame(from, frameData))
+                        }
                     }
                 }
                 "heart_reaction" -> {
@@ -203,6 +280,28 @@ class SignalingClient {
         send(payload)
     }
 
+    fun sendAudioChunk(to: String, audioBase64: String) {
+        if (webSocket == null || audioBase64.isBlank()) return
+        val payload = JSONObject().apply {
+            put("type", "audio_chunk")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+            put("audioData", audioBase64)
+        }
+        send(payload)
+    }
+
+    fun sendVideoFrame(to: String, frameBase64: String) {
+        if (webSocket == null || frameBase64.isBlank()) return
+        val payload = JSONObject().apply {
+            put("type", "video_frame")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+            put("frameData", frameBase64)
+        }
+        send(payload)
+    }
+
     fun sendHeartReaction(to: String) {
         val payload = JSONObject().apply {
             put("type", "heart_reaction")
@@ -219,6 +318,8 @@ class SignalingClient {
     }
 
     fun disconnect() {
+        isExplicitDisconnect = true
+        reconnectJob?.cancel()
         try {
             webSocket?.close(1000, "App closed")
             webSocket = null

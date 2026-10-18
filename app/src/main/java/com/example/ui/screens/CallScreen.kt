@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -78,6 +79,7 @@ fun CallScreen(
     val profile by viewModel.profile.collectAsState()
     val activeWallpaper by viewModel.activeWallpaper.collectAsState()
     val floatingHearts by viewModel.floatingHearts.collectAsState()
+    val remoteVideo by viewModel.remoteVideoBitmap.collectAsState()
 
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -88,14 +90,45 @@ fun CallScreen(
                 viewModel.sendFloatingHeart()
             }
     ) {
-        // Background Layer: Either live Camera preview or romantic Memory Wallpaper
+        // Background Layer: Remote partner live video feed when connected, or memory wallpaper
         if (callSession.type == CallType.VIDEO && callSession.status == CallStatus.CONNECTED) {
-            CameraPreview(
-                isFrontCamera = callSession.isFrontCamera,
-                isVideoEnabled = callSession.isVideoEnabled,
-                modifier = Modifier.fillMaxSize()
-            )
-            // Romantic subtle dark gradient over camera for top/bottom controls
+            val partnerFrame = remoteVideo
+            if (partnerFrame != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = partnerFrame.asImageBitmap(),
+                    contentDescription = "Partner Live Video Feed",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                MemoryBackground(
+                    memory = activeWallpaper,
+                    dimAmount = 0.65f
+                ) {}
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        PulsingHeartRing(baseSize = 100.dp) {
+                            Icon(
+                                imageVector = Icons.Default.Videocam,
+                                contentDescription = "Connecting Video",
+                                tint = LoveRose,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Receiving live video from ${profile.partnerName}...",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = LoveGold
+                        )
+                    }
+                }
+            }
+            // Romantic subtle dark gradient over video for top/bottom controls readability
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -107,6 +140,22 @@ fun CallScreen(
                                 Color.Transparent,
                                 Color(0xDD0E0712)
                             )
+                        )
+                    )
+            )
+        } else if (callSession.type == CallType.VIDEO && callSession.status == CallStatus.OUTGOING_RINGING) {
+            // While ringing outgoing, show self camera preview
+            CameraPreview(
+                isFrontCamera = callSession.isFrontCamera,
+                isVideoEnabled = callSession.isVideoEnabled,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            listOf(Color(0x990E0712), Color(0x660E0712), Color(0xDD0E0712))
                         )
                     )
             )
@@ -256,20 +305,29 @@ fun CallScreen(
                                     .background(Color(0xFF260824)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Favorite,
-                                    contentDescription = "My Feed",
-                                    tint = LoveRose,
-                                    modifier = Modifier.size(36.dp)
+                                CameraPreview(
+                                    isFrontCamera = callSession.isFrontCamera,
+                                    isVideoEnabled = callSession.isVideoEnabled,
+                                    onFrameCaptured = { bitmap ->
+                                        viewModel.sendVideoFrame(bitmap)
+                                    },
+                                    modifier = Modifier.fillMaxSize()
                                 )
-                                Text(
-                                    text = "You",
-                                    fontSize = 11.sp,
-                                    color = LoveWhite,
+                                Surface(
                                     modifier = Modifier
                                         .align(Alignment.BottomCenter)
-                                        .padding(bottom = 6.dp)
-                                )
+                                        .padding(bottom = 6.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0x99000000)
+                                ) {
+                                    Text(
+                                        text = "You",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = LoveWhite,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                         }
                     }

@@ -13,7 +13,14 @@ enum class CallStatus {
     ENDED
 }
 
+enum class AppTheme {
+    DARK,
+    LIGHT,
+    LOVE
+}
+
 data class CoupleProfile(
+    val userName: String = "You",
     val partnerName: String = "My Love",
     val partnerNickname: String = "Sweetheart",
     val myPairCode: String = "",
@@ -24,7 +31,8 @@ data class CoupleProfile(
     val avatarUri: String? = null,
     val serverUrl: String = "ws://10.0.2.2:3000",
     val isOnboardingCompleted: Boolean = false,
-    val isNotificationsMuted: Boolean = false
+    val isNotificationsMuted: Boolean = false,
+    val appTheme: AppTheme = AppTheme.LOVE
 )
 
 data class CallSession(

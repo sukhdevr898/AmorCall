@@ -1,7 +1,9 @@
 package com.example.ui.components
 
+import android.graphics.Bitmap
 import android.view.ViewGroup
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -25,7 +27,8 @@ import com.example.ui.theme.LoveRose
 fun CameraPreview(
     isFrontCamera: Boolean,
     isVideoEnabled: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onFrameCaptured: ((Bitmap) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -68,11 +71,40 @@ fun CameraPreview(
                     it.surfaceProvider = previewView.surfaceProvider
                 }
 
-                cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    cameraSelector,
-                    preview
-                )
+                val analysis = if (onFrameCaptured != null) {
+                    ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                        .also { analyzer ->
+                            var lastCaptureTime = 0L
+                            analyzer.setAnalyzer(executor) { imageProxy ->
+                                val now = System.currentTimeMillis()
+                                if (now - lastCaptureTime >= 130) {
+                                    lastCaptureTime = now
+                                    try {
+                                        val bitmap = imageProxy.toBitmap()
+                                        onFrameCaptured(bitmap)
+                                    } catch (_: Exception) {}
+                                }
+                                imageProxy.close()
+                            }
+                        }
+                } else null
+
+                if (analysis != null) {
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        analysis
+                    )
+                } else {
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview
+                    )
+                }
             } catch (_: Exception) {}
         }, executor)
 
