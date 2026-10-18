@@ -1,0 +1,6 @@
+{
+  "name": "AmourCall",
+  "description": "Personal audio and video calling app for couples with love theme, pairing code, romantic memory backgrounds, and quick one-tap calls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

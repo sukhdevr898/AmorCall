@@ -1,0 +1,213 @@
+package com.example.network
+
+import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+enum class ServerConnectionState {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED
+}
+
+sealed class SignalingEvent {
+    data class IncomingCall(val from: String, val callerName: String, val callType: String) : SignalingEvent()
+    data class CallAccepted(val from: String) : SignalingEvent()
+    data class CallDeclined(val from: String) : SignalingEvent()
+    data class CallEnded(val from: String) : SignalingEvent()
+    data class PartnerStatus(val isOnline: Boolean) : SignalingEvent()
+    object HeartReaction : SignalingEvent()
+}
+
+class SignalingClient {
+    private val client = OkHttpClient.Builder()
+        .pingInterval(25, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .build()
+
+    private var webSocket: WebSocket? = null
+    private val scope = CoroutineScope(Dispatchers.IO)
+
+    private val _connectionState = MutableStateFlow(ServerConnectionState.DISCONNECTED)
+    val connectionState: StateFlow<ServerConnectionState> = _connectionState.asStateFlow()
+
+    private val _events = MutableSharedFlow<SignalingEvent>(extraBufferCapacity = 16)
+    val events: SharedFlow<SignalingEvent> = _events.asSharedFlow()
+
+    private var currentMyCode: String = ""
+    private var currentPartnerCode: String = ""
+
+    fun connect(serverUrl: String, myCode: String, partnerCode: String) {
+        disconnect()
+
+        currentMyCode = myCode.uppercase().trim()
+        currentPartnerCode = partnerCode.uppercase().trim()
+
+        val cleanUrl = if (!serverUrl.startsWith("ws://") && !serverUrl.startsWith("wss://")) {
+            "ws://$serverUrl"
+        } else {
+            serverUrl
+        }
+
+        _connectionState.value = ServerConnectionState.CONNECTING
+
+        val request = try {
+            Request.Builder().url(cleanUrl).build()
+        } catch (e: Exception) {
+            Log.e("SignalingClient", "Invalid URL: $serverUrl", e)
+            _connectionState.value = ServerConnectionState.DISCONNECTED
+            return
+        }
+
+        webSocket = client.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                _connectionState.value = ServerConnectionState.CONNECTED
+                Log.d("SignalingClient", "WebSocket connected. Registering as #$currentMyCode")
+
+                // Register with server
+                val regMsg = JSONObject().apply {
+                    put("type", "register")
+                    put("pairCode", currentMyCode)
+                    put("partnerPairCode", currentPartnerCode)
+                }
+                webSocket.send(regMsg.toString())
+            }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                handleMessage(text)
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                _connectionState.value = ServerConnectionState.DISCONNECTED
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                Log.w("SignalingClient", "WebSocket connection issue: ${t.message}")
+                _connectionState.value = ServerConnectionState.DISCONNECTED
+            }
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                _connectionState.value = ServerConnectionState.DISCONNECTED
+            }
+        })
+    }
+
+    private fun handleMessage(text: String) {
+        try {
+            val json = JSONObject(text)
+            when (json.optString("type")) {
+                "call_incoming" -> {
+                    val from = json.optString("from")
+                    val callerName = json.optString("callerName", "My Love")
+                    val callType = json.optString("callType", "VOICE")
+                    scope.launch {
+                        _events.emit(SignalingEvent.IncomingCall(from, callerName, callType))
+                    }
+                }
+                "call_accepted" -> {
+                    scope.launch {
+                        _events.emit(SignalingEvent.CallAccepted(json.optString("from")))
+                    }
+                }
+                "call_declined" -> {
+                    scope.launch {
+                        _events.emit(SignalingEvent.CallDeclined(json.optString("from")))
+                    }
+                }
+                "call_ended" -> {
+                    scope.launch {
+                        _events.emit(SignalingEvent.CallEnded(json.optString("from")))
+                    }
+                }
+                "partner_status" -> {
+                    val isOnline = json.optBoolean("isOnline", false)
+                    scope.launch {
+                        _events.emit(SignalingEvent.PartnerStatus(isOnline))
+                    }
+                }
+                "heart_reaction" -> {
+                    scope.launch {
+                        _events.emit(SignalingEvent.HeartReaction)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SignalingClient", "Failed to parse message: $text", e)
+        }
+    }
+
+    fun sendCallInitiate(to: String, callerName: String, callType: String) {
+        val payload = JSONObject().apply {
+            put("type", "call_initiate")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+            put("callerName", callerName)
+            put("callType", callType)
+        }
+        send(payload)
+    }
+
+    fun sendCallAccept(to: String) {
+        val payload = JSONObject().apply {
+            put("type", "call_accept")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+        }
+        send(payload)
+    }
+
+    fun sendCallDecline(to: String) {
+        val payload = JSONObject().apply {
+            put("type", "call_decline")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+        }
+        send(payload)
+    }
+
+    fun sendCallEnd(to: String) {
+        val payload = JSONObject().apply {
+            put("type", "call_end")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+        }
+        send(payload)
+    }
+
+    fun sendHeartReaction(to: String) {
+        val payload = JSONObject().apply {
+            put("type", "heart_reaction")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+        }
+        send(payload)
+    }
+
+    private fun send(json: JSONObject) {
+        try {
+            webSocket?.send(json.toString())
+        } catch (_: Exception) {}
+    }
+
+    fun disconnect() {
+        try {
+            webSocket?.close(1000, "App closed")
+            webSocket = null
+        } catch (_: Exception) {}
+        _connectionState.value = ServerConnectionState.DISCONNECTED
+    }
+}

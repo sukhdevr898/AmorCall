@@ -1,0 +1,247 @@
+package com.example.data
+
+import android.content.Context
+import android.content.SharedPreferences
+import com.example.model.CallRecord
+import com.example.model.CallType
+import com.example.model.CoupleProfile
+import com.example.model.MemoryPhoto
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.UUID
+
+class CoupleRepository(context: Context) {
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("amour_couple_prefs", Context.MODE_PRIVATE)
+
+    private val _profile = MutableStateFlow(loadProfile())
+    val profile: StateFlow<CoupleProfile> = _profile.asStateFlow()
+
+    private val _memories = MutableStateFlow(loadMemories())
+    val memories: StateFlow<List<MemoryPhoto>> = _memories.asStateFlow()
+
+    private val _callHistory = MutableStateFlow(loadCallHistory())
+    val callHistory: StateFlow<List<CallRecord>> = _callHistory.asStateFlow()
+
+    private fun loadProfile(): CoupleProfile {
+        val partnerName = prefs.getString("partner_name", "My Love") ?: "My Love"
+        val partnerNickname = prefs.getString("partner_nickname", "Sweetheart") ?: "Sweetheart"
+        val myPairCode = prefs.getString("my_pair_code", "LOVE89") ?: "LOVE89"
+        val partnerPairCode = prefs.getString("partner_pair_code", "ROSE99") ?: "ROSE99"
+        val isPaired = prefs.getBoolean("is_paired", true)
+        val startDate = prefs.getLong(
+            "start_date",
+            System.currentTimeMillis() - (520L * 24 * 60 * 60 * 1000L)
+        )
+        val status = prefs.getString("partner_status", "Thinking of you always ❤️") ?: "Thinking of you always ❤️"
+        val avatarUri = prefs.getString("avatar_uri", null)
+        val serverUrl = prefs.getString("server_url", "ws://10.0.2.2:3000") ?: "ws://10.0.2.2:3000"
+        val isOnboardingCompleted = prefs.getBoolean("is_onboarding_completed", false)
+        val isNotificationsMuted = prefs.getBoolean("is_notifications_muted", false)
+
+        return CoupleProfile(
+            partnerName = partnerName,
+            partnerNickname = partnerNickname,
+            myPairCode = myPairCode,
+            partnerPairCode = partnerPairCode,
+            isPaired = isPaired,
+            relationshipStartDateEpochMs = startDate,
+            partnerStatus = status,
+            avatarUri = avatarUri,
+            serverUrl = serverUrl,
+            isOnboardingCompleted = isOnboardingCompleted,
+            isNotificationsMuted = isNotificationsMuted
+        )
+    }
+
+    fun saveProfile(profile: CoupleProfile) {
+        prefs.edit()
+            .putString("partner_name", profile.partnerName)
+            .putString("partner_nickname", profile.partnerNickname)
+            .putString("my_pair_code", profile.myPairCode)
+            .putString("partner_pair_code", profile.partnerPairCode)
+            .putBoolean("is_paired", profile.isPaired)
+            .putLong("start_date", profile.relationshipStartDateEpochMs)
+            .putString("partner_status", profile.partnerStatus)
+            .putString("avatar_uri", profile.avatarUri)
+            .putString("server_url", profile.serverUrl)
+            .putBoolean("is_onboarding_completed", profile.isOnboardingCompleted)
+            .putBoolean("is_notifications_muted", profile.isNotificationsMuted)
+            .apply()
+        _profile.value = profile
+    }
+
+    fun setNotificationsMuted(muted: Boolean) {
+        saveProfile(_profile.value.copy(isNotificationsMuted = muted))
+    }
+
+    fun completeOnboarding() {
+        saveProfile(_profile.value.copy(isOnboardingCompleted = true))
+    }
+
+    private fun loadMemories(): List<MemoryPhoto> {
+        val jsonStr = prefs.getString("memories_json", null)
+        if (jsonStr.isNullOrBlank()) {
+            return defaultMemories()
+        }
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<MemoryPhoto>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    MemoryPhoto(
+                        id = obj.getString("id"),
+                        title = obj.getString("title"),
+                        note = obj.getString("note"),
+                        dateStr = obj.getString("dateStr"),
+                        uriString = obj.optString("uriString").takeIf { it.isNotBlank() },
+                        isSelectedWallpaper = obj.optBoolean("isSelectedWallpaper", false),
+                        gradientStartHex = obj.optLong("gradientStartHex", 0xFFE11D48),
+                        gradientEndHex = obj.optLong("gradientEndHex", 0xFF4A052E)
+                    )
+                )
+            }
+            if (list.isEmpty()) defaultMemories() else list
+        } catch (_: Exception) {
+            defaultMemories()
+        }
+    }
+
+    private fun defaultMemories(): List<MemoryPhoto> {
+        return listOf(
+            MemoryPhoto(
+                id = "mem_1",
+                title = "Our First Coffee Date",
+                note = "The moment our eyes met and my heart knew you were the one.",
+                dateStr = "May 14, 2024",
+                isSelectedWallpaper = true,
+                gradientStartHex = 0xFFE11D48,
+                gradientEndHex = 0xFF4A052E
+            ),
+            MemoryPhoto(
+                id = "mem_2",
+                title = "Sunset by the Shore",
+                note = "Holding your warm hands while the sky turned to gold and crimson.",
+                dateStr = "August 22, 2024",
+                isSelectedWallpaper = false,
+                gradientStartHex = 0xFF9F1239,
+                gradientEndHex = 0xFF1E0A1A
+            ),
+            MemoryPhoto(
+                id = "mem_3",
+                title = "Midnight Stargazing",
+                note = "Counting shooting stars and wishing for every tomorrow with you.",
+                dateStr = "December 31, 2024",
+                isSelectedWallpaper = false,
+                gradientStartHex = 0xFFBE185D,
+                gradientEndHex = 0xFF0E0712
+            )
+        )
+    }
+
+    fun addMemory(title: String, note: String, dateStr: String, uriString: String?) {
+        val current = _memories.value.toMutableList()
+        val newMemory = MemoryPhoto(
+            id = UUID.randomUUID().toString(),
+            title = title,
+            note = note,
+            dateStr = dateStr,
+            uriString = uriString,
+            isSelectedWallpaper = current.isEmpty(),
+            gradientStartHex = 0xFFF43F5E,
+            gradientEndHex = 0xFF2A0824
+        )
+        current.add(0, newMemory)
+        saveMemories(current)
+    }
+
+    fun setWallpaper(memoryId: String) {
+        val updated = _memories.value.map {
+            it.copy(isSelectedWallpaper = it.id == memoryId)
+        }
+        saveMemories(updated)
+    }
+
+    fun deleteMemory(memoryId: String) {
+        val updated = _memories.value.filter { it.id != memoryId }
+        saveMemories(if (updated.isEmpty()) defaultMemories() else updated)
+    }
+
+    private fun saveMemories(list: List<MemoryPhoto>) {
+        val array = JSONArray()
+        list.forEach { mem ->
+            val obj = JSONObject()
+            obj.put("id", mem.id)
+            obj.put("title", mem.title)
+            obj.put("note", mem.note)
+            obj.put("dateStr", mem.dateStr)
+            obj.put("uriString", mem.uriString ?: "")
+            obj.put("isSelectedWallpaper", mem.isSelectedWallpaper)
+            obj.put("gradientStartHex", mem.gradientStartHex)
+            obj.put("gradientEndHex", mem.gradientEndHex)
+            array.put(obj)
+        }
+        prefs.edit().putString("memories_json", array.toString()).apply()
+        _memories.value = list
+    }
+
+    private fun loadCallHistory(): List<CallRecord> {
+        val jsonStr = prefs.getString("call_history_json", null) ?: return defaultCallHistory()
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<CallRecord>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    CallRecord(
+                        id = obj.getString("id"),
+                        type = CallType.valueOf(obj.getString("type")),
+                        timestamp = obj.getLong("timestamp"),
+                        durationSeconds = obj.getInt("durationSeconds"),
+                        isOutgoing = obj.getBoolean("isOutgoing")
+                    )
+                )
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun defaultCallHistory(): List<CallRecord> = emptyList()
+
+    fun clearCallHistory() {
+        prefs.edit().remove("call_history_json").apply()
+        _callHistory.value = emptyList()
+    }
+
+    fun recordCall(type: CallType, durationSeconds: Int, isOutgoing: Boolean) {
+        val current = _callHistory.value.toMutableList()
+        val record = CallRecord(
+            id = UUID.randomUUID().toString(),
+            type = type,
+            timestamp = System.currentTimeMillis(),
+            durationSeconds = durationSeconds,
+            isOutgoing = isOutgoing
+        )
+        current.add(0, record)
+        val trimmed = if (current.size > 50) current.take(50) else current
+
+        val array = JSONArray()
+        trimmed.forEach { rec ->
+            val obj = JSONObject()
+            obj.put("id", rec.id)
+            obj.put("type", rec.type.name)
+            obj.put("timestamp", rec.timestamp)
+            obj.put("durationSeconds", rec.durationSeconds)
+            obj.put("isOutgoing", rec.isOutgoing)
+            array.put(obj)
+        }
+        prefs.edit().putString("call_history_json", array.toString()).apply()
+        _callHistory.value = trimmed
+    }
+}

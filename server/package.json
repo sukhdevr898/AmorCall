@@ -1,0 +1,15 @@
+{
+  "name": "amourcall-server",
+  "version": "1.0.0",
+  "description": "Ultra-lightweight self-hosted WebSocket signaling server for AmourCall couple calling app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "keywords": ["webrtc", "calling", "signaling", "websocket", "amourcall"],
+  "author": "Sukhdev Singh (sukhdevr898)",
+  "license": "MIT"
+}
