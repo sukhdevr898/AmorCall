@@ -97,6 +97,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     is SignalingEvent.CallEnded -> {
                         endCall(notifyPartner = false)
                     }
+                    is SignalingEvent.CallUnavailable -> {
+                        val status = "Partner currently offline"
+                        repository.saveProfile(profile.value.copy(partnerStatus = status))
+                    }
                     is SignalingEvent.PartnerStatus -> {
                         val status = if (event.isOnline) "Partner Online ❤️" else "Thinking of you always ❤️"
                         repository.saveProfile(profile.value.copy(partnerStatus = status))
@@ -118,10 +122,18 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun completeOnboarding(partnerName: String, partnerNickname: String, partnerCode: String) {
+        val cleanPartnerCode = partnerCode.trim().uppercase()
+        val finalPartnerCode = if (cleanPartnerCode.equals("ROSE99", ignoreCase = true) ||
+            cleanPartnerCode.equals(profile.value.myPairCode, ignoreCase = true)) {
+            ""
+        } else {
+            cleanPartnerCode
+        }
         val updated = profile.value.copy(
             partnerName = partnerName.ifBlank { "My Love" },
             partnerNickname = partnerNickname.ifBlank { "Sweetheart" },
-            partnerPairCode = partnerCode.ifBlank { "ROSE99" },
+            partnerPairCode = finalPartnerCode,
+            isPaired = finalPartnerCode.isNotBlank(),
             isOnboardingCompleted = true
         )
         repository.saveProfile(updated)
@@ -150,6 +162,11 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startOutgoingCall(type: CallType) {
+        if (!profile.value.isPaired || profile.value.partnerPairCode.isBlank()) {
+            _currentScreen.value = AppScreen.PAIRING
+            return
+        }
+
         _callSession.value = CallSession(
             status = CallStatus.OUTGOING_RINGING,
             type = type,
@@ -166,12 +183,33 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             callType = type.name
         )
 
-        // Fallback simulation timer so calls connect reliably even if partner is offline
+        // Ringing timeout (40 seconds)
         simulatedAnswerJob?.cancel()
         simulatedAnswerJob = viewModelScope.launch {
-            delay(4000)
+            delay(40000)
             if (_callSession.value.status == CallStatus.OUTGOING_RINGING) {
-                acceptCall(isOutgoingInitiated = true)
+                endCall(notifyPartner = false)
+            }
+        }
+    }
+
+    fun startSelfTestCall(type: CallType) {
+        _callSession.value = CallSession(
+            status = CallStatus.CONNECTED,
+            type = type,
+            durationSeconds = 0,
+            isSpeakerOn = type == CallType.VIDEO
+        )
+        audioHaptics.setSpeakerphone(type == CallType.VIDEO)
+        audioHaptics.playConnectedChime()
+
+        callTimerJob?.cancel()
+        callTimerJob = viewModelScope.launch {
+            while (isActive) {
+                delay(1000)
+                _callSession.value = _callSession.value.copy(
+                    durationSeconds = _callSession.value.durationSeconds + 1
+                )
             }
         }
     }
@@ -313,14 +351,41 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun regenerateMyCode(): String {
+        val newCode = repository.regenerateMyCode()
+        val prof = profile.value
+        signalingClient.connect(prof.serverUrl, newCode, prof.partnerPairCode)
+        return newCode
+    }
+
     fun updateProfile(partnerName: String, partnerNickname: String, partnerCode: String) {
+        val cleanPartnerCode = partnerCode.trim().uppercase()
+        val finalPartnerCode = if (cleanPartnerCode.equals("ROSE99", ignoreCase = true) ||
+            cleanPartnerCode.equals(profile.value.myPairCode, ignoreCase = true)) {
+            ""
+        } else {
+            cleanPartnerCode
+        }
         val updated = profile.value.copy(
             partnerName = partnerName.ifBlank { "My Love" },
             partnerNickname = partnerNickname.ifBlank { "Sweetheart" },
-            partnerPairCode = partnerCode.ifBlank { "ROSE99" }
+            partnerPairCode = finalPartnerCode,
+            isPaired = finalPartnerCode.isNotBlank()
         )
         repository.saveProfile(updated)
         signalingClient.connect(updated.serverUrl, updated.myPairCode, updated.partnerPairCode)
+    }
+
+    fun unlinkPartner() {
+        repository.unlinkPartner()
+        val prof = profile.value
+        signalingClient.connect(prof.serverUrl, prof.myPairCode, "")
+    }
+
+    fun checkPartnerStatus() {
+        if (profile.value.partnerPairCode.isNotBlank()) {
+            signalingClient.checkPartnerOnline(profile.value.partnerPairCode)
+        }
     }
 
     fun addMemoryPhoto(title: String, note: String, dateStr: String, uriString: String?) {

@@ -139,32 +139,33 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                 colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
                 border = androidx.compose.foundation.BorderStroke(1.dp, LoveCardBorder)
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    val isPaired = profile.isPaired && profile.partnerPairCode.isNotBlank()
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(LoveAccentGreen.copy(alpha = 0.2f)),
+                                .background(if (isPaired) LoveAccentGreen.copy(alpha = 0.2f) else LoveGold.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Connected",
-                                tint = LoveAccentGreen,
+                                imageVector = if (isPaired) Icons.Default.CheckCircle else Icons.Default.Lock,
+                                contentDescription = if (isPaired) "Connected" else "Awaiting Pair",
+                                tint = if (isPaired) LoveAccentGreen else LoveGold,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = "Secure Pair Active",
+                                text = if (isPaired) "Paired with #${profile.partnerPairCode}" else "Awaiting Partner Pairing",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = LoveWhite
                             )
                             Text(
-                                text = "End-to-end encrypted direct couple lifeline",
+                                text = if (isPaired) "Private peer hotline active ❤️" else "Exchange codes between both devices to connect",
                                 fontSize = 12.sp,
                                 color = LoveTextMuted
                             )
@@ -174,13 +175,28 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                     Spacer(modifier = Modifier.height(18.dp))
 
                     // My Pair Code Display
-                    Text(
-                        text = "YOUR DEVICE LOVE CODE",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = LoveBlush
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "STEP 1: YOUR SPECIAL LOVE CODE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = LoveBlush
+                        )
+                        androidx.compose.material3.TextButton(
+                            onClick = {
+                                val newCode = viewModel.regenerateMyCode()
+                                Toast.makeText(context, "New unique code generated: #$newCode", Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                        ) {
+                            Text("Generate New", fontSize = 11.sp, color = LoveGold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = Color(0x33F43F5E),
@@ -188,24 +204,58 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "#${profile.myPairCode}",
-                                fontSize = 20.sp,
+                                fontSize = 19.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 2.sp,
                                 color = LoveGold
                             )
-                            Text(
-                                text = "Share with Partner",
-                                fontSize = 11.sp,
-                                color = LoveWhite
-                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Button(
+                                    onClick = {
+                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("AmourCall Code", profile.myPairCode)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "Love Code copied! Send to partner ❤️", Toast.LENGTH_SHORT).show()
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Button(
+                                    onClick = {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(android.content.Intent.EXTRA_TEXT, "Hey my love! Download AmourCall and enter my Love Code: #${profile.myPairCode} to connect our private hotline ❤️")
+                                        }
+                                        context.startActivity(android.content.Intent.createChooser(intent, "Share Love Code"))
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = LoveGold),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Share", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                }
+                            }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Pairing Steps Helper
+                    Text(
+                        text = "1. Share your code above with your partner.\n2. Ask your partner for their code from their app.\n3. Enter their code below and tap 'Save & Link Device'!",
+                        fontSize = 11.sp,
+                        color = LoveTextMuted,
+                        lineHeight = 16.sp
+                    )
                 }
             }
 
@@ -213,7 +263,7 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
 
             // Partner Customization Form
             Text(
-                text = "Partner Information",
+                text = "STEP 2: Enter Partner Information",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = LoveBlush,
@@ -269,8 +319,15 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                         value = partnerPairCode,
                         onValueChange = { partnerPairCode = it.uppercase() },
                         label = { Text("Partner's Love Code") },
-                        placeholder = { Text("ROSE99") },
+                        placeholder = { Text("e.g. LOVE-4819") },
                         singleLine = true,
+                        supportingText = {
+                            Text(
+                                text = "Enter the exact code displayed on your partner's AmourCall app.",
+                                fontSize = 11.sp,
+                                color = LoveTextMuted
+                            )
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = LoveWhite,
                             unfocusedTextColor = LoveWhite,
@@ -286,8 +343,13 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
 
                     Button(
                         onClick = {
-                            viewModel.updateProfile(partnerName, partnerNickname, partnerPairCode)
-                            Toast.makeText(context, "Pairing details saved ❤️", Toast.LENGTH_SHORT).show()
+                            val clean = partnerPairCode.trim().uppercase()
+                            if (clean.isNotBlank() && clean.equals(profile.myPairCode, ignoreCase = true)) {
+                                Toast.makeText(context, "You cannot enter your own code! Enter your partner's code.", Toast.LENGTH_LONG).show()
+                                return@Button
+                            }
+                            viewModel.updateProfile(partnerName, partnerNickname, clean)
+                            Toast.makeText(context, if (clean.isNotBlank()) "Devices linked successfully! ❤️" else "Profile details saved ❤️", Toast.LENGTH_SHORT).show()
                             viewModel.navigateTo(AppScreen.DASHBOARD)
                         },
                         modifier = Modifier
@@ -304,10 +366,71 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Save & Link Device",
+                            text = if (partnerPairCode.isNotBlank()) "Save & Link Device" else "Save Details",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
+                    }
+
+                    if (profile.isPaired && profile.partnerPairCode.isNotBlank()) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                viewModel.unlinkPartner()
+                                partnerPairCode = ""
+                                Toast.makeText(context, "Partner unlinked. You can link a new code.", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.5f))
+                        ) {
+                            Text("Unlink / Disconnect Partner", color = LoveRose, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Single-Device Call Test Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, LoveCardBorder)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text(
+                        text = "Preview Call Controls (Single Device)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LoveWhite
+                    )
+                    Text(
+                        text = "Test camera preview, microphone, love background, and floating hearts before calling partner.",
+                        fontSize = 11.sp,
+                        color = LoveTextMuted,
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { viewModel.startSelfTestCall(com.example.model.CallType.VOICE) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Test Voice", fontSize = 12.sp, color = LoveBlush)
+                        }
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = { viewModel.startSelfTestCall(com.example.model.CallType.VIDEO) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text("Test Video", fontSize = 12.sp, color = LoveGold)
+                        }
                     }
                 }
             }

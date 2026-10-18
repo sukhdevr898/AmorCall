@@ -86,6 +86,18 @@ wss.on("connection", (ws, req) => {
           break;
         }
 
+        case "check_partner": {
+          const target = (data.partnerCode || "").toUpperCase().trim();
+          const targetSession = clients.get(target);
+          const isOnline = !!(targetSession && targetSession.ws.readyState === WebSocket.OPEN);
+          ws.send(JSON.stringify({
+            type: "partner_status",
+            isOnline,
+            partnerCode: target
+          }));
+          break;
+        }
+
         case "call_initiate": {
           const target = (data.to || "").toUpperCase().trim();
           const targetSession = clients.get(target);

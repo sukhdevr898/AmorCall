@@ -16,9 +16,9 @@ enum class CallStatus {
 data class CoupleProfile(
     val partnerName: String = "My Love",
     val partnerNickname: String = "Sweetheart",
-    val myPairCode: String = "LOVE89",
-    val partnerPairCode: String = "ROSE99",
-    val isPaired: Boolean = true,
+    val myPairCode: String = "",
+    val partnerPairCode: String = "",
+    val isPaired: Boolean = false,
     val relationshipStartDateEpochMs: Long = System.currentTimeMillis() - (520L * 24 * 60 * 60 * 1000L),
     val partnerStatus: String = "Thinking of you always ❤️",
     val avatarUri: String? = null,

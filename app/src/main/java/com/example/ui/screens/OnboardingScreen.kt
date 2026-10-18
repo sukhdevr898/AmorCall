@@ -64,6 +64,9 @@ fun OnboardingScreen(
     var partnerNickname by remember { mutableStateOf(currentProfile.partnerNickname) }
     var partnerPairCode by remember { mutableStateOf(currentProfile.partnerPairCode) }
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -113,7 +116,7 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Set up your personal couple hotline in 30 seconds",
+                    text = "Your private, dedicated couple hotline",
                     fontSize = 13.sp,
                     color = LoveTextMuted,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -132,37 +135,80 @@ fun OnboardingScreen(
                         modifier = Modifier.padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // My Code Display
+                        // My Unique Love Code Display
+                        Text(
+                            text = "STEP 1: YOUR SPECIAL LOVE CODE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LoveBlush
+                        )
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = Color(0x22F43F5E),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.4f)),
+                            color = Color(0x33F43F5E),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.6f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "#${currentProfile.myPairCode}",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 1.sp,
+                                        color = LoveGold
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        androidx.compose.material3.TextButton(
+                                            onClick = {
+                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText("AmourCall Code", currentProfile.myPairCode)
+                                                clipboard.setPrimaryClip(clip)
+                                                android.widget.Toast.makeText(context, "Code copied! Share with your love ❤️", android.widget.Toast.LENGTH_SHORT).show()
+                                            },
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("Copy", fontSize = 12.sp, color = LoveWhite)
+                                        }
+                                        androidx.compose.material3.TextButton(
+                                            onClick = {
+                                                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(android.content.Intent.EXTRA_TEXT, "Hey my love! Connect with me on AmourCall ❤️ My Love Code is: #${currentProfile.myPairCode}")
+                                                }
+                                                context.startActivity(android.content.Intent.createChooser(intent, "Share Love Code"))
+                                            },
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("Share", fontSize = 12.sp, color = LoveGold)
+                                        }
+                                    }
+                                }
                                 Text(
-                                    text = "Your Love Code:",
-                                    fontSize = 12.sp,
-                                    color = LoveBlush
-                                )
-                                Text(
-                                    text = "#${currentProfile.myPairCode}",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = LoveGold
+                                    text = "Send this code to your partner so they can link with you.",
+                                    fontSize = 11.sp,
+                                    color = LoveTextMuted,
+                                    modifier = Modifier.padding(top = 4.dp)
                                 )
                             }
                         }
+
+                        Text(
+                            text = "STEP 2: PARTNER DETAILS & CODE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LoveBlush,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
 
                         OutlinedTextField(
                             value = partnerName,
                             onValueChange = { partnerName = it },
                             label = { Text("Partner's Name") },
-                            placeholder = { Text("e.g. My Love, Priya, Sophia") },
+                            placeholder = { Text("e.g. My Love, Sophia, Rahul") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = LoveWhite,
@@ -179,7 +225,7 @@ fun OnboardingScreen(
                             value = partnerNickname,
                             onValueChange = { partnerNickname = it },
                             label = { Text("Pet Name / Nickname") },
-                            placeholder = { Text("e.g. Sweetheart, Babu, Darling") },
+                            placeholder = { Text("e.g. Sweetheart, Jaanu, Darling") },
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = LoveWhite,
@@ -194,10 +240,20 @@ fun OnboardingScreen(
 
                         OutlinedTextField(
                             value = partnerPairCode,
-                            onValueChange = { partnerPairCode = it.uppercase() },
-                            label = { Text("Partner's Love Pairing Code") },
-                            placeholder = { Text("e.g. ROSE99") },
+                            onValueChange = {
+                                partnerPairCode = it.uppercase()
+                                errorMessage = null
+                            },
+                            label = { Text("Partner's Love Code (Optional)") },
+                            placeholder = { Text("Enter their code (e.g. AMOUR-7K9W)") },
                             singleLine = true,
+                            supportingText = {
+                                Text(
+                                    text = "Leave blank if you haven't received partner's code yet. You can link anytime!",
+                                    fontSize = 11.sp,
+                                    color = LoveTextMuted
+                                )
+                            },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = LoveWhite,
                                 unfocusedTextColor = LoveWhite,
@@ -208,6 +264,15 @@ fun OnboardingScreen(
                                 .fillMaxWidth()
                                 .testTag("onboarding_partner_code")
                         )
+
+                        if (errorMessage != null) {
+                            Text(
+                                text = errorMessage ?: "",
+                                color = LoveRose,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }
@@ -221,9 +286,13 @@ fun OnboardingScreen(
             ) {
                 Button(
                     onClick = {
+                        val finalCode = partnerPairCode.trim().uppercase()
+                        if (finalCode.isNotBlank() && finalCode.equals(currentProfile.myPairCode, ignoreCase = true)) {
+                            errorMessage = "You cannot enter your own code! Please enter your partner's code."
+                            return@Button
+                        }
                         val finalName = partnerName.ifBlank { "My Love" }
                         val finalNickname = partnerNickname.ifBlank { "Sweetheart" }
-                        val finalCode = partnerPairCode.ifBlank { "ROSE99" }
                         onComplete(finalName, finalNickname, finalCode)
                     },
                     modifier = Modifier

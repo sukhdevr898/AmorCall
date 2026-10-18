@@ -257,7 +257,7 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "AmourCall v1.0 • Dedicated to True Love",
+                            text = "AmourCall v1.1 • Dedicated to True Love",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = LoveGold

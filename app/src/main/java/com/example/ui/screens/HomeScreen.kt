@@ -116,12 +116,20 @@ fun HomeScreen(
                         )
                     }
                     val serverState by viewModel.serverConnectionState.collectAsState()
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { viewModel.navigateTo(AppScreen.PAIRING) }
+                    ) {
+                        val pairStatusText = if (profile.isPaired && profile.partnerPairCode.isNotBlank()) {
+                            "#${profile.myPairCode} ⇄ #${profile.partnerPairCode}"
+                        } else {
+                            "#${profile.myPairCode} • Not Linked"
+                        }
                         Text(
-                            text = "#${profile.myPairCode} ⇄ #${profile.partnerPairCode}",
+                            text = pairStatusText,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = LoveGold
+                            color = if (profile.isPaired) LoveGold else LoveRose
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Box(
@@ -129,7 +137,7 @@ fun HomeScreen(
                                 .size(6.dp)
                                 .clip(CircleShape)
                                 .background(
-                                    if (serverState == com.example.network.ServerConnectionState.CONNECTED)
+                                    if (profile.isPaired && serverState == com.example.network.ServerConnectionState.CONNECTED)
                                         LoveAccentGreen else LoveRose
                                 )
                         )
@@ -225,6 +233,62 @@ fun HomeScreen(
                         daysTogether = daysTogether,
                         avatarUri = profile.avatarUri
                     )
+                }
+
+                if (!profile.isPaired || profile.partnerPairCode.isBlank()) {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.navigateTo(AppScreen.PAIRING) }
+                                .testTag("unpaired_alert_card"),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0x33F43F5E)),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, LoveRose.copy(alpha = 0.7f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .clip(CircleShape)
+                                        .background(LoveRose.copy(alpha = 0.3f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Link,
+                                        contentDescription = "Link Partner",
+                                        tint = LoveGold,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Link Partner's Code to Call ❤️",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = LoveWhite
+                                    )
+                                    Text(
+                                        text = "Your Code is #${profile.myPairCode}. Tap here to share and link devices.",
+                                        fontSize = 11.sp,
+                                        color = LoveBlush
+                                    )
+                                }
+                                Button(
+                                    onClick = { viewModel.navigateTo(AppScreen.PAIRING) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Link", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Quick Call Actions (Voice & Video)

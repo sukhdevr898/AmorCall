@@ -29,6 +29,7 @@ sealed class SignalingEvent {
     data class CallAccepted(val from: String) : SignalingEvent()
     data class CallDeclined(val from: String) : SignalingEvent()
     data class CallEnded(val from: String) : SignalingEvent()
+    data class CallUnavailable(val reason: String) : SignalingEvent()
     data class PartnerStatus(val isOnline: Boolean) : SignalingEvent()
     object HeartReaction : SignalingEvent()
 }
@@ -133,6 +134,12 @@ class SignalingClient {
                         _events.emit(SignalingEvent.CallEnded(json.optString("from")))
                     }
                 }
+                "call_unavailable" -> {
+                    val reason = json.optString("reason", "Partner is currently offline")
+                    scope.launch {
+                        _events.emit(SignalingEvent.CallUnavailable(reason))
+                    }
+                }
                 "partner_status" -> {
                     val isOnline = json.optBoolean("isOnline", false)
                     scope.launch {
@@ -148,6 +155,14 @@ class SignalingClient {
         } catch (e: Exception) {
             Log.e("SignalingClient", "Failed to parse message: $text", e)
         }
+    }
+
+    fun checkPartnerOnline(partnerCode: String) {
+        val payload = JSONObject().apply {
+            put("type", "check_partner")
+            put("partnerCode", partnerCode.uppercase().trim())
+        }
+        send(payload)
     }
 
     fun sendCallInitiate(to: String, callerName: String, callType: String) {

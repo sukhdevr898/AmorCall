@@ -26,12 +26,35 @@ class CoupleRepository(context: Context) {
     private val _callHistory = MutableStateFlow(loadCallHistory())
     val callHistory: StateFlow<List<CallRecord>> = _callHistory.asStateFlow()
 
+    private fun generateUniqueLoveCode(): String {
+        val prefixes = listOf("AMOUR", "LOVE", "ROSE", "SOUL", "HEART", "CHERI")
+        val chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+        val random = java.security.SecureRandom()
+        val randomSuffix = (1..4).map { chars[random.nextInt(chars.length)] }.joinToString("")
+        val prefix = prefixes[random.nextInt(prefixes.size)]
+        return "$prefix-$randomSuffix"
+    }
+
     private fun loadProfile(): CoupleProfile {
         val partnerName = prefs.getString("partner_name", "My Love") ?: "My Love"
         val partnerNickname = prefs.getString("partner_nickname", "Sweetheart") ?: "Sweetheart"
-        val myPairCode = prefs.getString("my_pair_code", "LOVE89") ?: "LOVE89"
-        val partnerPairCode = prefs.getString("partner_pair_code", "ROSE99") ?: "ROSE99"
-        val isPaired = prefs.getBoolean("is_paired", true)
+
+        val existingMyCode = prefs.getString("my_pair_code", null)
+        val myPairCode = if (existingMyCode.isNullOrBlank() || existingMyCode == "LOVE89" || existingMyCode == "ROSE99") {
+            val newCode = generateUniqueLoveCode()
+            prefs.edit().putString("my_pair_code", newCode).apply()
+            newCode
+        } else {
+            existingMyCode
+        }
+
+        var partnerPairCode = prefs.getString("partner_pair_code", "") ?: ""
+        // Purge dummy/stale placeholders and avoid accidental self-pairing
+        if (partnerPairCode == "ROSE99" || partnerPairCode == "LOVE89" || partnerPairCode.equals(myPairCode, ignoreCase = true)) {
+            partnerPairCode = ""
+            prefs.edit().putString("partner_pair_code", "").putBoolean("is_paired", false).apply()
+        }
+        val isPaired = partnerPairCode.isNotBlank()
         val startDate = prefs.getLong(
             "start_date",
             System.currentTimeMillis() - (520L * 24 * 60 * 60 * 1000L)
@@ -57,13 +80,36 @@ class CoupleRepository(context: Context) {
         )
     }
 
+    fun regenerateMyCode(): String {
+        val newCode = generateUniqueLoveCode()
+        val updated = _profile.value.copy(myPairCode = newCode)
+        saveProfile(updated)
+        return newCode
+    }
+
+    fun unlinkPartner() {
+        val updated = _profile.value.copy(
+            partnerPairCode = "",
+            isPaired = false
+        )
+        saveProfile(updated)
+    }
+
     fun saveProfile(profile: CoupleProfile) {
+        val cleanPartnerCode = if (profile.partnerPairCode.equals("ROSE99", ignoreCase = true) ||
+            profile.partnerPairCode.equals(profile.myPairCode, ignoreCase = true)) {
+            ""
+        } else {
+            profile.partnerPairCode.trim().uppercase()
+        }
+        val actualIsPaired = cleanPartnerCode.isNotBlank()
+
         prefs.edit()
             .putString("partner_name", profile.partnerName)
             .putString("partner_nickname", profile.partnerNickname)
             .putString("my_pair_code", profile.myPairCode)
-            .putString("partner_pair_code", profile.partnerPairCode)
-            .putBoolean("is_paired", profile.isPaired)
+            .putString("partner_pair_code", cleanPartnerCode)
+            .putBoolean("is_paired", actualIsPaired)
             .putLong("start_date", profile.relationshipStartDateEpochMs)
             .putString("partner_status", profile.partnerStatus)
             .putString("avatar_uri", profile.avatarUri)
@@ -71,7 +117,10 @@ class CoupleRepository(context: Context) {
             .putBoolean("is_onboarding_completed", profile.isOnboardingCompleted)
             .putBoolean("is_notifications_muted", profile.isNotificationsMuted)
             .apply()
-        _profile.value = profile
+        _profile.value = profile.copy(
+            partnerPairCode = cleanPartnerCode,
+            isPaired = actualIsPaired
+        )
     }
 
     fun setNotificationsMuted(muted: Boolean) {
