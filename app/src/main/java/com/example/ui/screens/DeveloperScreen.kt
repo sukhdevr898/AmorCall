@@ -27,16 +27,25 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.example.BuildConfig
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,6 +75,9 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
     }
 
     val context = LocalContext.current
+    val updateInfo by viewModel.appUpdateInfo.collectAsState()
+    val isChecking by viewModel.isCheckingUpdate.collectAsState()
+    val statusMessage by viewModel.updateStatusMessage.collectAsState()
 
     Box(
         modifier = Modifier
@@ -235,7 +247,142 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
                 testTag = "dev_instagram_link"
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // App Updates & Version Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
+                border = androidx.compose.foundation.BorderStroke(1.2.dp, LoveRose.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(LoveRose.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SystemUpdate,
+                                    contentDescription = null,
+                                    tint = LoveRose,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "App Updates & Releases",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LoveWhite
+                                )
+                                Text(
+                                    text = "Current: v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+                                    fontSize = 11.sp,
+                                    color = LoveGold
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { viewModel.checkForUpdates(isManual = true) },
+                            enabled = !isChecking,
+                            colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.testTag("check_updates_button")
+                        ) {
+                            if (isChecking) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Check", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (statusMessage != null) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0x33FFFFFF),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = statusMessage!!,
+                                fontSize = 12.sp,
+                                color = LoveWhite,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+
+                    if (updateInfo?.isAvailable == true) {
+                        Button(
+                            onClick = {
+                                val targetUrl = updateInfo!!.browserUrl.ifBlank { updateInfo!!.downloadUrl }
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl))
+                                context.startActivity(intent)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("dev_download_update_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Download v${updateInfo!!.versionName} from GitHub",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Color.White
+                            )
+                        }
+                    }
+
+                    // Direct link to GitHub Repo APK Directory
+                    DeveloperLinkCard(
+                        title = "GitHub APK Directory",
+                        handle = "github.com/sukhdevr898/AmorCall/tree/main/APK",
+                        iconColor = LoveGold,
+                        accentBorder = LoveGold.copy(alpha = 0.5f),
+                        onClick = {
+                            val intent = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("https://github.com/sukhdevr898/AmorCall/tree/main/APK")
+                            )
+                            context.startActivity(intent)
+                        },
+                        testTag = "dev_apk_directory_link"
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             // App Version & Dedication
             Card(
@@ -257,7 +404,7 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "AmourCall v1.2 • Dedicated to True Love",
+                            text = "Duora v2.0 • Two hearts. One private space.",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = LoveGold

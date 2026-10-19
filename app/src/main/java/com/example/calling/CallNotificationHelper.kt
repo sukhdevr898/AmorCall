@@ -18,9 +18,14 @@ object CallNotificationHelper {
     const val SERVICE_NOTIFICATION_ID = 1009
 
     const val EXTRA_ACTION = "extra_call_action"
-    const val ACTION_ANSWER = "action_answer_call"
-    const val ACTION_DECLINE = "action_decline_call"
-    const val ACTION_OPEN = "action_open_call"
+    const val EXTRA_CALL_TYPE = "extra_call_type"
+
+    const val ACTION_ANSWER = "com.example.ACTION_ANSWER"
+    const val ACTION_DECLINE = "com.example.ACTION_DECLINE"
+    const val ACTION_OPEN = "com.example.ACTION_OPEN"
+    const val ACTION_END_CALL = "com.example.ACTION_END_CALL"
+    const val ACTION_TOGGLE_MUTE = "com.example.ACTION_TOGGLE_MUTE"
+    const val ACTION_TOGGLE_SPEAKER = "com.example.ACTION_TOGGLE_SPEAKER"
 
     fun initChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -30,7 +35,7 @@ object CallNotificationHelper {
             // High Priority Incoming Call Channel
             val callChannel = NotificationChannel(
                 CHANNEL_ID,
-                "AmourCall Love Calling",
+                "Duora Incoming Calls",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "High-priority incoming audio and video calls from your partner"
@@ -40,13 +45,13 @@ object CallNotificationHelper {
             }
             notificationManager.createNotificationChannel(callChannel)
 
-            // Ongoing Foreground Service Channel (Maintains background hotline connection)
+            // Ongoing Foreground Service Channel (Hotline & In-Progress Calls)
             val serviceChannel = NotificationChannel(
                 SERVICE_CHANNEL_ID,
-                "AmourCall Hotline Background Service",
+                "Duora Active Call & Hotline",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Maintains connection to receive partner calls in the background"
+                description = "Active voice/video call session and 24/7 background hotline"
                 setShowBadge(false)
             }
             notificationManager.createNotificationChannel(serviceChannel)
@@ -57,7 +62,8 @@ object CallNotificationHelper {
         initChannels(context)
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_ACTION, ACTION_OPEN)
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -66,13 +72,104 @@ object CallNotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val partnerText = if (partnerName.isNotBlank()) "Connected to $partnerName • " else ""
+
         return NotificationCompat.Builder(context, SERVICE_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
-            .setContentTitle("AmourCall Hotline Active")
-            .setContentText("Connected to $partnerName • Ready for incoming calls ❤️")
+            .setContentTitle("Duora Hotline Active")
+            .setContentText("${partnerText}Ready for incoming calls ❤️")
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
+            .build()
+    }
+
+    fun buildOngoingCallNotification(
+        context: Context,
+        partnerName: String,
+        callType: CallType,
+        durationSeconds: Int,
+        isMuted: Boolean,
+        isSpeakerOn: Boolean
+    ): Notification {
+        initChannels(context)
+
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_ACTION, ACTION_OPEN)
+            putExtra(EXTRA_CALL_TYPE, callType.name)
+        }
+        val openPendingIntent = PendingIntent.getActivity(
+            context,
+            20,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // End Call Broadcast Intent
+        val endCallIntent = Intent(context, CallActionReceiver::class.java).apply {
+            action = ACTION_END_CALL
+        }
+        val endCallPendingIntent = PendingIntent.getBroadcast(
+            context,
+            21,
+            endCallIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Toggle Mute Broadcast Intent
+        val toggleMuteIntent = Intent(context, CallActionReceiver::class.java).apply {
+            action = ACTION_TOGGLE_MUTE
+        }
+        val toggleMutePendingIntent = PendingIntent.getBroadcast(
+            context,
+            22,
+            toggleMuteIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        // Toggle Speaker Broadcast Intent
+        val toggleSpeakerIntent = Intent(context, CallActionReceiver::class.java).apply {
+            action = ACTION_TOGGLE_SPEAKER
+        }
+        val toggleSpeakerPendingIntent = PendingIntent.getBroadcast(
+            context,
+            23,
+            toggleSpeakerIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val mins = durationSeconds / 60
+        val secs = durationSeconds % 60
+        val durationFormatted = String.format("%02d:%02d", mins, secs)
+
+        val typeLabel = if (callType == CallType.VIDEO) "📹 Video Call" else "📞 Voice Call"
+        val statusText = if (durationSeconds > 0) "$typeLabel • $durationFormatted" else "$typeLabel • In Call"
+
+        return NotificationCompat.Builder(context, SERVICE_CHANNEL_ID)
+            .setSmallIcon(if (callType == CallType.VIDEO) android.R.drawable.presence_video_online else android.R.drawable.stat_sys_phone_call)
+            .setContentTitle("❤️ In Call with $partnerName")
+            .setContentText(statusText)
+            .setSubText(durationFormatted)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOngoing(true)
+            .setContentIntent(openPendingIntent)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "End Call",
+                endCallPendingIntent
+            )
+            .addAction(
+                if (isMuted) android.R.drawable.stat_notify_call_mute else android.R.drawable.ic_btn_speak_now,
+                if (isMuted) "Unmute" else "Mute",
+                toggleMutePendingIntent
+            )
+            .addAction(
+                if (isSpeakerOn) android.R.drawable.stat_sys_speakerphone else android.R.drawable.ic_lock_silent_mode_off,
+                if (isSpeakerOn) "Earpiece" else "Speaker",
+                toggleSpeakerPendingIntent
+            )
             .build()
     }
 
@@ -85,8 +182,9 @@ object CallNotificationHelper {
         initChannels(context)
 
         val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_ACTION, ACTION_OPEN)
+            putExtra(EXTRA_CALL_TYPE, callType.name)
         }
         val fullScreenPendingIntent = PendingIntent.getActivity(
             context,
@@ -96,8 +194,9 @@ object CallNotificationHelper {
         )
 
         val answerIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_ACTION, ACTION_ANSWER)
+            putExtra(EXTRA_CALL_TYPE, callType.name)
         }
         val answerPendingIntent = PendingIntent.getActivity(
             context,
@@ -106,11 +205,11 @@ object CallNotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val declineIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(EXTRA_ACTION, ACTION_DECLINE)
+        val declineIntent = Intent(context, CallActionReceiver::class.java).apply {
+            action = ACTION_DECLINE
+            putExtra(EXTRA_CALL_TYPE, callType.name)
         }
-        val declinePendingIntent = PendingIntent.getActivity(
+        val declinePendingIntent = PendingIntent.getBroadcast(
             context,
             2,
             declineIntent,
@@ -120,9 +219,9 @@ object CallNotificationHelper {
         val callTypeLabel = if (callType == CallType.VIDEO) "Incoming Video Call 📹" else "Incoming Voice Call 📞"
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_phone_call)
+            .setSmallIcon(if (callType == CallType.VIDEO) android.R.drawable.presence_video_online else android.R.drawable.stat_sys_phone_call)
             .setContentTitle("❤️ $callerName is Calling...")
-            .setContentText("$callTypeLabel • AmourCall")
+            .setContentText("$callTypeLabel • Duora")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

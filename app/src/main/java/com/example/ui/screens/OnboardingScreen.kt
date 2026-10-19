@@ -107,8 +107,8 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Welcome to AmourCall ❤️",
-                    fontSize = 24.sp,
+                    text = "Welcome to Duora",
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
                     color = LoveWhite
                 )
@@ -116,9 +116,10 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Your private, dedicated couple hotline",
-                    fontSize = 13.sp,
-                    color = LoveTextMuted,
+                    text = "Two hearts. One private space.",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = LoveGold,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
 

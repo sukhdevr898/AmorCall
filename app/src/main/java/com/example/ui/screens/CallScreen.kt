@@ -29,10 +29,13 @@ import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -74,12 +77,25 @@ import com.example.viewmodel.LoveCallViewModel
 @Composable
 fun CallScreen(
     viewModel: LoveCallViewModel,
-    callSession: CallSession
+    callSession: CallSession,
+    onEnterPip: () -> Unit = {}
 ) {
     val profile by viewModel.profile.collectAsState()
     val activeWallpaper by viewModel.activeWallpaper.collectAsState()
     val floatingHearts by viewModel.floatingHearts.collectAsState()
     val remoteVideo by viewModel.remoteVideoBitmap.collectAsState()
+    val isInPipMode by viewModel.isInPipMode.collectAsState()
+
+    if (isInPipMode && callSession.type == CallType.VIDEO) {
+        PipCallLayout(
+            viewModel = viewModel,
+            callSession = callSession,
+            partnerName = profile.partnerName,
+            partnerNickname = profile.partnerNickname,
+            remoteVideo = remoteVideo
+        )
+        return
+    }
 
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -229,10 +245,16 @@ fun CallScreen(
                 // Call Status / Duration
                 when (callSession.status) {
                     CallStatus.OUTGOING_RINGING -> {
+                        val statusText = if (callSession.isPartnerRinging) {
+                            "Ringing... 🔔"
+                        } else {
+                            "Calling ${profile.partnerName}..."
+                        }
                         Text(
-                            text = "Calling ${profile.partnerName}... ❤️",
-                            fontSize = 15.sp,
-                            color = LoveBlush
+                            text = statusText,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (callSession.isPartnerRinging) LoveAccentGreen else LoveBlush
                         )
                     }
                     CallStatus.INCOMING_RINGING -> {
@@ -254,18 +276,55 @@ fun CallScreen(
                             color = LoveGold
                         )
                     }
+                    CallStatus.ENDED -> {
+                        Text(
+                            text = callSession.statusMessage ?: "${profile.partnerName} call declined by partner",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LoveRose
+                        )
+                    }
                     else -> {}
                 }
             }
 
-            // Middle Area: Partner Avatar / Pulsing Rings or PiP
+            // Middle Area: Partner Avatar / Pulsing Rings or PiP or Ended Notice
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                if (callSession.status == CallStatus.OUTGOING_RINGING || callSession.status == CallStatus.INCOMING_RINGING) {
+                if (callSession.status == CallStatus.ENDED) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(CircleShape)
+                                .background(LoveCrimson.copy(alpha = 0.25f))
+                                .border(2.dp, LoveRose, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CallEnd,
+                                contentDescription = "Call Ended",
+                                tint = LoveRose,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Text(
+                            text = callSession.statusMessage ?: "${profile.partnerName} call declined by partner",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LoveWhite,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                } else if (callSession.status == CallStatus.OUTGOING_RINGING || callSession.status == CallStatus.INCOMING_RINGING) {
                     PulsingHeartRing(baseSize = 130.dp) {
                         PartnerAvatarCircle(
                             avatarUri = profile.avatarUri,
@@ -336,6 +395,24 @@ fun CallScreen(
 
             // Bottom Controls Area
             when (callSession.status) {
+                CallStatus.ENDED -> {
+                    Button(
+                        onClick = { viewModel.resetCallSessionToIdle() },
+                        colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                        shape = RoundedCornerShape(22.dp),
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(52.dp)
+                            .testTag("call_ended_return_home_button")
+                    ) {
+                        Text(
+                            text = "Back to Home",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color.White
+                        )
+                    }
+                }
                 CallStatus.INCOMING_RINGING -> {
                     // Incoming Answer & Decline Buttons
                     Row(
@@ -480,6 +557,16 @@ fun CallScreen(
                                         onClick = { viewModel.switchCamera() },
                                         testTag = "switch_camera_button"
                                     )
+
+                                    // PiP Minimize Button
+                                    CallControlButton(
+                                        icon = Icons.Default.PictureInPictureAlt,
+                                        label = "PiP",
+                                        isActive = false,
+                                        activeColor = LoveRose,
+                                        onClick = { onEnterPip() },
+                                        testTag = "enter_pip_mode_button"
+                                    )
                                 }
 
                                 // End Call Button
@@ -578,5 +665,93 @@ private fun CallControlButton(
             fontSize = 10.sp,
             color = LoveWhite.copy(alpha = 0.8f)
         )
+    }
+}
+
+@Composable
+private fun PipCallLayout(
+    viewModel: LoveCallViewModel,
+    callSession: CallSession,
+    partnerName: String,
+    partnerNickname: String,
+    remoteVideo: android.graphics.Bitmap?
+) {
+    val floatingHearts by viewModel.floatingHearts.collectAsState()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { viewModel.sendFloatingHeart() }
+    ) {
+        if (remoteVideo != null) {
+            androidx.compose.foundation.Image(
+                bitmap = remoteVideo.asImageBitmap(),
+                contentDescription = "Partner Live Video",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+
+            // Corner PIP Thumbnail: Local camera preview
+            Card(
+                modifier = Modifier
+                    .size(width = 44.dp, height = 62.dp)
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 4.dp, bottom = 4.dp)
+                    .clip(RoundedCornerShape(6.dp)),
+                border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose)
+            ) {
+                CameraPreview(
+                    isFrontCamera = callSession.isFrontCamera,
+                    isVideoEnabled = callSession.isVideoEnabled,
+                    onFrameCaptured = { viewModel.sendVideoFrame(it) },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        } else {
+            // Local Camera Preview as main view until partner frame arrives
+            CameraPreview(
+                isFrontCamera = callSession.isFrontCamera,
+                isVideoEnabled = callSession.isVideoEnabled,
+                onFrameCaptured = { viewModel.sendVideoFrame(it) },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        // Top subtle overlay pill: Partner Nickname & Call Duration
+        val mins = callSession.durationSeconds / 60
+        val secs = callSession.durationSeconds % 60
+        val durationFormatted = String.format("%02d:%02d", mins, secs)
+
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Color(0xAA000000),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 6.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "❤️ $partnerNickname • $durationFormatted",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                if (callSession.isMuted) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Default.MicOff,
+                        contentDescription = "Muted",
+                        tint = LoveRose,
+                        modifier = Modifier.size(11.dp)
+                    )
+                }
+            }
+        }
+
+        FloatingHeartsOverlay(hearts = floatingHearts)
     }
 }

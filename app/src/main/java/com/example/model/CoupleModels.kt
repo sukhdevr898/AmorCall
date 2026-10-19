@@ -42,7 +42,9 @@ data class CallSession(
     val isMuted: Boolean = false,
     val isSpeakerOn: Boolean = false,
     val isVideoEnabled: Boolean = true,
-    val isFrontCamera: Boolean = true
+    val isFrontCamera: Boolean = true,
+    val isPartnerRinging: Boolean = false,
+    val statusMessage: String? = null
 )
 
 data class FloatingHeart(

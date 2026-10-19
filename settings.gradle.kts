@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "AmourCall"
+rootProject.name = "Duora"
 
 include(":app")

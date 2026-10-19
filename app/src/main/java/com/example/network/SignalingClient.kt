@@ -28,6 +28,7 @@ enum class ServerConnectionState {
 
 sealed class SignalingEvent {
     data class IncomingCall(val from: String, val callerName: String, val callType: String) : SignalingEvent()
+    data class CallRinging(val from: String) : SignalingEvent()
     data class CallAccepted(val from: String) : SignalingEvent()
     data class CallDeclined(val from: String) : SignalingEvent()
     data class CallEnded(val from: String) : SignalingEvent()
@@ -178,6 +179,11 @@ class SignalingClient private constructor() {
                         _events.emit(SignalingEvent.IncomingCall(from, callerName, callType))
                     }
                 }
+                "call_ringing" -> {
+                    scope.launch {
+                        _events.emit(SignalingEvent.CallRinging(json.optString("from")))
+                    }
+                }
                 "call_accepted" -> {
                     scope.launch {
                         _events.emit(SignalingEvent.CallAccepted(json.optString("from")))
@@ -249,6 +255,15 @@ class SignalingClient private constructor() {
             put("to", to.uppercase().trim())
             put("callerName", callerName)
             put("callType", callType)
+        }
+        send(payload)
+    }
+
+    fun sendCallRinging(to: String) {
+        val payload = JSONObject().apply {
+            put("type", "call_ringing")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
         }
         send(payload)
     }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
@@ -37,7 +38,9 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Videocam
+import com.example.BuildConfig
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -92,8 +95,16 @@ fun HomeScreen(
     val callHistory by viewModel.callHistory.collectAsState()
     val serverState by viewModel.serverConnectionState.collectAsState()
 
+    val updateInfo by viewModel.appUpdateInfo.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
     var showPermissionsModal by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(updateInfo) {
+        if (updateInfo?.isAvailable == true) {
+            showUpdateDialog = true
+        }
+    }
 
     fun checkMissingPermissions(): Boolean {
         val permissions = mutableListOf(
@@ -134,7 +145,7 @@ fun HomeScreen(
             },
             text = {
                 Text(
-                    text = "AmourCall requires Microphone, Camera, and Notification permissions to provide real-time voice and video calls and receive incoming calls while the app is in the background.\n\nPlease allow these permissions to ensure full hotline functionality.",
+                    text = "Duora requires Microphone, Camera, and Notification permissions to provide real-time voice and video calls and receive incoming calls while the app is in the background.\n\nPlease allow these permissions to ensure full hotline functionality.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 14.sp,
                     lineHeight = 20.sp
@@ -236,6 +247,117 @@ fun HomeScreen(
         )
     }
 
+    // App Update Available Dialog
+    if (showUpdateDialog && updateInfo != null && updateInfo!!.isAvailable) {
+        val info = updateInfo!!
+        AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.SystemUpdate,
+                        contentDescription = "Update Available",
+                        tint = LoveRose,
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "New Update Available! 🚀",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "A new version of Duora is available on GitHub.",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = LoveRose.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.4f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Current: v${BuildConfig.VERSION_NAME}",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "➔  New: v${info.versionName}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = LoveRose
+                            )
+                        }
+                    }
+
+                    if (info.releaseNotes.isNotBlank()) {
+                        Text(
+                            text = "What's New:",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = info.releaseNotes,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(10.dp),
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val targetUrl = info.browserUrl.ifBlank { info.downloadUrl }
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        try {
+                            context.startActivity(browserIntent)
+                        } catch (_: Exception) {}
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                    modifier = Modifier.testTag("download_update_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Download Update", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdateDialog = false }) {
+                    Text("Later", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -259,19 +381,26 @@ fun HomeScreen(
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "AmourCall",
-                            fontSize = 22.sp,
+                            text = "Duora",
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Default.Favorite,
-                            contentDescription = "Love Icon",
+                            contentDescription = "Duora Hearts",
                             tint = LoveRose,
                             modifier = Modifier.size(18.dp)
                         )
                     }
+
+                    Text(
+                        text = "Two hearts. One private space.",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
                     // Real-time server connection indicator
                     Row(
@@ -389,6 +518,75 @@ fun HomeScreen(
                     .padding(horizontal = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // 0. Update Alert Banner (if update available)
+                if (updateInfo?.isAvailable == true) {
+                    item {
+                        Surface(
+                            onClick = { showUpdateDialog = true },
+                            shape = RoundedCornerShape(16.dp),
+                            color = LoveRose.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, LoveRose.copy(alpha = 0.6f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("update_available_banner")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(LoveRose.copy(alpha = 0.2f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SystemUpdate,
+                                            contentDescription = null,
+                                            tint = LoveRose,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Duora v${updateInfo!!.versionName} Available! 🎉",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "Tap to review update & download APK",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = LoveRose
+                                ) {
+                                    Text(
+                                        text = "Update",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 1. Couple Connection Card (User Name & Partner Name)
                 item {
                     CoupleHeroCard(

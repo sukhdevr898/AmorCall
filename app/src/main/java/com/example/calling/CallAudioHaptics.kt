@@ -1,10 +1,13 @@
 package com.example.calling
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioManager
+import android.media.Ringtone
+import android.media.RingtoneManager
 import android.media.ToneGenerator
+import android.net.Uri
 import android.os.Build
-import android.os.CombinedVibration
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -18,6 +21,7 @@ import kotlinx.coroutines.launch
 class CallAudioHaptics(private val context: Context) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var toneGenerator: ToneGenerator? = null
+    private var ringtone: Ringtone? = null
     private var ringJob: Job? = null
     private var vibrateJob: Job? = null
 
@@ -51,12 +55,43 @@ class CallAudioHaptics(private val context: Context) {
 
     fun startIncomingRinging(scope: CoroutineScope) {
         stopAll()
-        ringJob = scope.launch(Dispatchers.IO) {
-            while (isActive) {
-                try {
-                    toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 1000)
-                } catch (_: Exception) {}
-                delay(2000)
+        try {
+            val ringtoneUri: Uri? = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            if (ringtoneUri != null) {
+                ringtone = RingtoneManager.getRingtone(context, ringtoneUri)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    ringtone?.isLooping = true
+                }
+                val attributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                ringtone?.audioAttributes = attributes
+                ringtone?.play()
+            }
+        } catch (_: Exception) {
+            ringJob = scope.launch(Dispatchers.IO) {
+                while (isActive) {
+                    try {
+                        toneGenerator?.startTone(ToneGenerator.TONE_SUP_RINGTONE, 1800)
+                    } catch (_: Exception) {}
+                    delay(3500)
+                }
+            }
+        }
+
+        // Pre-P looping fallback
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P && ringtone != null) {
+            ringJob = scope.launch(Dispatchers.IO) {
+                while (isActive) {
+                    try {
+                        if (ringtone?.isPlaying == false) {
+                            ringtone?.play()
+                        }
+                    } catch (_: Exception) {}
+                    delay(2500)
+                }
             }
         }
 
@@ -116,6 +151,10 @@ class CallAudioHaptics(private val context: Context) {
         ringJob = null
         vibrateJob?.cancel()
         vibrateJob = null
+        try {
+            ringtone?.stop()
+            ringtone = null
+        } catch (_: Exception) {}
         try {
             toneGenerator?.stopTone()
             vibrator?.cancel()

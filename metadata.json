@@ -1,6 +1,6 @@
 {
-  "name": "AmourCall",
-  "description": "Personal audio and video calling app for couples with love theme, pairing code, romantic memory backgrounds, and quick one-tap calls.",
+  "name": "Duora",
+  "description": "Two hearts. One private space. Private communication app for two paired users with real-time audio and video calling, background hotline, PiP mode, and secure pairing.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

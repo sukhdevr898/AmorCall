@@ -139,12 +139,26 @@ wss.on("connection", (ws, req) => {
             callType: data.callType || "VOICE"
           });
 
-          if (!delivered) {
+          if (delivered) {
+            ws.send(JSON.stringify({
+              type: "call_ringing",
+              from: target
+            }));
+          } else {
             ws.send(JSON.stringify({
               type: "call_unavailable",
               reason: "Partner is currently offline or unreachable."
             }));
           }
+          break;
+        }
+
+        case "call_ringing": {
+          const target = (data.to || "").toUpperCase().trim();
+          forwardToTarget(target, {
+            type: "call_ringing",
+            from: data.from
+          });
           break;
         }
 

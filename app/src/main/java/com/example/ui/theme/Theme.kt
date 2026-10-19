@@ -7,36 +7,36 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import com.example.model.AppTheme
 
-private val LoveColorScheme = darkColorScheme(
-    primary = LoveRose,
-    onPrimary = Color.White,
-    primaryContainer = LoveCrimson,
-    onPrimaryContainer = Color.White,
-    secondary = LoveGold,
-    onSecondary = Color.Black,
-    secondaryContainer = LoveCardSurface,
-    onSecondaryContainer = LoveBlush,
-    tertiary = LoveBlush,
+private val DuoraDarkColorScheme = darkColorScheme(
+    primary = DuoraLilac,
+    onPrimary = Color(0xFF100D17),
+    primaryContainer = DuoraCardSurface,
+    onPrimaryContainer = DuoraLilac,
+    secondary = DuoraRose,
+    onSecondary = Color(0xFF100D17),
+    secondaryContainer = DuoraCardSurface,
+    onSecondaryContainer = DuoraRose,
+    tertiary = LoveGold,
     onTertiary = Color.Black,
-    background = LoveDarkBg,
-    onBackground = LoveWhite,
-    surface = LoveDarkSurface,
-    onSurface = LoveWhite,
-    surfaceVariant = LoveCardSurface,
+    background = DuoraDarkBg,
+    onBackground = DuoraLightBg,
+    surface = DuoraDarkSurface,
+    onSurface = DuoraLightBg,
+    surfaceVariant = DuoraCardSurface,
     onSurfaceVariant = LoveTextMuted,
-    outline = LoveCardBorder
+    outline = DuoraCardBorder
 )
 
-private val DarkColorScheme = darkColorScheme(
-    primary = LoveRose,
+private val SlateDarkColorScheme = darkColorScheme(
+    primary = DuoraLilac,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFF374151),
+    primaryContainer = Color(0xFF28203B),
     onPrimaryContainer = Color.White,
-    secondary = LoveGold,
+    secondary = DuoraRose,
     onSecondary = Color.Black,
     secondaryContainer = DarkCardSurface,
     onSecondaryContainer = DarkTextSecondary,
-    tertiary = LoveBlush,
+    tertiary = LoveGold,
     onTertiary = Color.Black,
     background = DarkBg,
     onBackground = DarkTextPrimary,
@@ -47,35 +47,35 @@ private val DarkColorScheme = darkColorScheme(
     outline = DarkCardBorder
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = LoveCrimson,
+private val DuoraLightColorScheme = lightColorScheme(
+    primary = DuoraLightPrimary,
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFE4E6),
-    onPrimaryContainer = LoveCrimson,
-    secondary = Color(0xFFD97706),
+    primaryContainer = Color(0xFFEDE4FF),
+    onPrimaryContainer = DuoraLightPrimary,
+    secondary = DuoraRose,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF1F5F9),
+    secondaryContainer = Color(0xFFF5EFFF),
     onSecondaryContainer = LightTextPrimary,
-    tertiary = LoveRose,
-    onTertiary = Color.White,
-    background = LightBg,
+    tertiary = LoveGold,
+    onTertiary = Color.Black,
+    background = DuoraLightBg,
     onBackground = LightTextPrimary,
     surface = LightSurface,
     onSurface = LightTextPrimary,
-    surfaceVariant = Color(0xFFF1F5F9),
+    surfaceVariant = Color(0xFFF3EEFF),
     onSurfaceVariant = LightTextSecondary,
-    outline = LightCardBorder
+    outline = Color(0xFFDDD2F5)
 )
 
 @Composable
-fun AmourCallTheme(
+fun DuoraTheme(
     theme: AppTheme = AppTheme.LOVE,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when (theme) {
-        AppTheme.LOVE -> LoveColorScheme
-        AppTheme.DARK -> DarkColorScheme
-        AppTheme.LIGHT -> LightColorScheme
+        AppTheme.LOVE -> DuoraDarkColorScheme
+        AppTheme.DARK -> SlateDarkColorScheme
+        AppTheme.LIGHT -> DuoraLightColorScheme
     }
 
     MaterialTheme(
@@ -85,3 +85,9 @@ fun AmourCallTheme(
     )
 }
 
+// Backward-compatible alias
+@Composable
+fun AmourCallTheme(
+    theme: AppTheme = AppTheme.LOVE,
+    content: @Composable () -> Unit
+) = DuoraTheme(theme = theme, content = content)

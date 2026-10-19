@@ -64,6 +64,13 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     private val _callSession = MutableStateFlow(CallSession())
     val callSession: StateFlow<CallSession> = _callSession.asStateFlow()
 
+    private val _isInPipMode = MutableStateFlow(false)
+    val isInPipMode: StateFlow<Boolean> = _isInPipMode.asStateFlow()
+
+    fun setIsInPipMode(inPip: Boolean) {
+        _isInPipMode.value = inPip
+    }
+
     private val _remoteVideoBitmap = MutableStateFlow<Bitmap?>(null)
     val remoteVideoBitmap: StateFlow<Bitmap?> = _remoteVideoBitmap.asStateFlow()
 
@@ -73,11 +80,37 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     private val _currentScreen = MutableStateFlow(AppScreen.SPLASH)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
+    private val updateManager = com.example.network.AppUpdateManager.getInstance()
+    val appUpdateInfo: StateFlow<com.example.network.AppUpdateInfo?> = updateManager.updateInfo
+    val isCheckingUpdate: StateFlow<Boolean> = updateManager.isChecking
+    val updateStatusMessage: StateFlow<String?> = updateManager.statusMessage
+
+    fun checkForUpdates(isManual: Boolean = false) {
+        viewModelScope.launch {
+            updateManager.checkForUpdates(isManual)
+        }
+    }
+
+    fun dismissUpdateDialog() {
+        updateManager.dismissUpdateDialog()
+    }
+
+    fun clearUpdateStatusMessage() {
+        updateManager.clearStatusMessage()
+    }
+
     private var callTimerJob: Job? = null
     private var simulatedAnswerJob: Job? = null
 
     init {
         CallNotificationHelper.initChannels(application)
+
+        // Connect global CallStateManager callbacks for notifications & PiP remote actions
+        com.example.calling.CallStateManager.onEndCallRequested = { endCall() }
+        com.example.calling.CallStateManager.onToggleMuteRequested = { toggleMute() }
+        com.example.calling.CallStateManager.onToggleSpeakerRequested = { toggleSpeaker() }
+        com.example.calling.CallStateManager.onAnswerCallRequested = { type -> acceptCall(incomingType = type) }
+        com.example.calling.CallStateManager.onDeclineCallRequested = { declineCall() }
 
         // Connect to signaling server
         val prof = profile.value
@@ -87,6 +120,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         if (prof.isOnboardingCompleted) {
             CallForegroundService.start(application)
         }
+
+        // Check for app updates from GitHub repository
+        checkForUpdates(isManual = false)
 
         // Observe real-time signaling events
         viewModelScope.launch {
@@ -100,18 +136,25 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         }
                         triggerIncomingCall(type)
                     }
+                    is SignalingEvent.CallRinging -> {
+                        if (_callSession.value.status == CallStatus.OUTGOING_RINGING) {
+                            _callSession.value = _callSession.value.copy(
+                                isPartnerRinging = true,
+                                statusMessage = "Ringing..."
+                            )
+                        }
+                    }
                     is SignalingEvent.CallAccepted -> {
                         acceptCall(isOutgoingInitiated = true)
                     }
                     is SignalingEvent.CallDeclined -> {
-                        declineCall(notifyPartner = false)
+                        handlePartnerDeclinedCall()
                     }
                     is SignalingEvent.CallEnded -> {
-                        endCall(notifyPartner = false)
+                        handlePartnerEndedCall()
                     }
                     is SignalingEvent.CallUnavailable -> {
-                        val status = "Partner currently offline"
-                        repository.saveProfile(profile.value.copy(partnerStatus = status))
+                        handlePartnerUnavailable()
                     }
                     is SignalingEvent.PartnerStatus -> {
                         val status = if (event.isOnline) "Partner Online ❤️" else "Thinking of you always ❤️"
@@ -134,6 +177,34 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
             }
+        }
+    }
+
+    fun syncCallStateToService() {
+        val session = _callSession.value
+        val isConnected = session.status == CallStatus.CONNECTED
+        val isOutgoing = session.status == CallStatus.OUTGOING_RINGING
+        val isActive = isConnected || isOutgoing
+
+        com.example.calling.CallStateManager.isCallActive = isActive
+        com.example.calling.CallStateManager.currentCallType = session.type
+        com.example.calling.CallStateManager.isMuted = session.isMuted
+        com.example.calling.CallStateManager.isSpeakerOn = session.isSpeakerOn
+        com.example.calling.CallStateManager.currentPartnerName = profile.value.partnerName
+        com.example.calling.CallStateManager.durationSeconds = session.durationSeconds
+
+        if (isActive) {
+            CallForegroundService.updateCallProgress(
+                getApplication(),
+                isCallActive = true,
+                partnerName = profile.value.partnerName,
+                callType = session.type,
+                durationSeconds = session.durationSeconds,
+                isMuted = session.isMuted,
+                isSpeakerOn = session.isSpeakerOn
+            )
+        } else {
+            CallForegroundService.restoreHotline(getApplication())
         }
     }
 
@@ -191,19 +262,23 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
+        val partner = profile.value.partnerName
         _callSession.value = CallSession(
             status = CallStatus.OUTGOING_RINGING,
             type = type,
             durationSeconds = 0,
-            isSpeakerOn = type == CallType.VIDEO
+            isSpeakerOn = type == CallType.VIDEO,
+            isPartnerRinging = false,
+            statusMessage = "Calling $partner..."
         )
         audioHaptics.setSpeakerphone(type == CallType.VIDEO)
         audioHaptics.startOutgoingRinging(viewModelScope)
+        syncCallStateToService()
 
         // Send signal to partner via WebSocket
         signalingClient.sendCallInitiate(
             to = profile.value.partnerPairCode,
-            callerName = profile.value.partnerNickname,
+            callerName = profile.value.userName.ifBlank { "My Love" },
             callType = type.name
         )
 
@@ -212,7 +287,13 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         simulatedAnswerJob = viewModelScope.launch {
             delay(40000)
             if (_callSession.value.status == CallStatus.OUTGOING_RINGING) {
-                endCall(notifyPartner = false)
+                _callSession.value = _callSession.value.copy(
+                    status = CallStatus.ENDED,
+                    statusMessage = "$partner did not answer"
+                )
+                syncCallStateToService()
+                delay(2500)
+                resetCallSessionToIdle()
             }
         }
     }
@@ -222,10 +303,13 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             status = CallStatus.CONNECTED,
             type = type,
             durationSeconds = 0,
-            isSpeakerOn = type == CallType.VIDEO
+            isSpeakerOn = type == CallType.VIDEO,
+            isPartnerRinging = true,
+            statusMessage = "Self Test Connected"
         )
         audioHaptics.setSpeakerphone(type == CallType.VIDEO)
         audioHaptics.playConnectedChime()
+        syncCallStateToService()
 
         callTimerJob?.cancel()
         callTimerJob = viewModelScope.launch {
@@ -234,6 +318,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                 _callSession.value = _callSession.value.copy(
                     durationSeconds = _callSession.value.durationSeconds + 1
                 )
+                syncCallStateToService()
             }
         }
     }
@@ -244,8 +329,15 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             status = CallStatus.INCOMING_RINGING,
             type = type,
             durationSeconds = 0,
-            isSpeakerOn = type == CallType.VIDEO
+            isSpeakerOn = type == CallType.VIDEO,
+            isPartnerRinging = true,
+            statusMessage = "Incoming Call"
         )
+        // Acknowledge back that destination device has received call and is ringing
+        if (profile.value.partnerPairCode.isNotBlank()) {
+            signalingClient.sendCallRinging(profile.value.partnerPairCode)
+        }
+
         if (!profile.value.isNotificationsMuted) {
             audioHaptics.startIncomingRinging(viewModelScope)
         }
@@ -257,17 +349,20 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
-    fun acceptCall(isOutgoingInitiated: Boolean = false) {
+    fun acceptCall(isOutgoingInitiated: Boolean = false, incomingType: CallType? = null) {
         simulatedAnswerJob?.cancel()
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.playConnectedChime()
 
-        val currentType = _callSession.value.type
+        val currentType = incomingType ?: _callSession.value.type
         val speakerDefault = currentType == CallType.VIDEO
         _callSession.value = _callSession.value.copy(
             status = CallStatus.CONNECTED,
+            type = currentType,
             durationSeconds = 0,
-            isSpeakerOn = speakerDefault
+            isSpeakerOn = speakerDefault,
+            isPartnerRinging = true,
+            statusMessage = "Connected"
         )
         audioHaptics.setSpeakerphone(speakerDefault)
 
@@ -278,6 +373,8 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             signalingClient.sendCallAccept(profile.value.partnerPairCode)
         }
 
+        syncCallStateToService()
+
         callTimerJob?.cancel()
         callTimerJob = viewModelScope.launch {
             while (isActive) {
@@ -285,6 +382,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                 _callSession.value = _callSession.value.copy(
                     durationSeconds = _callSession.value.durationSeconds + 1
                 )
+                syncCallStateToService()
             }
         }
     }
@@ -308,6 +406,87 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         )
 
         _callSession.value = CallSession(status = CallStatus.IDLE)
+        syncCallStateToService()
+    }
+
+    fun handlePartnerDeclinedCall() {
+        simulatedAnswerJob?.cancel()
+        callTimerJob?.cancel()
+        CallNotificationHelper.cancelNotification(getApplication())
+        audioHaptics.playEndCallTone()
+        audioHaptics.stopAll()
+        audioStreamManager.stop()
+        _remoteVideoBitmap.value = null
+
+        val partner = profile.value.partnerName
+        val declineMessage = "$partner call declined by partner"
+
+        repository.recordCall(
+            type = _callSession.value.type,
+            durationSeconds = 0,
+            isOutgoing = true
+        )
+
+        _callSession.value = _callSession.value.copy(
+            status = CallStatus.ENDED,
+            statusMessage = declineMessage
+        )
+
+        viewModelScope.launch {
+            delay(3000)
+            if (_callSession.value.status == CallStatus.ENDED) {
+                _callSession.value = CallSession(status = CallStatus.IDLE)
+            }
+        }
+    }
+
+    fun handlePartnerEndedCall() {
+        simulatedAnswerJob?.cancel()
+        callTimerJob?.cancel()
+        CallNotificationHelper.cancelNotification(getApplication())
+        audioHaptics.playEndCallTone()
+        audioHaptics.stopAll()
+        audioStreamManager.stop()
+        _remoteVideoBitmap.value = null
+
+        val partner = profile.value.partnerName
+        _callSession.value = _callSession.value.copy(
+            status = CallStatus.ENDED,
+            statusMessage = "$partner ended the call"
+        )
+
+        viewModelScope.launch {
+            delay(2500)
+            if (_callSession.value.status == CallStatus.ENDED) {
+                _callSession.value = CallSession(status = CallStatus.IDLE)
+            }
+        }
+    }
+
+    fun handlePartnerUnavailable() {
+        simulatedAnswerJob?.cancel()
+        callTimerJob?.cancel()
+        CallNotificationHelper.cancelNotification(getApplication())
+        audioHaptics.playEndCallTone()
+        audioHaptics.stopAll()
+        audioStreamManager.stop()
+        _remoteVideoBitmap.value = null
+
+        val partner = profile.value.partnerName
+        val status = "$partner is currently offline"
+        repository.saveProfile(profile.value.copy(partnerStatus = status))
+
+        _callSession.value = _callSession.value.copy(
+            status = CallStatus.ENDED,
+            statusMessage = status
+        )
+
+        viewModelScope.launch {
+            delay(3000)
+            if (_callSession.value.status == CallStatus.ENDED) {
+                _callSession.value = CallSession(status = CallStatus.IDLE)
+            }
+        }
     }
 
     fun endCall(notifyPartner: Boolean = true) {
@@ -335,7 +514,38 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             )
         }
 
+        _callSession.value = _callSession.value.copy(
+            status = CallStatus.ENDED,
+            statusMessage = "Call Ended"
+        )
+        syncCallStateToService()
+        viewModelScope.launch {
+            delay(1500)
+            if (_callSession.value.status == CallStatus.ENDED) {
+                _callSession.value = CallSession(status = CallStatus.IDLE)
+                syncCallStateToService()
+            }
+        }
+    }
+
+    fun resetCallSessionToIdle() {
+        simulatedAnswerJob?.cancel()
+        callTimerJob?.cancel()
+        CallNotificationHelper.cancelNotification(getApplication())
+        audioHaptics.stopAll()
+        audioStreamManager.stop()
+        _remoteVideoBitmap.value = null
         _callSession.value = CallSession(status = CallStatus.IDLE)
+        syncCallStateToService()
+        _currentScreen.value = AppScreen.DASHBOARD
+    }
+
+    fun cleanupStaleCallOnResume() {
+        val status = _callSession.value.status
+        if (status == CallStatus.ENDED) {
+            _callSession.value = CallSession(status = CallStatus.IDLE)
+            syncCallStateToService()
+        }
     }
 
     fun toggleMute() {
@@ -343,6 +553,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         _callSession.value = _callSession.value.copy(isMuted = next)
         audioHaptics.setMicrophoneMute(next)
         audioStreamManager.setMuted(next)
+        syncCallStateToService()
     }
 
     fun toggleSpeaker() {
@@ -350,6 +561,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         _callSession.value = _callSession.value.copy(isSpeakerOn = next)
         audioHaptics.setSpeakerphone(next)
         audioStreamManager.setSpeakerphone(next)
+        syncCallStateToService()
     }
 
     fun toggleVideo() {
