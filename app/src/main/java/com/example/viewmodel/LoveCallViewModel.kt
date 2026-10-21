@@ -91,6 +91,18 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     private val _currentScreen = MutableStateFlow(AppScreen.SPLASH)
     val currentScreen: StateFlow<AppScreen> = _currentScreen.asStateFlow()
 
+    private val _targetBottomTab = MutableStateFlow<String?>(null)
+    val targetBottomTab: StateFlow<String?> = _targetBottomTab.asStateFlow()
+
+    fun openChatTab() {
+        _currentScreen.value = AppScreen.DASHBOARD
+        _targetBottomTab.value = "CHAT"
+    }
+
+    fun clearTargetBottomTab() {
+        _targetBottomTab.value = null
+    }
+
     private val updateManager = com.example.network.AppUpdateManager.getInstance()
     val appUpdateInfo: StateFlow<com.example.network.AppUpdateInfo?> = updateManager.updateInfo
     val isCheckingUpdate: StateFlow<Boolean> = updateManager.isChecking
@@ -202,6 +214,14 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     }
                     is SignalingEvent.ChatMessageReceived -> {
                         repository.saveChatMessage(event.message)
+                        if (!event.message.isOutgoing) {
+                            val partner = profile.value.partnerName.ifBlank { "Partner" }
+                            com.example.calling.CallNotificationHelper.showMessageNotification(
+                                context = getApplication(),
+                                senderName = partner,
+                                messageText = event.message.content
+                            )
+                        }
                     }
                     is SignalingEvent.ChatTyping -> {
                         _isPartnerTyping.value = event.isTyping
@@ -869,7 +889,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private var lastSentTypingState: Boolean? = null
     fun setChatTyping(isTyping: Boolean) {
+        if (lastSentTypingState == isTyping) return
+        lastSentTypingState = isTyping
         val partnerCode = profile.value.partnerPairCode.trim()
         if (partnerCode.isNotBlank()) {
             signalingClient.sendChatTyping(partnerCode, isTyping)

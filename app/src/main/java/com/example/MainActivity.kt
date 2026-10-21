@@ -195,6 +195,10 @@ class MainActivity : ComponentActivity() {
             CallNotificationHelper.ACTION_TOGGLE_SPEAKER -> {
                 viewModel.toggleSpeaker()
             }
+            CallNotificationHelper.ACTION_OPEN_CHAT -> {
+                viewModel.openChatTab()
+                CallNotificationHelper.clearMessageNotification(this)
+            }
         }
     }
 

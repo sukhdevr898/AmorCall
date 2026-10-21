@@ -14,8 +14,10 @@ import com.example.model.CallType
 object CallNotificationHelper {
     const val CHANNEL_ID = "amour_call_notifications"
     const val SERVICE_CHANNEL_ID = "amour_foreground_service"
+    const val MESSAGE_CHANNEL_ID = "duora_message_notifications"
     const val NOTIFICATION_ID = 1008
     const val SERVICE_NOTIFICATION_ID = 1009
+    const val MESSAGE_NOTIFICATION_ID = 1015
 
     const val EXTRA_ACTION = "extra_call_action"
     const val EXTRA_CALL_TYPE = "extra_call_type"
@@ -23,6 +25,7 @@ object CallNotificationHelper {
     const val ACTION_ANSWER = "com.example.ACTION_ANSWER"
     const val ACTION_DECLINE = "com.example.ACTION_DECLINE"
     const val ACTION_OPEN = "com.example.ACTION_OPEN"
+    const val ACTION_OPEN_CHAT = "com.example.ACTION_OPEN_CHAT"
     const val ACTION_END_CALL = "com.example.ACTION_END_CALL"
     const val ACTION_TOGGLE_MUTE = "com.example.ACTION_TOGGLE_MUTE"
     const val ACTION_TOGGLE_SPEAKER = "com.example.ACTION_TOGGLE_SPEAKER"
@@ -55,6 +58,19 @@ object CallNotificationHelper {
                 setShowBadge(false)
             }
             notificationManager.createNotificationChannel(serviceChannel)
+
+            // High Priority Real-time Incoming Message Channel
+            val messageChannel = NotificationChannel(
+                MESSAGE_CHANNEL_ID,
+                "Duora Partner Messages",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Real-time incoming chat messages from your partner"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 150, 80, 150)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            notificationManager.createNotificationChannel(messageChannel)
         }
     }
 
@@ -249,5 +265,46 @@ object CallNotificationHelper {
         val notificationManager: NotificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.cancel(NOTIFICATION_ID)
+    }
+
+    fun showMessageNotification(
+        context: Context,
+        senderName: String,
+        messageText: String
+    ) {
+        initChannels(context)
+
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_ACTION, ACTION_OPEN_CHAT)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            120,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.sym_action_chat)
+            .setContentTitle(if (senderName.isNotBlank()) senderName else "Partner")
+            .setContentText(messageText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(messageText))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .build()
+
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(MESSAGE_NOTIFICATION_ID, notification)
+    }
+
+    fun clearMessageNotification(context: Context) {
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(MESSAGE_NOTIFICATION_ID)
     }
 }

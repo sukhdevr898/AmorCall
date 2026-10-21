@@ -8,6 +8,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -140,6 +141,14 @@ fun HomeScreen(
     var currentBottomTab by remember { mutableStateOf(HomeBottomTab.HOME) }
     BackHandler(enabled = currentBottomTab != HomeBottomTab.HOME) {
         currentBottomTab = HomeBottomTab.HOME
+    }
+
+    val targetTab by viewModel.targetBottomTab.collectAsState()
+    LaunchedEffect(targetTab) {
+        if (targetTab == "CHAT") {
+            currentBottomTab = HomeBottomTab.CHAT
+            viewModel.clearTargetBottomTab()
+        }
     }
     val updateInfo by viewModel.appUpdateInfo.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
@@ -1566,126 +1575,84 @@ fun HomeScreen(
                 }
             }
 
-// Floating Rounded Bottom Navigation Bar (Hidden on full-screen Chat)
+// Floating Rounded Island Dock Bottom Bar (Hidden on full-screen Chat)
 if (currentBottomTab != HomeBottomTab.CHAT) {
-    Surface(
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 6.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+    val unreadChatCount = remember(chatMessages) {
+        chatMessages.count { !it.isOutgoing && !it.isRead }
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        NavigationBar(
-            containerColor = Color.Transparent,
-            tonalElevation = 0.dp,
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 8.dp,
+            shadowElevation = 10.dp,
+            border = androidx.compose.foundation.BorderStroke(1.2.dp, DuoraRaspberry.copy(alpha = 0.25f)),
             modifier = Modifier.fillMaxWidth()
         ) {
-            // 1. Home
-            NavigationBarItem(
-                selected = currentBottomTab == HomeBottomTab.HOME,
-                onClick = { currentBottomTab = HomeBottomTab.HOME },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Home,
-                        contentDescription = "Home"
-                    )
-                },
-                label = { Text("Home", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = DuoraRaspberry,
-                    selectedTextColor = DuoraRaspberry,
-                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.testTag("nav_item_home")
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 1. Home
+                DuoraBottomNavTab(
+                    selected = currentBottomTab == HomeBottomTab.HOME,
+                    onClick = { currentBottomTab = HomeBottomTab.HOME },
+                    icon = Icons.Default.Home,
+                    label = "Home",
+                    testTag = "nav_item_home",
+                    badgeCount = 0
+                )
 
-            // 2. Notes
-            NavigationBarItem(
-                selected = currentBottomTab == HomeBottomTab.NOTES,
-                onClick = { currentBottomTab = HomeBottomTab.NOTES },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Description,
-                        contentDescription = "Notes"
-                    )
-                },
-                label = { Text("Notes", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = DuoraRaspberry,
-                    selectedTextColor = DuoraRaspberry,
-                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.testTag("nav_item_notes")
-            )
+                // 2. Notes
+                DuoraBottomNavTab(
+                    selected = currentBottomTab == HomeBottomTab.NOTES,
+                    onClick = { currentBottomTab = HomeBottomTab.NOTES },
+                    icon = Icons.Default.Description,
+                    label = "Notes",
+                    testTag = "nav_item_notes",
+                    badgeCount = 0
+                )
 
-            // 3. Chat
-            NavigationBarItem(
-                selected = currentBottomTab == HomeBottomTab.CHAT,
-                onClick = { currentBottomTab = HomeBottomTab.CHAT },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.ChatBubble,
-                        contentDescription = "Chat"
-                    )
-                },
-                label = { Text("Chat", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = DuoraRaspberry,
-                    selectedTextColor = DuoraRaspberry,
-                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.testTag("nav_item_chat")
-            )
+                // 3. Chat
+                DuoraBottomNavTab(
+                    selected = currentBottomTab == HomeBottomTab.CHAT,
+                    onClick = { currentBottomTab = HomeBottomTab.CHAT },
+                    icon = Icons.Default.ChatBubble,
+                    label = "Chat",
+                    testTag = "nav_item_chat",
+                    badgeCount = unreadChatCount
+                )
 
-            // 4. Calls
-            NavigationBarItem(
-                selected = currentBottomTab == HomeBottomTab.CALL_LOGS,
-                onClick = { currentBottomTab = HomeBottomTab.CALL_LOGS },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Call,
-                        contentDescription = "Calls"
-                    )
-                },
-                label = { Text("Calls", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = DuoraRaspberry,
-                    selectedTextColor = DuoraRaspberry,
-                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.testTag("nav_item_calls")
-            )
+                // 4. Calls
+                DuoraBottomNavTab(
+                    selected = currentBottomTab == HomeBottomTab.CALL_LOGS,
+                    onClick = { currentBottomTab = HomeBottomTab.CALL_LOGS },
+                    icon = Icons.Default.Call,
+                    label = "Calls",
+                    testTag = "nav_item_calls",
+                    badgeCount = 0
+                )
 
-            // 5. Settings
-            NavigationBarItem(
-                selected = currentBottomTab == HomeBottomTab.SETTINGS,
-                onClick = { currentBottomTab = HomeBottomTab.SETTINGS },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings"
-                    )
-                },
-                label = { Text("Settings", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = DuoraRaspberry,
-                    selectedTextColor = DuoraRaspberry,
-                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                modifier = Modifier.testTag("nav_item_settings")
-            )
+                // 5. Settings
+                DuoraBottomNavTab(
+                    selected = currentBottomTab == HomeBottomTab.SETTINGS,
+                    onClick = { currentBottomTab = HomeBottomTab.SETTINGS },
+                    icon = Icons.Default.Settings,
+                    label = "Settings",
+                    testTag = "nav_item_settings",
+                    badgeCount = 0
+                )
+            }
         }
     }
 }
@@ -2001,3 +1968,69 @@ private fun ThemeOptionRow(
         }
     }
 }
+
+@Composable
+private fun DuoraBottomNavTab(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    testTag: String,
+    badgeCount: Int = 0
+) {
+    val pillBg by animateColorAsState(
+        targetValue = if (selected) DuoraPaleSky.copy(alpha = 0.65f) else Color.Transparent,
+        animationSpec = tween(220),
+        label = "pillBg"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) DuoraRaspberry else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(220),
+        label = "contentColor"
+    )
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .background(pillBg)
+            .padding(horizontal = if (selected) 12.dp else 10.dp, vertical = 7.dp)
+            .testTag(testTag),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+
+                if (badgeCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(DuoraRaspberry)
+                            .border(1.dp, Color.White, CircleShape)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = label,
+                fontSize = 10.sp,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor
+            )
+        }
+    }
+}
+
