@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -65,6 +66,8 @@ import com.example.ui.components.CameraPreview
 import com.example.ui.components.FloatingHeartsOverlay
 import com.example.ui.components.MemoryBackground
 import com.example.ui.components.PulsingHeartRing
+import com.example.ui.theme.DuoraPaleSky
+import com.example.ui.theme.DuoraRaspberry
 import com.example.ui.theme.LoveAccentGreen
 import com.example.ui.theme.LoveBlush
 import com.example.ui.theme.LoveCardSurface
@@ -201,25 +204,25 @@ fun CallScreen(
                 modifier = Modifier.padding(top = 16.dp)
             ) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = LoveCardSurface.copy(alpha = 0.8f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.5f))
+                    shape = RoundedCornerShape(18.dp),
+                    color = DuoraRaspberry.copy(alpha = 0.25f),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DuoraPaleSky.copy(alpha = 0.5f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Heart",
-                            tint = LoveRose,
+                            imageVector = if (callSession.type == CallType.VIDEO) Icons.Default.Videocam else Icons.Default.Call,
+                            contentDescription = null,
+                            tint = DuoraPaleSky,
                             modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (callSession.type == CallType.VIDEO) "Secure Video Call" else "Secure Voice Call",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
+                            text = if (callSession.type == CallType.VIDEO) "Duora Video Call" else "Duora Voice Call",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
                             color = LoveWhite
                         )
                     }
@@ -501,19 +504,19 @@ fun CallScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        // Controls Row: Mute, Speaker, Camera, Flip, End Call
+                        // Controls Row: Mute, Speaker, Camera, Flip, PiP (for video) or Mute, Speaker, Video Switch (for voice)
                         Card(
-                            shape = RoundedCornerShape(28.dp),
-                            colors = CardDefaults.cardColors(containerColor = LoveCardSurface.copy(alpha = 0.9f)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(26.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xDD1B0E2A)),
+                            border = androidx.compose.foundation.BorderStroke(1.2.dp, DuoraRaspberry.copy(alpha = 0.5f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                                    .padding(vertical = 14.dp, horizontal = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceEvenly,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -522,7 +525,7 @@ fun CallScreen(
                                     icon = if (callSession.isMuted) Icons.Default.MicOff else Icons.Default.Mic,
                                     label = if (callSession.isMuted) "Unmute" else "Mute",
                                     isActive = callSession.isMuted,
-                                    activeColor = LoveRose,
+                                    activeColor = DuoraRaspberry,
                                     onClick = { viewModel.toggleMute() },
                                     testTag = "toggle_mute_button"
                                 )
@@ -532,7 +535,7 @@ fun CallScreen(
                                     icon = if (callSession.isSpeakerOn) Icons.Default.VolumeUp else Icons.Default.VolumeOff,
                                     label = if (callSession.isSpeakerOn) "Speaker" else "Earpiece",
                                     isActive = callSession.isSpeakerOn,
-                                    activeColor = LoveGold,
+                                    activeColor = DuoraPaleSky,
                                     onClick = { viewModel.toggleSpeaker() },
                                     testTag = "toggle_speaker_button"
                                 )
@@ -543,7 +546,7 @@ fun CallScreen(
                                         icon = if (callSession.isVideoEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff,
                                         label = if (callSession.isVideoEnabled) "Cam On" else "Cam Off",
                                         isActive = !callSession.isVideoEnabled,
-                                        activeColor = LoveRose,
+                                        activeColor = Color(0xFFEF4444),
                                         onClick = { viewModel.toggleVideo() },
                                         testTag = "toggle_video_button"
                                     )
@@ -563,29 +566,42 @@ fun CallScreen(
                                         icon = Icons.Default.PictureInPictureAlt,
                                         label = "PiP",
                                         isActive = false,
-                                        activeColor = LoveRose,
+                                        activeColor = DuoraPaleSky,
                                         onClick = { onEnterPip() },
                                         testTag = "enter_pip_mode_button"
                                     )
-                                }
-
-                                // End Call Button
-                                IconButton(
-                                    onClick = { viewModel.endCall() },
-                                    modifier = Modifier
-                                        .size(56.dp)
-                                        .clip(CircleShape)
-                                        .background(LoveCrimson)
-                                        .testTag("end_call_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CallEnd,
-                                        contentDescription = "End Call",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(28.dp)
+                                } else {
+                                    // Switch / Upgrade to Video Button
+                                    CallControlButton(
+                                        icon = Icons.Default.Videocam,
+                                        label = "Video",
+                                        isActive = false,
+                                        activeColor = DuoraPaleSky,
+                                        onClick = { viewModel.switchCallType() },
+                                        testTag = "switch_to_video_button"
                                     )
                                 }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        // Large Centered Red End Call Button
+                        IconButton(
+                            onClick = { viewModel.endCall() },
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEF4444))
+                                .border(2.dp, Color(0x44FFFFFF), CircleShape)
+                                .testTag("end_call_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CallEnd,
+                                contentDescription = "End Call",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
                         }
                     }
                 }
@@ -605,8 +621,8 @@ private fun PartnerAvatarCircle(
         modifier = Modifier
             .size(sizeDp.dp)
             .clip(CircleShape)
-            .border(3.dp, LoveRose, CircleShape)
-            .background(Color(0xFF3B0B2E)),
+            .border(3.dp, DuoraRaspberry, CircleShape)
+            .background(Color(0xFF200F2E)),
         contentAlignment = Alignment.Center
     ) {
         if (!avatarUri.isNullOrBlank()) {
@@ -620,7 +636,7 @@ private fun PartnerAvatarCircle(
             Icon(
                 imageVector = Icons.Default.Favorite,
                 contentDescription = "Love Heart Avatar",
-                tint = LoveRose,
+                tint = DuoraRaspberry,
                 modifier = Modifier.size((sizeDp / 2).dp)
             )
         }
@@ -638,15 +654,18 @@ private fun CallControlButton(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable { onClick() }.testTag(testTag)
+        modifier = Modifier
+            .widthIn(min = 52.dp)
+            .clickable { onClick() }
+            .testTag(testTag)
     ) {
         Box(
             modifier = Modifier
-                .size(46.dp)
+                .size(50.dp)
                 .clip(CircleShape)
                 .background(if (isActive) activeColor.copy(alpha = 0.35f) else Color(0x33FFFFFF))
                 .border(
-                    1.dp,
+                    1.2.dp,
                     if (isActive) activeColor else Color(0x22FFFFFF),
                     CircleShape
                 ),
@@ -656,14 +675,15 @@ private fun CallControlButton(
                 imageVector = icon,
                 contentDescription = label,
                 tint = if (isActive) activeColor else LoveWhite,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = label,
-            fontSize = 10.sp,
-            color = LoveWhite.copy(alpha = 0.8f)
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = LoveWhite.copy(alpha = 0.9f)
         )
     }
 }

@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -24,19 +28,26 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,15 +63,12 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.model.CallType
+import com.example.ui.theme.DuoraPaleSky
+import com.example.ui.theme.DuoraRaspberry
 import com.example.ui.theme.LoveAccentGreen
-import com.example.ui.theme.LoveBlush
-import com.example.ui.theme.LoveCardBorder
-import com.example.ui.theme.LoveCardSurface
-import com.example.ui.theme.LoveDarkBg
 import com.example.ui.theme.LoveGold
 import com.example.ui.theme.LoveRose
-import com.example.ui.theme.LoveTextMuted
-import com.example.ui.theme.LoveWhite
 import com.example.viewmodel.AppScreen
 import com.example.viewmodel.LoveCallViewModel
 
@@ -76,18 +84,21 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
     var partnerName by remember(profile.partnerName) { mutableStateOf(profile.partnerName) }
     var partnerNickname by remember(profile.partnerNickname) { mutableStateOf(profile.partnerNickname) }
     var partnerPairCode by remember(profile.partnerPairCode) { mutableStateOf(profile.partnerPairCode) }
+    var showUnlinkDialog by remember { mutableStateOf(false) }
+
+    val isPaired = profile.isPaired && profile.partnerPairCode.isNotBlank()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(LoveDarkBg)
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 18.dp)
                 .verticalScroll(rememberScrollState())
         ) {
             // Header
@@ -102,105 +113,122 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)
-                        .background(LoveCardSurface)
-                        .border(1.dp, LoveCardBorder, CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                         .testTag("pairing_back_button")
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = LoveWhite
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
                 Column {
                     Text(
-                        text = "Couple Connection & Pairing",
-                        fontSize = 18.sp,
+                        text = "Partner Pairing",
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = LoveWhite
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Secure private peer pairing code",
+                        text = "Private two-person peer link",
                         fontSize = 12.sp,
-                        color = LoveTextMuted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Pairing Status Badge
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if (isPaired) LoveAccentGreen.copy(alpha = 0.15f) else DuoraPaleSky.copy(alpha = 0.4f),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isPaired) LoveAccentGreen.copy(alpha = 0.4f) else DuoraRaspberry.copy(alpha = 0.3f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(if (isPaired) LoveAccentGreen.copy(alpha = 0.2f) else DuoraRaspberry.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isPaired) Icons.Default.CheckCircle else Icons.Default.Link,
+                            contentDescription = null,
+                            tint = if (isPaired) LoveAccentGreen else DuoraRaspberry,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = if (isPaired) "Paired with ${profile.partnerName} (#${profile.partnerPairCode})" else "Ready to Connect",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isPaired) "Private encrypted space active ❤️" else "Share your code or enter your partner's code below",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Pairing Status Card
+            // STEP 1: Your Invitation Code
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LoveCardBorder)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    val isPaired = profile.isPaired && profile.partnerPairCode.isNotBlank()
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(if (isPaired) LoveAccentGreen.copy(alpha = 0.2f) else LoveGold.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isPaired) Icons.Default.CheckCircle else Icons.Default.Lock,
-                                contentDescription = if (isPaired) "Connected" else "Awaiting Pair",
-                                tint = if (isPaired) LoveAccentGreen else LoveGold,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = if (isPaired) "Paired with #${profile.partnerPairCode}" else "Awaiting Partner Pairing",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp,
-                                color = LoveWhite
-                            )
-                            Text(
-                                text = if (isPaired) "Private peer hotline active ❤️" else "Exchange codes between both devices to connect",
-                                fontSize = 12.sp,
-                                color = LoveTextMuted
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    // My Pair Code Display
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "STEP 1: YOUR SPECIAL LOVE CODE",
+                            text = "STEP 1: YOUR PAIR CODE",
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = LoveBlush
+                            fontWeight = FontWeight.Bold,
+                            color = DuoraRaspberry
                         )
-                        androidx.compose.material3.TextButton(
+
+                        TextButton(
                             onClick = {
                                 val newCode = viewModel.regenerateMyCode()
-                                Toast.makeText(context, "New unique code generated: #$newCode", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "New code generated: #$newCode", Toast.LENGTH_SHORT).show()
                             },
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                         ) {
-                            Text("Generate New", fontSize = 11.sp, color = LoveGold)
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp), tint = DuoraRaspberry)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("New Code", fontSize = 11.sp, color = DuoraRaspberry, fontWeight = FontWeight.Bold)
                         }
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
                     Surface(
                         shape = RoundedCornerShape(14.dp),
-                        color = Color(0x33F43F5E),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.6f)),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, DuoraRaspberry.copy(alpha = 0.5f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -210,88 +238,86 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                         ) {
                             Text(
                                 text = "#${profile.myPairCode}",
-                                fontSize = 19.sp,
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 letterSpacing = 2.sp,
-                                color = LoveGold
+                                color = DuoraRaspberry
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
-                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        val clip = android.content.ClipData.newPlainText("AmourCall Code", profile.myPairCode)
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("Duora Code", profile.myPairCode)
                                         clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "Love Code copied! Send to partner ❤️", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Code copied! Send to partner ❤️", Toast.LENGTH_SHORT).show()
                                     },
                                     shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    colors = ButtonDefaults.buttonColors(containerColor = DuoraRaspberry),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.testTag("copy_pairing_code_button")
                                 ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
+
                                 Button(
                                     onClick = {
-                                        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
                                             type = "text/plain"
-                                            putExtra(android.content.Intent.EXTRA_TEXT, "Hey my love! Download AmourCall and enter my Love Code: #${profile.myPairCode} to connect our private hotline ❤️")
+                                            putExtra(
+                                                Intent.EXTRA_TEXT,
+                                                "Hey my love! Connect with me on Duora using my private pair code: #${profile.myPairCode} ❤️ Two hearts. One private space."
+                                            )
                                         }
-                                        context.startActivity(android.content.Intent.createChooser(intent, "Share Love Code"))
+                                        context.startActivity(Intent.createChooser(intent, "Share Duora Code"))
                                     },
                                     shape = RoundedCornerShape(10.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = LoveGold),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.testTag("share_pairing_code_button")
                                 ) {
+                                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color.Black)
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text("Share", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 }
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Pairing Steps Helper
-                    Text(
-                        text = "1. Share your code above with your partner.\n2. Ask your partner for their code from their app.\n3. Enter their code below and tap 'Save & Link Device'!",
-                        fontSize = 11.sp,
-                        color = LoveTextMuted,
-                        lineHeight = 16.sp
-                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Partner Customization Form
-            Text(
-                text = "STEP 2: Enter Partner Information",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = LoveBlush,
-                modifier = Modifier.padding(start = 4.dp)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-
+            // STEP 2: Enter Partner Information
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LoveCardBorder)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    Text(
+                        text = "STEP 2: ENTER PARTNER DETAILS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = DuoraRaspberry
+                    )
+
                     OutlinedTextField(
                         value = partnerName,
                         onValueChange = { partnerName = it },
-                        label = { Text("Partner Name") },
+                        label = { Text("Partner Display Name") },
                         placeholder = { Text("My Love") },
                         singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LoveWhite,
-                            unfocusedTextColor = LoveWhite,
-                            focusedBorderColor = LoveRose,
-                            unfocusedBorderColor = LoveCardBorder
+                            focusedBorderColor = DuoraRaspberry,
+                            cursorColor = DuoraRaspberry
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -302,13 +328,12 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                         value = partnerNickname,
                         onValueChange = { partnerNickname = it },
                         label = { Text("Pet Name / Nickname") },
-                        placeholder = { Text("Sweetheart / Babu") },
+                        placeholder = { Text("Sweetheart") },
                         singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LoveWhite,
-                            unfocusedTextColor = LoveWhite,
-                            focusedBorderColor = LoveRose,
-                            unfocusedBorderColor = LoveCardBorder
+                            focusedBorderColor = DuoraRaspberry,
+                            cursorColor = DuoraRaspberry
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -318,28 +343,25 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                     OutlinedTextField(
                         value = partnerPairCode,
                         onValueChange = { partnerPairCode = it.uppercase() },
-                        label = { Text("Partner's Love Code") },
-                        placeholder = { Text("e.g. LOVE-4819") },
+                        label = { Text("Partner's Pair Code *") },
+                        placeholder = { Text("e.g. LOVE-8921") },
                         singleLine = true,
                         supportingText = {
                             Text(
-                                text = "Enter the exact code displayed on your partner's AmourCall app.",
+                                text = "Enter the 6-character code shown on your partner's screen.",
                                 fontSize = 11.sp,
-                                color = LoveTextMuted
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         },
+                        shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LoveWhite,
-                            unfocusedTextColor = LoveWhite,
-                            focusedBorderColor = LoveRose,
-                            unfocusedBorderColor = LoveCardBorder
+                            focusedBorderColor = DuoraRaspberry,
+                            cursorColor = DuoraRaspberry
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("partner_code_input")
                     )
-
-                    Spacer(modifier = Modifier.height(4.dp))
 
                     Button(
                         onClick = {
@@ -356,8 +378,8 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                             .fillMaxWidth()
                             .height(52.dp)
                             .testTag("save_pairing_button"),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = LoveRose)
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DuoraRaspberry)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Favorite,
@@ -368,202 +390,114 @@ fun PairingScreen(viewModel: LoveCallViewModel) {
                         Text(
                             text = if (partnerPairCode.isNotBlank()) "Save & Link Device" else "Save Details",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
+                            fontSize = 15.sp,
+                            color = Color.White
                         )
                     }
 
-                    if (profile.isPaired && profile.partnerPairCode.isNotBlank()) {
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = {
-                                viewModel.unlinkPartner()
-                                partnerPairCode = ""
-                                Toast.makeText(context, "Partner unlinked. You can link a new code.", Toast.LENGTH_SHORT).show()
-                            },
+                    if (isPaired) {
+                        OutlinedButton(
+                            onClick = { showUnlinkDialog = true },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(46.dp),
+                                .height(46.dp)
+                                .testTag("unlink_partner_button"),
                             shape = RoundedCornerShape(14.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.5f))
                         ) {
-                            Text("Unlink / Disconnect Partner", color = LoveRose, fontSize = 13.sp)
+                            Text("Unlink / Disconnect Partner", color = LoveRose, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Single-Device Call Test Card
+            // Test Calls Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LoveCardBorder)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text(
-                        text = "Preview Call Controls (Single Device)",
+                        text = "Call Audio/Video Self-Test",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = LoveWhite
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Test camera preview, microphone, love background, and floating hearts before calling partner.",
+                        text = "Verify camera, microphone, and romantic backdrop on this device.",
                         fontSize = 11.sp,
-                        color = LoveTextMuted,
-                        modifier = Modifier.padding(vertical = 6.dp)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 4.dp)
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = { viewModel.startSelfTestCall(com.example.model.CallType.VOICE) },
+                        OutlinedButton(
+                            onClick = { viewModel.startSelfTestCall(CallType.VOICE) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Test Voice", fontSize = 12.sp, color = LoveBlush)
+                            Text("Test Voice", fontSize = 12.sp, color = DuoraRaspberry, fontWeight = FontWeight.Bold)
                         }
-                        androidx.compose.material3.OutlinedButton(
-                            onClick = { viewModel.startSelfTestCall(com.example.model.CallType.VIDEO) },
+                        OutlinedButton(
+                            onClick = { viewModel.startSelfTestCall(CallType.VIDEO) },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Test Video", fontSize = 12.sp, color = LoveGold)
+                            Text("Test Video", fontSize = 12.sp, color = LoveRose, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Self-Hosted Server Configuration Card
-            val serverState by viewModel.serverConnectionState.collectAsState()
-            var serverUrlInput by remember(profile.serverUrl) { mutableStateOf(profile.serverUrl) }
-
-            Text(
-                text = "Self-Hosted Node.js Server",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = LoveBlush,
-                modifier = Modifier.padding(start = 4.dp)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
-                border = androidx.compose.foundation.BorderStroke(1.dp, LoveCardBorder)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Server Status",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = LoveWhite
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = when (serverState) {
-                                com.example.network.ServerConnectionState.CONNECTED -> Color(0x3310B981)
-                                com.example.network.ServerConnectionState.CONNECTING -> Color(0x33FBBF24)
-                                com.example.network.ServerConnectionState.DISCONNECTED -> Color(0x33F43F5E)
-                            }
-                        ) {
-                            Text(
-                                text = when (serverState) {
-                                    com.example.network.ServerConnectionState.CONNECTED -> "● Connected"
-                                    com.example.network.ServerConnectionState.CONNECTING -> "Connecting..."
-                                    com.example.network.ServerConnectionState.DISCONNECTED -> "○ Offline / Direct"
-                                },
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = when (serverState) {
-                                    com.example.network.ServerConnectionState.CONNECTED -> LoveAccentGreen
-                                    com.example.network.ServerConnectionState.CONNECTING -> LoveGold
-                                    com.example.network.ServerConnectionState.DISCONNECTED -> LoveRose
-                                },
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = serverUrlInput,
-                        onValueChange = { serverUrlInput = it },
-                        label = { Text("WebSocket Server URL") },
-                        placeholder = { Text("ws://10.0.2.2:3000 or wss://...") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = LoveWhite,
-                            unfocusedTextColor = LoveWhite,
-                            focusedBorderColor = LoveRose,
-                            unfocusedBorderColor = LoveCardBorder
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("server_url_input")
-                    )
-
-                    Button(
-                        onClick = {
-                            viewModel.reconnectServer(serverUrlInput)
-                            Toast.makeText(context, "Connecting to server...", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp)
-                            .testTag("connect_server_button"),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = LoveCardBorder)
-                    ) {
-                        Text(
-                            text = "Save & Connect Server",
-                            fontSize = 13.sp,
-                            color = LoveWhite
-                        )
-                    }
-
-                    Text(
-                        text = "The app connects directly to your Node.js server located in the /server directory for real-time couple signaling.",
-                        fontSize = 11.sp,
-                        color = LoveTextMuted,
-                        lineHeight = 16.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Security Details
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = "Security",
-                    tint = LoveGold,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Encrypted direct peer channel. Zero tracking or ads.",
-                    fontSize = 11.sp,
-                    color = LoveTextMuted
-                )
-            }
-
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(28.dp))
         }
+    }
+
+    if (showUnlinkDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnlinkDialog = false },
+            title = {
+                Text(
+                    text = "Unlink Partner?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Text(
+                    text = "This will disconnect you from #${profile.partnerPairCode}. You can re-link at any time.",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.unlinkPartner()
+                        partnerPairCode = ""
+                        showUnlinkDialog = false
+                        Toast.makeText(context, "Partner unlinked", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                    modifier = Modifier.testTag("confirm_unlink_button")
+                ) {
+                    Text("Unlink", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnlinkDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 }

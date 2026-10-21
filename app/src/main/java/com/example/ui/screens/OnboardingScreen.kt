@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,310 +16,341 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.CoupleProfile
-import com.example.ui.theme.LoveBlush
-import com.example.ui.theme.LoveCardBorder
-import com.example.ui.theme.LoveCardSurface
-import com.example.ui.theme.LoveCrimson
-import com.example.ui.theme.LoveDarkBg
+import com.example.ui.theme.DuoraDarkBg
+import com.example.ui.theme.DuoraPaleSky
+import com.example.ui.theme.DuoraRaspberry
 import com.example.ui.theme.LoveGold
-import com.example.ui.theme.LoveRose
-import com.example.ui.theme.LoveTextMuted
-import com.example.ui.theme.LoveWhite
+import kotlinx.coroutines.launch
+
+data class OnboardingPageData(
+    val title: String,
+    val subtitle: String,
+    val icon: ImageVector,
+    val tag: String,
+    val badge1: String,
+    val badge2: String
+)
 
 @Composable
 fun OnboardingScreen(
     currentProfile: CoupleProfile,
     onComplete: (partnerName: String, partnerNickname: String, partnerCode: String) -> Unit
 ) {
-    var partnerName by remember { mutableStateOf(currentProfile.partnerName) }
-    var partnerNickname by remember { mutableStateOf(currentProfile.partnerNickname) }
-    var partnerPairCode by remember { mutableStateOf(currentProfile.partnerPairCode) }
+    val pages = listOf(
+        OnboardingPageData(
+            title = "Your private space",
+            subtitle = "Only you and your paired partner. No strangers, no discovery feeds, no group chats—just a private, intimate sanctuary.",
+            icon = Icons.Default.Lock,
+            tag = "Two hearts. One private space.",
+            badge1 = "Mutual Pairing Only",
+            badge2 = "Zero Public Profile"
+        ),
+        OnboardingPageData(
+            title = "Stay close",
+            subtitle = "Real-time chat with truthful delivery, read states, live typing feedback, and 24-hour sweet partner love notes.",
+            icon = Icons.Default.ChatBubble,
+            tag = "Instant & Truthful Messaging",
+            badge1 = "Delivered & Read Receipts",
+            badge2 = "24-Hour Couple Notes"
+        ),
+        OnboardingPageData(
+            title = "Hear and see each other",
+            subtitle = "One-tap private audio and video calls, seamless background hotline, picture-in-picture multitasking, and floating heart reactions.",
+            icon = Icons.Default.Videocam,
+            tag = "Direct Audio & Video Hotline",
+            badge1 = "Picture-in-Picture",
+            badge2 = "Floating Heart Reactions"
+        )
+    )
 
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val pagerState = rememberPagerState(pageCount = { pages.size })
+    val coroutineScope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(LoveDarkBg)
+            .background(DuoraDarkBg)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(24.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Box(
-                    modifier = Modifier
-                        .size(76.dp)
-                        .clip(CircleShape)
-                        .background(
-                            brush = Brush.radialGradient(
-                                listOf(LoveRose, LoveCrimson, Color(0xFF380824))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
+            // Top Bar: Skip button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Wordmark
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Duora",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Icon(
                         imageVector = Icons.Default.Favorite,
-                        contentDescription = "Welcome Heart",
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
+                        contentDescription = null,
+                        tint = DuoraRaspberry,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Welcome to Duora",
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = LoveWhite
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = "Two hearts. One private space.",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = LoveGold,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Setup Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, LoveCardBorder)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                // Skip button on pages 0 and 1
+                AnimatedVisibility(visible = pagerState.currentPage < 2) {
+                    TextButton(
+                        onClick = {
+                            onComplete(
+                                currentProfile.partnerName,
+                                currentProfile.partnerNickname,
+                                currentProfile.partnerPairCode
+                            )
+                        },
+                        modifier = Modifier.testTag("onboarding_skip_button")
                     ) {
-                        // My Unique Love Code Display
                         Text(
-                            text = "STEP 1: YOUR SPECIAL LOVE CODE",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = LoveBlush
+                            text = "Skip",
+                            color = DuoraPaleSky.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
                         )
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color(0x33F43F5E),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.6f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "#${currentProfile.myPairCode}",
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        letterSpacing = 1.sp,
-                                        color = LoveGold
+                    }
+                }
+            }
+
+            // Pager content
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) { pageIndex ->
+                val page = pages[pageIndex]
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    // Glowing Icon Container
+                    Box(
+                        modifier = Modifier
+                            .size(120.dp)
+                            .clip(CircleShape)
+                            .background(
+                                brush = Brush.radialGradient(
+                                    listOf(
+                                        DuoraRaspberry.copy(alpha = 0.45f),
+                                        Color(0xFF23184A),
+                                        DuoraDarkBg
                                     )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        androidx.compose.material3.TextButton(
-                                            onClick = {
-                                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                                val clip = android.content.ClipData.newPlainText("AmourCall Code", currentProfile.myPairCode)
-                                                clipboard.setPrimaryClip(clip)
-                                                android.widget.Toast.makeText(context, "Code copied! Share with your love ❤️", android.widget.Toast.LENGTH_SHORT).show()
-                                            },
-                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                        ) {
-                                            Text("Copy", fontSize = 12.sp, color = LoveWhite)
-                                        }
-                                        androidx.compose.material3.TextButton(
-                                            onClick = {
-                                                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                                    type = "text/plain"
-                                                    putExtra(android.content.Intent.EXTRA_TEXT, "Hey my love! Connect with me on AmourCall ❤️ My Love Code is: #${currentProfile.myPairCode}")
-                                                }
-                                                context.startActivity(android.content.Intent.createChooser(intent, "Share Love Code"))
-                                            },
-                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                        ) {
-                                            Text("Share", fontSize = 12.sp, color = LoveGold)
-                                        }
-                                    }
-                                }
-                                Text(
-                                    text = "Send this code to your partner so they can link with you.",
-                                    fontSize = 11.sp,
-                                    color = LoveTextMuted,
-                                    modifier = Modifier.padding(top = 4.dp)
                                 )
-                            }
+                            )
+                            .border(2.dp, DuoraRaspberry.copy(alpha = 0.5f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = page.icon,
+                            contentDescription = page.title,
+                            tint = DuoraPaleSky,
+                            modifier = Modifier.size(54.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(28.dp))
+
+                    // Tagline chip
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = DuoraRaspberry.copy(alpha = 0.15f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DuoraRaspberry.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = page.tag,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = DuoraPaleSky,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = page.title,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = page.subtitle,
+                        fontSize = 15.sp,
+                        color = DuoraPaleSky.copy(alpha = 0.85f),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Feature highlights row
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF262035),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF382C4E))
+                        ) {
+                            Text(
+                                text = "✓ ${page.badge1}",
+                                fontSize = 11.sp,
+                                color = LoveGold,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
                         }
 
-                        Text(
-                            text = "STEP 2: PARTNER DETAILS & CODE",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = LoveBlush,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-
-                        OutlinedTextField(
-                            value = partnerName,
-                            onValueChange = { partnerName = it },
-                            label = { Text("Partner's Name") },
-                            placeholder = { Text("e.g. My Love, Sophia, Rahul") },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = LoveWhite,
-                                unfocusedTextColor = LoveWhite,
-                                focusedBorderColor = LoveRose,
-                                unfocusedBorderColor = LoveCardBorder
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("onboarding_partner_name")
-                        )
-
-                        OutlinedTextField(
-                            value = partnerNickname,
-                            onValueChange = { partnerNickname = it },
-                            label = { Text("Pet Name / Nickname") },
-                            placeholder = { Text("e.g. Sweetheart, Jaanu, Darling") },
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = LoveWhite,
-                                unfocusedTextColor = LoveWhite,
-                                focusedBorderColor = LoveRose,
-                                unfocusedBorderColor = LoveCardBorder
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("onboarding_partner_nickname")
-                        )
-
-                        OutlinedTextField(
-                            value = partnerPairCode,
-                            onValueChange = {
-                                partnerPairCode = it.uppercase()
-                                errorMessage = null
-                            },
-                            label = { Text("Partner's Love Code (Optional)") },
-                            placeholder = { Text("Enter their code (e.g. AMOUR-7K9W)") },
-                            singleLine = true,
-                            supportingText = {
-                                Text(
-                                    text = "Leave blank if you haven't received partner's code yet. You can link anytime!",
-                                    fontSize = 11.sp,
-                                    color = LoveTextMuted
-                                )
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = LoveWhite,
-                                unfocusedTextColor = LoveWhite,
-                                focusedBorderColor = LoveRose,
-                                unfocusedBorderColor = LoveCardBorder
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("onboarding_partner_code")
-                        )
-
-                        if (errorMessage != null) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF262035),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF382C4E))
+                        ) {
                             Text(
-                                text = errorMessage ?: "",
-                                color = LoveRose,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                                text = "✓ ${page.badge2}",
+                                fontSize = 11.sp,
+                                color = LoveGold,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Action Button
+            // Bottom Navigation Controls
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Button(
-                    onClick = {
-                        val finalCode = partnerPairCode.trim().uppercase()
-                        if (finalCode.isNotBlank() && finalCode.equals(currentProfile.myPairCode, ignoreCase = true)) {
-                            errorMessage = "You cannot enter your own code! Please enter your partner's code."
-                            return@Button
-                        }
-                        val finalName = partnerName.ifBlank { "My Love" }
-                        val finalNickname = partnerNickname.ifBlank { "Sweetheart" }
-                        onComplete(finalName, finalNickname, finalCode)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .testTag("onboarding_submit_button"),
-                    shape = RoundedCornerShape(18.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose)
+                // Page Indicator Dots
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 24.dp)
                 ) {
-                    Text(
-                        text = "Enter AmourCall ❤️",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    repeat(pages.size) { index ->
+                        val isSelected = pagerState.currentPage == index
+                        Box(
+                            modifier = Modifier
+                                .size(if (isSelected) 24.dp else 8.dp, 8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(
+                                    if (isSelected) DuoraRaspberry else DuoraPaleSky.copy(alpha = 0.3f)
+                                )
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "🔒 Private & secure • You can update details anytime in Settings",
-                    fontSize = 11.sp,
-                    color = LoveTextMuted
-                )
+                // Action Button (Continue or Get started)
+                if (pagerState.currentPage < 2) {
+                    Button(
+                        onClick = {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("onboarding_continue_button"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DuoraRaspberry,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            text = "Continue",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            onComplete(
+                                currentProfile.partnerName,
+                                currentProfile.partnerNickname,
+                                currentProfile.partnerPairCode
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("onboarding_get_started_button"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = DuoraRaspberry,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(
+                            text = "Get Started",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
             }
         }
     }

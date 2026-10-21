@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">Duora</string>
+    <string name="icon_duora_label">Duora</string>
+    <string name="icon_calculator_label">Calculator</string>
+    <string name="icon_notes_label">Notes</string>
+    <string name="icon_clock_label">Clock</string>
+    <string name="icon_weather_label">Weather</string>
 </resources>

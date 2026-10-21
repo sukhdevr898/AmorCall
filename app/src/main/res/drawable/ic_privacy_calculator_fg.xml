@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Calculator body outline -->
+    <path
+        android:fillColor="#334155"
+        android:pathData="M34,22 h40 c4.4,0 8,3.6 8,8 v48 c0,4.4 -3.6,8 -8,8 h-40 c-4.4,0 -8,-3.6 -8,-8 v-48 c0,-4.4 3.6,-8 8,-8 z" />
+    <!-- Screen -->
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M32,28 h44 c2.2,0 4,1.8 4,4 v10 c0,2.2 -1.8,4 -4,4 h-44 c-2.2,0 -4,-1.8 -4,-4 v-10 c0,-2.2 1.8,-4 4,-4 z" />
+    <!-- Screen display digits bar -->
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M64,36 h10 v3 h-10 z M54,36 h6 v3 h-6 z" />
+    <!-- Keypad buttons: row 1 -->
+    <path
+        android:fillColor="#64748B"
+        android:pathData="M32,50 h8 c1.5,0 3,1.5 3,3 v3 c0,1.5 -1.5,3 -3,3 h-8 c-1.5,0 -3,-1.5 -3,-3 v-3 c0,-1.5 1.5,-3 3,-3 z" />
+    <path
+        android:fillColor="#64748B"
+        android:pathData="M48,50 h8 c1.5,0 3,1.5 3,3 v3 c0,1.5 -1.5,3 -3,3 h-8 c-1.5,0 -3,-1.5 -3,-3 v-3 c0,-1.5 1.5,-3 3,-3 z" />
+    <path
+        android:fillColor="#F97316"
+        android:pathData="M64,50 h12 c1.5,0 3,1.5 3,3 v3 c0,1.5 -1.5,3 -3,3 h-12 c-1.5,0 -3,-1.5 -3,-3 v-3 c0,-1.5 1.5,-3 3,-3 z" />
+    <!-- Keypad buttons: row 2 -->
+    <path
+        android:fillColor="#64748B"
+        android:pathData="M32,62 h8 c1.5,0 3,1.5 3,3 v3 c0,1.5 -1.5,3 -3,3 h-8 c-1.5,0 -3,-1.5 -3,-3 v-3 c0,-1.5 1.5,-3 3,-3 z" />
+    <path
+        android:fillColor="#64748B"
+        android:pathData="M48,62 h8 c1.5,0 3,1.5 3,3 v3 c0,1.5 -1.5,3 -3,3 h-8 c-1.5,0 -3,-1.5 -3,-3 v-3 c0,-1.5 1.5,-3 3,-3 z" />
+    <path
+        android:fillColor="#F97316"
+        android:pathData="M64,62 h12 c1.5,0 3,1.5 3,3 v3 c0,1.5 -1.5,3 -3,3 h-12 c-1.5,0 -3,-1.5 -3,-3 v-3 c0,-1.5 1.5,-3 3,-3 z" />
+    <!-- Keypad buttons: row 3 -->
+    <path
+        android:fillColor="#64748B"
+        android:pathData="M32,74 h24 c1.5,0 3,1.5 3,3 v3 c0,1.5 -1.5,3 -3,3 h-24 c-1.5,0 -3,-1.5 -3,-3 v-3 c0,-1.5 1.5,-3 3,-3 z" />
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M64,74 h12 c1.5,0 3,1.5 3,3 v3 c0,1.5 -1.5,3 -3,3 h-12 c-1.5,0 -3,-1.5 -3,-3 v-3 c0,-1.5 1.5,-3 3,-3 z" />
+</vector>

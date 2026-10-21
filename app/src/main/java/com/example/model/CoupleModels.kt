@@ -71,3 +71,50 @@ data class CallRecord(
     val durationSeconds: Int,
     val isOutgoing: Boolean
 )
+
+data class CoupleNote(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String = "",
+    val content: String = "",
+    val authorCode: String = "",
+    val authorName: String = "",
+    val createdAtEpochMs: Long = System.currentTimeMillis(),
+    val updatedAtEpochMs: Long = System.currentTimeMillis(),
+    val isFromPartner: Boolean = false,
+    val isShared: Boolean = true
+) {
+    val isExpired: Boolean
+        get() = (System.currentTimeMillis() - createdAtEpochMs) > (24L * 60 * 60 * 1000L)
+
+    val remainingMinutes: Long
+        get() {
+            val elapsed = System.currentTimeMillis() - createdAtEpochMs
+            val remainingMs = (24L * 60 * 60 * 1000L) - elapsed
+            return if (remainingMs > 0) remainingMs / (1000L * 60L) else 0L
+        }
+
+    val remainingFormatted: String
+        get() {
+            val mins = remainingMinutes
+            val hours = mins / 60
+            val remMins = mins % 60
+            return when {
+                hours > 0 -> "${hours}h ${remMins}m left"
+                mins > 0 -> "${mins}m left"
+                else -> "Expiring soon"
+            }
+        }
+}
+
+data class ChatMessage(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val fromCode: String = "",
+    val toCode: String = "",
+    val senderName: String = "",
+    val content: String = "",
+    val messageType: String = "text",
+    val timestamp: Long = System.currentTimeMillis(),
+    val isOutgoing: Boolean = true,
+    val isRead: Boolean = false
+)
+

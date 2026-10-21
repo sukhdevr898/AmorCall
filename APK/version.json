@@ -1,10 +1,10 @@
 {
-  "versionCode": 4,
-  "versionName": "2.0",
+  "versionCode": 6,
+  "versionName": "2.1.0",
   "minSupportedVersion": "1.0",
   "appName": "Duora",
-  "downloadUrl": "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.0.apk",
-  "browserUrl": "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.0.apk",
+  "downloadUrl": "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.1.0.apk",
+  "browserUrl": "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.1.0.apk",
   "repoUrl": "https://github.com/sukhdevr898/AmorCall",
-  "releaseNotes": "• Picture-in-Picture (PiP) video calling\n• Background call audio and video hotline reliability\n• Native Android incoming call ringtone & heartbeat haptics\n• Duora brand redesign (Two hearts. One private space)\n• Automatic in-app update checker"
+  "releaseNotes": "• App version 2.1.0 release\n• Native Android 5-tab navigation bar (Home, Notes, Chat, Calls, Settings) with Raspberry & Pale Sky styling\n• Shared-element animated transitions between screens and partner card into Chat\n• In-app top back navigation buttons and Android system back handling across all secondary screens\n• Complete real-time Audio and Video calling controls with camera switch, PiP mode, and speakerphone routing\n• Full couple notes management, message state receipts, and private pairing setup"
 }

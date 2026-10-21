@@ -16,6 +16,8 @@ import com.example.model.CallRecord
 import com.example.model.CallSession
 import com.example.model.CallStatus
 import com.example.model.CallType
+import com.example.model.ChatMessage
+import com.example.model.CoupleNote
 import com.example.model.CoupleProfile
 import com.example.model.FloatingHeart
 import com.example.model.MemoryPhoto
@@ -55,7 +57,16 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     val profile: StateFlow<CoupleProfile> = repository.profile
     val memories: StateFlow<List<MemoryPhoto>> = repository.memories
     val callHistory: StateFlow<List<CallRecord>> = repository.callHistory
+    val sharedNote: StateFlow<CoupleNote?> = repository.sharedNote
+    val notes: StateFlow<List<CoupleNote>> = repository.notes
+    val chatMessages: StateFlow<List<ChatMessage>> = repository.chatMessages
     val serverConnectionState: StateFlow<ServerConnectionState> = signalingClient.connectionState
+
+    private val _isPartnerTyping = MutableStateFlow(false)
+    val isPartnerTyping: StateFlow<Boolean> = _isPartnerTyping.asStateFlow()
+
+    private val _isChatOpen = MutableStateFlow(false)
+    val isChatOpen: StateFlow<Boolean> = _isChatOpen.asStateFlow()
 
     val activeWallpaper: StateFlow<MemoryPhoto?> = repository.memories
         .map { list -> list.firstOrNull { it.isSelectedWallpaper } ?: list.firstOrNull() }
@@ -175,6 +186,29 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     is SignalingEvent.HeartReaction -> {
                         spawnFloatingHeart()
                     }
+                    is SignalingEvent.PartnerNoteReceived -> {
+                        val note = CoupleNote(
+                            id = event.noteId,
+                            content = event.content,
+                            authorCode = event.from,
+                            authorName = event.authorName,
+                            createdAtEpochMs = event.createdAt,
+                            isFromPartner = true
+                        )
+                        repository.saveSharedNote(note)
+                    }
+                    is SignalingEvent.PartnerNoteDeleted -> {
+                        repository.deleteSharedNote()
+                    }
+                    is SignalingEvent.ChatMessageReceived -> {
+                        repository.saveChatMessage(event.message)
+                    }
+                    is SignalingEvent.ChatTyping -> {
+                        _isPartnerTyping.value = event.isTyping
+                    }
+                    is SignalingEvent.ChatHistoryLoaded -> {
+                        repository.setChatMessages(event.messages)
+                    }
                 }
             }
         }
@@ -237,6 +271,38 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         _currentScreen.value = AppScreen.DASHBOARD
     }
 
+    fun replayOnboarding() {
+        _currentScreen.value = AppScreen.ONBOARDING
+    }
+
+    fun updateRelationshipProfile(userName: String, partnerName: String, partnerNickname: String) {
+        val updated = profile.value.copy(
+            userName = userName.ifBlank { "You" },
+            partnerName = partnerName.ifBlank { "My Love" },
+            partnerNickname = partnerNickname.ifBlank { "Sweetheart" }
+        )
+        repository.saveProfile(updated)
+    }
+
+    fun getRedactedDiagnostics(): String {
+        val prof = profile.value
+        val isConnected = serverConnectionState.value == ServerConnectionState.CONNECTED
+        return """
+            === Duora Diagnostics ===
+            App: Duora v${com.example.BuildConfig.VERSION_NAME} (${com.example.BuildConfig.VERSION_CODE})
+            Platform: Android Native (Kotlin + Jetpack Compose)
+            WebSocket Server: [REDACTED_URL]
+            Socket Connection: ${if (isConnected) "CONNECTED" else "DISCONNECTED"}
+            Mutual Pairing: ${if (prof.isPaired) "PAIRED (#${prof.myPairCode.take(2)}*** -> #${prof.partnerPairCode.take(2)}***)" else "UNPAIRED"}
+            Cached Messages: ${chatMessages.value.size}
+            Active 24h Note: ${if (sharedNote.value != null) "ACTIVE" else "NONE"}
+            Call State: ${_callSession.value.status}
+            Theme: ${prof.appTheme.name}
+            Notifications Muted: ${prof.isNotificationsMuted}
+            Sensitive Data (Tokens, Passwords, Codes, Messages, SDP/ICE): REDACTED
+        """.trimIndent()
+    }
+
     fun navigateTo(screen: AppScreen) {
         _currentScreen.value = screen
     }
@@ -254,6 +320,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         val updated = profile.value.copy(serverUrl = newServerUrl.trim())
         repository.saveProfile(updated)
         signalingClient.connect(updated.serverUrl, updated.myPairCode, updated.partnerPairCode)
+    }
+
+    fun initiateCall(type: CallType) {
+        startOutgoingCall(type)
     }
 
     fun startOutgoingCall(type: CallType) {
@@ -546,6 +616,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             _callSession.value = CallSession(status = CallStatus.IDLE)
             syncCallStateToService()
         }
+        repository.checkNoteExpiry()
     }
 
     fun toggleMute() {
@@ -574,6 +645,18 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         _callSession.value = _callSession.value.copy(
             isFrontCamera = !_callSession.value.isFrontCamera
         )
+    }
+
+    fun switchCallType() {
+        val currentType = _callSession.value.type
+        val nextType = if (currentType == CallType.VOICE) CallType.VIDEO else CallType.VOICE
+        val speakerDefault = nextType == CallType.VIDEO
+        _callSession.value = _callSession.value.copy(
+            type = nextType,
+            isSpeakerOn = speakerDefault
+        )
+        audioHaptics.setSpeakerphone(speakerDefault)
+        syncCallStateToService()
     }
 
     fun sendVideoFrame(bitmap: Bitmap) {
@@ -679,6 +762,138 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
 
     fun deleteMemory(memoryId: String) {
         repository.deleteMemory(memoryId)
+    }
+
+    fun postSharedNote(content: String) {
+        val cleanContent = content.trim()
+        if (cleanContent.isBlank()) return
+        val prof = profile.value
+        val note = CoupleNote(
+            id = java.util.UUID.randomUUID().toString(),
+            content = cleanContent,
+            authorCode = prof.myPairCode,
+            authorName = prof.userName,
+            createdAtEpochMs = System.currentTimeMillis(),
+            isFromPartner = false
+        )
+        repository.saveSharedNote(note)
+        if (prof.isPaired && prof.partnerPairCode.isNotBlank()) {
+            signalingClient.sendCoupleNote(
+                to = prof.partnerPairCode,
+                noteId = note.id,
+                content = note.content,
+                authorName = note.authorName,
+                createdAt = note.createdAtEpochMs
+            )
+        }
+    }
+
+    fun deleteSharedNote() {
+        val current = repository.sharedNote.value
+        val prof = profile.value
+        repository.deleteSharedNote()
+        if (current != null && prof.isPaired && prof.partnerPairCode.isNotBlank()) {
+            signalingClient.sendDeleteNote(
+                to = prof.partnerPairCode,
+                noteId = current.id
+            )
+        }
+    }
+
+    fun saveNote(title: String, content: String, isShared: Boolean = true, existingId: String? = null) {
+        val cleanContent = content.trim()
+        if (cleanContent.isBlank()) return
+        val prof = profile.value
+        val note = CoupleNote(
+            id = existingId ?: java.util.UUID.randomUUID().toString(),
+            title = title.trim(),
+            content = cleanContent,
+            authorCode = prof.myPairCode,
+            authorName = prof.userName,
+            createdAtEpochMs = System.currentTimeMillis(),
+            updatedAtEpochMs = System.currentTimeMillis(),
+            isFromPartner = false,
+            isShared = isShared
+        )
+        repository.addOrUpdateNote(note)
+        if (isShared && prof.isPaired && prof.partnerPairCode.isNotBlank()) {
+            signalingClient.sendCoupleNote(
+                to = prof.partnerPairCode,
+                noteId = note.id,
+                content = note.content,
+                authorName = note.authorName,
+                createdAt = note.createdAtEpochMs
+            )
+        }
+    }
+
+    fun deleteNote(noteId: String) {
+        val prof = profile.value
+        repository.deleteNote(noteId)
+        if (prof.isPaired && prof.partnerPairCode.isNotBlank()) {
+            signalingClient.sendDeleteNote(
+                to = prof.partnerPairCode,
+                noteId = noteId
+            )
+        }
+    }
+
+    fun checkNoteExpiry() {
+        repository.checkNoteExpiry()
+    }
+
+    fun sendChatMessage(text: String) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return
+        val prof = profile.value
+        val partnerCode = prof.partnerPairCode.trim()
+        val msg = ChatMessage(
+            id = java.util.UUID.randomUUID().toString(),
+            fromCode = prof.myPairCode,
+            toCode = partnerCode,
+            senderName = "Me",
+            content = trimmed,
+            timestamp = System.currentTimeMillis(),
+            isOutgoing = true,
+            isRead = false
+        )
+        repository.saveChatMessage(msg)
+        if (partnerCode.isNotBlank()) {
+            signalingClient.sendChatMessage(
+                to = partnerCode,
+                id = msg.id,
+                content = msg.content,
+                senderName = prof.partnerName,
+                timestamp = msg.timestamp
+            )
+        }
+    }
+
+    fun setChatTyping(isTyping: Boolean) {
+        val partnerCode = profile.value.partnerPairCode.trim()
+        if (partnerCode.isNotBlank()) {
+            signalingClient.sendChatTyping(partnerCode, isTyping)
+        }
+    }
+
+    fun requestChatHistory() {
+        val partnerCode = profile.value.partnerPairCode.trim()
+        if (partnerCode.isNotBlank()) {
+            signalingClient.requestChatHistory(partnerCode)
+        }
+    }
+
+    fun clearChat() {
+        repository.clearChatMessages()
+    }
+
+    fun openChat() {
+        _isChatOpen.value = true
+        requestChatHistory()
+    }
+
+    fun closeChat() {
+        _isChatOpen.value = false
     }
 
     override fun onCleared() {

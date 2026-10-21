@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Button
@@ -45,7 +46,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.example.BuildConfig
+import com.example.privacy.PrivacyIconManager
+import com.example.privacy.PrivacyIconType
+import com.example.ui.components.PrivacyIconDialog
+import com.example.ui.theme.LoveAccentGreen
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,6 +86,17 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
     val updateInfo by viewModel.appUpdateInfo.collectAsState()
     val isChecking by viewModel.isCheckingUpdate.collectAsState()
     val statusMessage by viewModel.updateStatusMessage.collectAsState()
+
+    var showPrivacyIconDialog by remember { mutableStateOf(false) }
+    val currentPrivacyIcon by PrivacyIconManager.currentIcon.collectAsState()
+
+    if (showPrivacyIconDialog) {
+        PrivacyIconDialog(
+            currentIcon = currentPrivacyIcon,
+            onDismiss = { showPrivacyIconDialog = false },
+            onIconChanged = { showPrivacyIconDialog = false }
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -384,6 +403,75 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            // Stealth Privacy App Icon Disguise Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = LoveCardSurface),
+                border = androidx.compose.foundation.BorderStroke(1.2.dp, LoveRose.copy(alpha = 0.5f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(LoveRose.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Shield,
+                                    contentDescription = "Privacy Shield",
+                                    tint = LoveRose,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Privacy App Icon",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LoveWhite
+                                )
+                                Text(
+                                    text = "Active: ${currentPrivacyIcon.launcherLabel} (${currentPrivacyIcon.title})",
+                                    fontSize = 11.sp,
+                                    color = LoveGold
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = { showPrivacyIconDialog = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.testTag("dev_change_privacy_icon_button")
+                        ) {
+                            Text("Disguise", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Disguise the launcher icon and title as a Calculator, Notes, Clock, or Weather app to keep calls discreet.",
+                        fontSize = 11.sp,
+                        color = LoveTextMuted,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             // App Version & Dedication
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -404,7 +492,7 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Duora v2.0 • Two hearts. One private space.",
+                            text = "Duora v${BuildConfig.VERSION_NAME} • Two hearts. One private space.",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = LoveGold

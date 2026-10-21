@@ -19,6 +19,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import com.example.model.ChatMessage
 
 enum class ServerConnectionState {
     DISCONNECTED,
@@ -37,6 +38,17 @@ sealed class SignalingEvent {
     data class AudioChunk(val from: String, val audioData: String) : SignalingEvent()
     data class VideoFrame(val from: String, val frameData: String) : SignalingEvent()
     object HeartReaction : SignalingEvent()
+    data class PartnerNoteReceived(
+        val from: String,
+        val noteId: String,
+        val content: String,
+        val authorName: String,
+        val createdAt: Long
+    ) : SignalingEvent()
+    data class PartnerNoteDeleted(val from: String, val noteId: String) : SignalingEvent()
+    data class ChatMessageReceived(val message: ChatMessage) : SignalingEvent()
+    data class ChatTyping(val from: String, val isTyping: Boolean) : SignalingEvent()
+    data class ChatHistoryLoaded(val messages: List<ChatMessage>) : SignalingEvent()
 }
 
 class SignalingClient private constructor() {
@@ -234,6 +246,90 @@ class SignalingClient private constructor() {
                         _events.emit(SignalingEvent.HeartReaction)
                     }
                 }
+                "couple_note" -> {
+                    val from = json.optString("from")
+                    val noteId = json.optString("noteId")
+                    val content = json.optString("content")
+                    val authorName = json.optString("authorName", "Partner")
+                    val createdAt = json.optLong("createdAt", System.currentTimeMillis())
+                    if (content.isNotBlank()) {
+                        scope.launch {
+                            _events.emit(
+                                SignalingEvent.PartnerNoteReceived(
+                                    from = from,
+                                    noteId = noteId,
+                                    content = content,
+                                    authorName = authorName,
+                                    createdAt = createdAt
+                                )
+                            )
+                        }
+                    }
+                }
+                "delete_note" -> {
+                    val from = json.optString("from")
+                    val noteId = json.optString("noteId")
+                    scope.launch {
+                        _events.emit(SignalingEvent.PartnerNoteDeleted(from, noteId))
+                    }
+                }
+                "chat_message" -> {
+                    val id = json.optString("id", java.util.UUID.randomUUID().toString())
+                    val from = json.optString("from")
+                    val to = json.optString("to")
+                    val senderName = json.optString("senderName", "Partner")
+                    val content = json.optString("content")
+                    val messageType = json.optString("messageType", "text")
+                    val timestamp = json.optLong("timestamp", System.currentTimeMillis())
+                    val chatMsg = ChatMessage(
+                        id = id,
+                        fromCode = from,
+                        toCode = to,
+                        senderName = senderName,
+                        content = content,
+                        messageType = messageType,
+                        timestamp = timestamp,
+                        isOutgoing = false,
+                        isRead = false
+                    )
+                    scope.launch {
+                        _events.emit(SignalingEvent.ChatMessageReceived(chatMsg))
+                    }
+                }
+                "chat_typing" -> {
+                    val from = json.optString("from")
+                    val isTyping = json.optBoolean("isTyping", false)
+                    scope.launch {
+                        _events.emit(SignalingEvent.ChatTyping(from, isTyping))
+                    }
+                }
+                "chat_history" -> {
+                    val array = json.optJSONArray("messages")
+                    val list = mutableListOf<ChatMessage>()
+                    if (array != null) {
+                        for (i in 0 until array.length()) {
+                            val item = array.getJSONObject(i)
+                            val from = item.optString("fromCode")
+                            val isOut = from.equals(currentMyCode, ignoreCase = true)
+                            list.add(
+                                ChatMessage(
+                                    id = item.optString("id"),
+                                    fromCode = from,
+                                    toCode = item.optString("toCode"),
+                                    senderName = item.optString("senderName"),
+                                    content = item.optString("content"),
+                                    messageType = item.optString("messageType", "text"),
+                                    timestamp = item.optLong("timestamp"),
+                                    isOutgoing = isOut,
+                                    isRead = item.optBoolean("isRead", false)
+                                )
+                            )
+                        }
+                    }
+                    scope.launch {
+                        _events.emit(SignalingEvent.ChatHistoryLoaded(list))
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e("SignalingClient", "Failed to parse message: $text", e)
@@ -320,6 +416,70 @@ class SignalingClient private constructor() {
     fun sendHeartReaction(to: String) {
         val payload = JSONObject().apply {
             put("type", "heart_reaction")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+        }
+        send(payload)
+    }
+
+    fun sendCoupleNote(to: String, noteId: String, content: String, authorName: String, createdAt: Long) {
+        val payload = JSONObject().apply {
+            put("type", "couple_note")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+            put("noteId", noteId)
+            put("content", content)
+            put("authorName", authorName)
+            put("createdAt", createdAt)
+        }
+        send(payload)
+    }
+
+    fun sendDeleteNote(to: String, noteId: String) {
+        val payload = JSONObject().apply {
+            put("type", "delete_note")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+            put("noteId", noteId)
+        }
+        send(payload)
+    }
+
+    fun sendChatMessage(to: String, id: String, content: String, senderName: String, timestamp: Long) {
+        val payload = JSONObject().apply {
+            put("type", "chat_message")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+            put("id", id)
+            put("content", content)
+            put("senderName", senderName)
+            put("timestamp", timestamp)
+        }
+        send(payload)
+    }
+
+    fun sendChatTyping(to: String, isTyping: Boolean) {
+        val payload = JSONObject().apply {
+            put("type", "chat_typing")
+            put("from", currentMyCode)
+            put("to", to.uppercase().trim())
+            put("isTyping", isTyping)
+        }
+        send(payload)
+    }
+
+    fun requestChatHistory(partnerCode: String) {
+        val payload = JSONObject().apply {
+            put("type", "chat_history_request")
+            put("from", currentMyCode)
+            put("to", partnerCode.uppercase().trim())
+        }
+        send(payload)
+    }
+
+    fun sendChatRead(to: String) {
+        val payload = JSONObject().apply {
+            put("type", "chat_read")
             put("from", currentMyCode)
             put("to", to.uppercase().trim())
         }

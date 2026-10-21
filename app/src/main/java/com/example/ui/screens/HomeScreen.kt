@@ -6,6 +6,14 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +38,7 @@ import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
@@ -37,19 +46,42 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import com.example.ui.theme.DuoraPaleSky
+import com.example.ui.theme.DuoraRaspberry
 import com.example.BuildConfig
+import com.example.model.CoupleNote
+import com.example.privacy.PrivacyIconManager
+import com.example.privacy.PrivacyIconType
+import com.example.ui.components.PrivacyIconDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -85,6 +117,14 @@ import com.example.ui.theme.LoveWhite
 import com.example.viewmodel.AppScreen
 import com.example.viewmodel.LoveCallViewModel
 
+enum class HomeBottomTab {
+    HOME,
+    NOTES,
+    CHAT,
+    CALL_LOGS,
+    SETTINGS
+}
+
 @Composable
 fun HomeScreen(
     viewModel: LoveCallViewModel,
@@ -94,16 +134,32 @@ fun HomeScreen(
     val profile by viewModel.profile.collectAsState()
     val callHistory by viewModel.callHistory.collectAsState()
     val serverState by viewModel.serverConnectionState.collectAsState()
+    val sharedNote by viewModel.sharedNote.collectAsState()
+    val chatMessages by viewModel.chatMessages.collectAsState()
 
+    var currentBottomTab by remember { mutableStateOf(HomeBottomTab.HOME) }
+    BackHandler(enabled = currentBottomTab != HomeBottomTab.HOME) {
+        currentBottomTab = HomeBottomTab.HOME
+    }
     val updateInfo by viewModel.appUpdateInfo.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showServerSettingsDialog by remember { mutableStateOf(false) }
+    var showNoteInputDialog by remember { mutableStateOf(false) }
     var showPermissionsModal by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var showPrivacyIconDialog by remember { mutableStateOf(false) }
+    var showProfileDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
+    val currentPrivacyIcon by PrivacyIconManager.currentIcon.collectAsState()
 
     LaunchedEffect(updateInfo) {
         if (updateInfo?.isAvailable == true) {
             showUpdateDialog = true
         }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.checkNoteExpiry()
     }
 
     fun checkMissingPermissions(): Boolean {
@@ -247,6 +303,270 @@ fun HomeScreen(
         )
     }
 
+    // Stealth Privacy App Icon Disguise Dialog
+    if (showPrivacyIconDialog) {
+        PrivacyIconDialog(
+            currentIcon = currentPrivacyIcon,
+            onDismiss = { showPrivacyIconDialog = false },
+            onIconChanged = { showPrivacyIconDialog = false }
+        )
+    }
+
+    // Server Settings Dialog
+    if (showServerSettingsDialog) {
+        var serverInput by remember(profile.serverUrl) { mutableStateOf(profile.serverUrl) }
+        AlertDialog(
+            onDismissRequest = { showServerSettingsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Dns,
+                        contentDescription = "Server Settings",
+                        tint = LoveGold,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Signaling Server",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Duora connects calls, video, and notes in real time through this WebSocket server.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = when (serverState) {
+                            ServerConnectionState.CONNECTED -> Color(0x3310B981)
+                            ServerConnectionState.CONNECTING -> Color(0x33FBBF24)
+                            ServerConnectionState.DISCONNECTED -> Color(0x33F43F5E)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        when (serverState) {
+                                            ServerConnectionState.CONNECTED -> LoveAccentGreen
+                                            ServerConnectionState.CONNECTING -> LoveGold
+                                            ServerConnectionState.DISCONNECTED -> LoveRose
+                                        }
+                                    )
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when (serverState) {
+                                    ServerConnectionState.CONNECTED -> "Status: Connected to Server"
+                                    ServerConnectionState.CONNECTING -> "Status: Connecting..."
+                                    ServerConnectionState.DISCONNECTED -> "Status: Disconnected / Offline"
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = when (serverState) {
+                                    ServerConnectionState.CONNECTED -> LoveAccentGreen
+                                    ServerConnectionState.CONNECTING -> LoveGold
+                                    ServerConnectionState.DISCONNECTED -> LoveRose
+                                }
+                            )
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = serverInput,
+                        onValueChange = { serverInput = it },
+                        label = { Text("Server WebSocket URL") },
+                        placeholder = { Text("ws://10.0.2.2:3000 or wss://...") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LoveRose,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("dialog_server_url_input")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { serverInput = "ws://10.0.2.2:3000" },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Emulator", fontSize = 11.sp)
+                        }
+                        OutlinedButton(
+                            onClick = { serverInput = "ws://localhost:3000" },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Localhost", fontSize = 11.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val clean = serverInput.trim()
+                        if (clean.isNotBlank()) {
+                            viewModel.reconnectServer(clean)
+                        }
+                        showServerSettingsDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                    modifier = Modifier.testTag("dialog_save_server_button")
+                ) {
+                    Text("Save & Connect", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showServerSettingsDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
+    // Share Note with Partner Dialog
+    if (showNoteInputDialog) {
+        var noteDraft by remember { mutableStateOf("") }
+        val quickPhrases = listOf(
+            "Missing you so much ❤️",
+            "Call me when you're free 💕",
+            "Thinking of you always 🥰",
+            "Have a wonderful day sweetheart ☀️",
+            "I love you endlessly 🌹",
+            "Can't wait to hear your voice ✨"
+        )
+        AlertDialog(
+            onDismissRequest = { showNoteInputDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Favorite,
+                        contentDescription = "Love Note",
+                        tint = LoveRose,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Share Note with ${profile.partnerName}",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 17.sp
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "This note will be displayed on both your and ${profile.partnerName}'s home screen for 24 hours (unless deleted).",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+
+                    OutlinedTextField(
+                        value = noteDraft,
+                        onValueChange = { if (it.length <= 160) noteDraft = it },
+                        placeholder = { Text("Write something sweet for ${profile.partnerName}...") },
+                        minLines = 3,
+                        maxLines = 5,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = LoveRose,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("note_input_field")
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Quick Love Prompts:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = LoveGold
+                        )
+                        Text(
+                            text = "${noteDraft.length}/160",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        quickPhrases.take(4).forEach { phrase ->
+                            Surface(
+                                onClick = { noteDraft = phrase },
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = phrase,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (noteDraft.isNotBlank()) {
+                            viewModel.postSharedNote(noteDraft)
+                            showNoteInputDialog = false
+                        }
+                    },
+                    enabled = noteDraft.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                    modifier = Modifier.testTag("dialog_send_note_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Share (24h)", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNoteInputDialog = false }) {
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
+
     // App Update Available Dialog
     if (showUpdateDialog && updateInfo != null && updateInfo!!.isAvailable) {
         val info = updateInfo!!
@@ -358,166 +678,163 @@ fun HomeScreen(
         )
     }
 
+    if (showProfileDialog) {
+        ProfileEditDialog(
+            currentUserName = profile.userName,
+            currentPartnerName = profile.partnerName,
+            currentPartnerNickname = profile.partnerNickname,
+            myCode = profile.myPairCode,
+            partnerCode = profile.partnerPairCode,
+            onDismiss = { showProfileDialog = false },
+            onSave = { uName, pName, pNick ->
+                viewModel.updateRelationshipProfile(uName, pName, pNick)
+                showProfileDialog = false
+            }
+        )
+    }
+
+    if (showAboutDialog) {
+        AboutDuoraDialog(
+            viewModel = viewModel,
+            onDismiss = { showAboutDialog = false }
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Top Bar: Branding, Connection, Theme, Mute, Pairing, Dev
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Title & connection status
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Duora",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Duora Hearts",
-                            tint = LoveRose,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Text(
-                        text = "Two hearts. One private space.",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    // Real-time server connection indicator
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { viewModel.navigateTo(AppScreen.PAIRING) }
-                    ) {
-                        val isConnected = serverState == ServerConnectionState.CONNECTED
-                        val statusLabel = if (isConnected) {
-                            if (profile.isPaired) "Hotline Online" else "Server Connected"
-                        } else {
-                            "Connecting..."
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(if (isConnected) LoveAccentGreen else LoveRose)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = statusLabel,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isConnected) LoveAccentGreen else LoveRose
-                        )
-                    }
-                }
-
-                // Important Top Action Icons
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Theme Switcher Button
-                    IconButton(
-                        onClick = { showThemeDialog = true },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .testTag("theme_selector_button")
-                    ) {
-                        val themeIcon = when (profile.appTheme) {
-                            AppTheme.LOVE -> Icons.Default.Favorite
-                            AppTheme.DARK -> Icons.Default.DarkMode
-                            AppTheme.LIGHT -> Icons.Default.LightMode
-                        }
-                        Icon(
-                            imageVector = themeIcon,
-                            contentDescription = "Change Theme",
-                            tint = LoveRose,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-
-                    // Notification Mute Toggle
-                    IconButton(
-                        onClick = { viewModel.toggleMuteNotifications() },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .testTag("toggle_notification_mute_button")
-                    ) {
-                        Icon(
-                            imageVector = if (profile.isNotificationsMuted)
-                                Icons.Default.NotificationsOff else Icons.Default.NotificationsActive,
-                            contentDescription = if (profile.isNotificationsMuted) "Unmute Alerts" else "Mute Alerts",
-                            tint = if (profile.isNotificationsMuted) LoveRose else LoveGold,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-
-                    // Partner Pairing Settings
-                    IconButton(
-                        onClick = { viewModel.navigateTo(AppScreen.PAIRING) },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .testTag("nav_pairing_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Link,
-                            contentDescription = "Pairing Settings",
-                            tint = LoveGold,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-
-                    // Developer Screen Info
-                    IconButton(
-                        onClick = { viewModel.navigateTo(AppScreen.DEVELOPER) },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .testTag("nav_developer_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Developer Info",
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(19.dp)
-                        )
-                    }
-                }
-            }
-
-            LazyColumn(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(horizontal = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                AnimatedContent(
+                    targetState = currentBottomTab,
+                    transitionSpec = {
+                        if (targetState == HomeBottomTab.CHAT || initialState == HomeBottomTab.CHAT) {
+                            (fadeIn(animationSpec = tween(300)) + scaleIn(initialScale = 0.95f, animationSpec = tween(300)))
+                                .togetherWith(fadeOut(animationSpec = tween(200)) + scaleOut(targetScale = 0.98f, animationSpec = tween(200)))
+                        } else {
+                            fadeIn(animationSpec = tween(220))
+                                .togetherWith(fadeOut(animationSpec = tween(180)))
+                        }
+                    },
+                    label = "TabSharedTransition"
+                ) { targetTab ->
+                    when (targetTab) {
+                        HomeBottomTab.HOME -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .statusBarsPadding()
+                        ) {
+                            // Top Bar: Branding & Circular Profile DP (No Three-Dot Menu)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 18.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Title & connection status
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "Duora",
+                                            fontSize = 24.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.Favorite,
+                                            contentDescription = "Duora Hearts",
+                                            tint = DuoraRaspberry,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    Text(
+                                        text = "Two hearts. One private space.",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    // Real-time server connection indicator
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.clickable { viewModel.navigateTo(AppScreen.PAIRING) }
+                                    ) {
+                                        val isConnected = serverState == ServerConnectionState.CONNECTED
+                                        val statusLabel = if (isConnected) {
+                                            if (profile.isPaired) "Hotline Online" else "Server Connected"
+                                        } else {
+                                            "Connecting..."
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isConnected) LoveAccentGreen else LoveRose)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = statusLabel,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isConnected) LoveAccentGreen else LoveRose
+                                        )
+                                    }
+                                }
+
+                                // Right Top Action: Circular Profile DP (~40dp); tap opens Profile
+                                IconButton(
+                                    onClick = { showProfileDialog = true },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(DuoraRaspberry.copy(alpha = 0.2f))
+                                        .border(1.5.dp, DuoraRaspberry, CircleShape)
+                                        .testTag("home_top_profile_avatar")
+                                ) {
+                                    Text(
+                                        text = profile.userName.take(1).uppercase(),
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DuoraRaspberry
+                                    )
+                                }
+                            }
+
+                            // Romantic Greeting
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 18.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Your space, just for two ❤️",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = DuoraRaspberry
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 18.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
                 // 0. Update Alert Banner (if update available)
                 if (updateInfo?.isAvailable == true) {
                     item {
@@ -602,6 +919,308 @@ fun HomeScreen(
                     )
                 }
 
+                // 1.25. Couple 24-Hour Shared Note Section
+                item {
+                    val activeNote = sharedNote
+                    if (activeNote != null && !activeNote.isExpired) {
+                        // Active Shared Note Card
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("active_shared_note_card"),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.5.dp,
+                                Brush.horizontalGradient(listOf(LoveRose, LoveGold))
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .background(LoveRose.copy(alpha = 0.2f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Favorite,
+                                                contentDescription = null,
+                                                tint = LoveRose,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = if (activeNote.isFromPartner)
+                                                    "${profile.partnerName}'s Note ❤️" else "Your Note to ${profile.partnerName}",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "⏰ 24h Note • ${activeNote.remainingFormatted}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = LoveGold
+                                            )
+                                        }
+                                    }
+
+                                    IconButton(
+                                        onClick = { viewModel.deleteSharedNote() },
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .testTag("delete_shared_note_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Delete Note",
+                                            tint = LoveRose.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = LoveRose.copy(alpha = 0.08f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.25f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "\"${activeNote.content}\"",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        lineHeight = 20.sp,
+                                        modifier = Modifier.padding(14.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = { showNoteInputDialog = true },
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.testTag("edit_shared_note_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = LoveGold
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Update Note", fontSize = 11.sp, color = LoveGold, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Empty note state - Invite sharing
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("empty_shared_note_card"),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(CircleShape)
+                                                .background(LoveRose.copy(alpha = 0.2f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Favorite,
+                                                contentDescription = null,
+                                                tint = LoveRose,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = "Partner 24-Hour Note",
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "Share a love note for 24 hours ❤️",
+                                                fontSize = 11.sp,
+                                                color = LoveGold
+                                            )
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = { showNoteInputDialog = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("leave_note_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Write Note", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Quick one-tap preset notes
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val quick1 = "Missing you ❤️"
+                                    val quick2 = "Call me soon 💕"
+                                    Surface(
+                                        onClick = { viewModel.postSharedNote(quick1) },
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = quick1,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                    Surface(
+                                        onClick = { viewModel.postSharedNote(quick2) },
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = quick2,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 1.5. Privacy Disguise Status Card
+                item {
+                    Surface(
+                        onClick = { showPrivacyIconDialog = true },
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("home_privacy_disguise_card")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(CircleShape)
+                                        .background(LoveRose.copy(alpha = 0.2f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Shield,
+                                        contentDescription = null,
+                                        tint = LoveRose,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Privacy App Icon Disguise",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Current: ${currentPrivacyIcon.launcherLabel} • Tap to disguise",
+                                        fontSize = 11.sp,
+                                        color = LoveGold
+                                    )
+                                }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = LoveRose.copy(alpha = 0.2f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = "Change",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LoveRose,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // 2. Calling Features: One-Tap Voice & Video Calls
                 item {
                     Text(
@@ -616,7 +1235,7 @@ fun HomeScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // Voice Call Button
                         Button(
@@ -638,35 +1257,28 @@ fun HomeScreen(
                                     .fillMaxSize()
                                     .background(
                                         brush = Brush.horizontalGradient(
-                                            listOf(LoveCrimson, LoveRose)
+                                            listOf(DuoraRaspberry, LoveRose)
                                         )
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Call,
                                         contentDescription = "Voice Call",
                                         tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(20.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = "Voice Call",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp,
-                                            color = Color.White
-                                        )
-                                        Text(
-                                            text = "Real VoIP Audio",
-                                            fontSize = 11.sp,
-                                            color = Color.White.copy(alpha = 0.85f)
-                                        )
-                                    }
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Voice",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color.White
+                                    )
                                 }
                             }
                         }
@@ -696,30 +1308,137 @@ fun HomeScreen(
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Videocam,
                                         contentDescription = "Video Call",
                                         tint = Color.White,
-                                        modifier = Modifier.size(26.dp)
+                                        modifier = Modifier.size(22.dp)
                                     )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Video",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+
+                        // Message Button
+                        Button(
+                            onClick = { currentBottomTab = HomeBottomTab.CHAT },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(64.dp)
+                                .testTag("one_tap_message_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush = Brush.horizontalGradient(
+                                            listOf(Color(0xFF6366F1), DuoraRaspberry)
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ChatBubble,
+                                        contentDescription = "Message",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Message",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Latest Message Preview Card
+                if (chatMessages.isNotEmpty()) {
+                    item {
+                        val lastMsg = chatMessages.last()
+                        Surface(
+                            onClick = { currentBottomTab = HomeBottomTab.CHAT },
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("latest_message_preview_card")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(CircleShape)
+                                            .background(DuoraRaspberry.copy(alpha = 0.2f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ChatBubble,
+                                            contentDescription = null,
+                                            tint = DuoraRaspberry,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
-                                            text = "Video Call",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp,
-                                            color = Color.White
+                                            text = if (lastMsg.isOutgoing) "You: ${lastMsg.content}" else "${profile.partnerName}: ${lastMsg.content}",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1
                                         )
                                         Text(
-                                            text = "Live Camera Feed",
+                                            text = "Tap to open chat",
                                             fontSize = 11.sp,
-                                            color = Color.White.copy(alpha = 0.85f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = DuoraRaspberry.copy(alpha = 0.15f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, DuoraRaspberry.copy(alpha = 0.4f))
+                                ) {
+                                    Text(
+                                        text = "Chat",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DuoraRaspberry,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
                                 }
                             }
                         }
@@ -742,26 +1461,20 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.onBackground
                         )
 
-                        if (callHistory.isNotEmpty()) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clickable { viewModel.clearCallHistory() }
-                                    .testTag("clear_call_logs_button")
-                                    .padding(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DeleteSweep,
-                                    contentDescription = "Clear All",
-                                    tint = LoveRose,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (callHistory.isNotEmpty()) {
                                 Text(
-                                    text = "Clear Logs",
+                                    text = "View All",
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = LoveRose
+                                    fontWeight = FontWeight.Bold,
+                                    color = DuoraRaspberry,
+                                    modifier = Modifier
+                                        .clickable { currentBottomTab = HomeBottomTab.CALL_LOGS }
+                                        .testTag("view_all_calls_button")
+                                        .padding(4.dp)
                                 )
                             }
                         }
@@ -818,6 +1531,164 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                 }
             }
+        }
+    }
+                        HomeBottomTab.NOTES -> {
+                            NotesTab(
+                                viewModel = viewModel,
+                                onBack = { currentBottomTab = HomeBottomTab.HOME }
+                            )
+                        }
+                        HomeBottomTab.CHAT -> {
+                            ChatTab(
+                                viewModel = viewModel,
+                                onRequestPermissions = onRequestPermissions,
+                                onBack = { currentBottomTab = HomeBottomTab.HOME }
+                            )
+                        }
+                        HomeBottomTab.CALL_LOGS -> {
+                            CallLogsTab(
+                                viewModel = viewModel,
+                                onRequestPermissions = onRequestPermissions,
+                                onBack = { currentBottomTab = HomeBottomTab.HOME }
+                            )
+                        }
+                        HomeBottomTab.SETTINGS -> {
+                            SettingsTab(
+                                viewModel = viewModel,
+                                onOpenThemeDialog = { showThemeDialog = true },
+                                onOpenServerDialog = { showServerSettingsDialog = true },
+                                onOpenPrivacyIconDialog = { showPrivacyIconDialog = true },
+                                onBack = { currentBottomTab = HomeBottomTab.HOME }
+                            )
+                        }
+                    }
+                }
+            }
+
+// Floating Rounded Bottom Navigation Bar (Hidden on full-screen Chat)
+if (currentBottomTab != HomeBottomTab.CHAT) {
+    Surface(
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 6.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+    ) {
+        NavigationBar(
+            containerColor = Color.Transparent,
+            tonalElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            // 1. Home
+            NavigationBarItem(
+                selected = currentBottomTab == HomeBottomTab.HOME,
+                onClick = { currentBottomTab = HomeBottomTab.HOME },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Home,
+                        contentDescription = "Home"
+                    )
+                },
+                label = { Text("Home", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = DuoraRaspberry,
+                    selectedTextColor = DuoraRaspberry,
+                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.testTag("nav_item_home")
+            )
+
+            // 2. Notes
+            NavigationBarItem(
+                selected = currentBottomTab == HomeBottomTab.NOTES,
+                onClick = { currentBottomTab = HomeBottomTab.NOTES },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Description,
+                        contentDescription = "Notes"
+                    )
+                },
+                label = { Text("Notes", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = DuoraRaspberry,
+                    selectedTextColor = DuoraRaspberry,
+                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.testTag("nav_item_notes")
+            )
+
+            // 3. Chat
+            NavigationBarItem(
+                selected = currentBottomTab == HomeBottomTab.CHAT,
+                onClick = { currentBottomTab = HomeBottomTab.CHAT },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.ChatBubble,
+                        contentDescription = "Chat"
+                    )
+                },
+                label = { Text("Chat", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = DuoraRaspberry,
+                    selectedTextColor = DuoraRaspberry,
+                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.testTag("nav_item_chat")
+            )
+
+            // 4. Calls
+            NavigationBarItem(
+                selected = currentBottomTab == HomeBottomTab.CALL_LOGS,
+                onClick = { currentBottomTab = HomeBottomTab.CALL_LOGS },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Call,
+                        contentDescription = "Calls"
+                    )
+                },
+                label = { Text("Calls", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = DuoraRaspberry,
+                    selectedTextColor = DuoraRaspberry,
+                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.testTag("nav_item_calls")
+            )
+
+            // 5. Settings
+            NavigationBarItem(
+                selected = currentBottomTab == HomeBottomTab.SETTINGS,
+                onClick = { currentBottomTab = HomeBottomTab.SETTINGS },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings"
+                    )
+                },
+                label = { Text("Settings", fontSize = 10.sp, fontWeight = FontWeight.SemiBold) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = DuoraRaspberry,
+                    selectedTextColor = DuoraRaspberry,
+                    indicatorColor = DuoraPaleSky.copy(alpha = 0.45f),
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.testTag("nav_item_settings")
+            )
+        }
+    }
+}
         }
     }
 }

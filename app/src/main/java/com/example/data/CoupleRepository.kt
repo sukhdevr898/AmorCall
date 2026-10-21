@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.example.model.CallRecord
 import com.example.model.CallType
+import com.example.model.ChatMessage
+import com.example.model.CoupleNote
 import com.example.model.CoupleProfile
 import com.example.model.MemoryPhoto
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +27,15 @@ class CoupleRepository(context: Context) {
 
     private val _callHistory = MutableStateFlow(loadCallHistory())
     val callHistory: StateFlow<List<CallRecord>> = _callHistory.asStateFlow()
+
+    private val _sharedNote = MutableStateFlow<CoupleNote?>(loadSharedNote())
+    val sharedNote: StateFlow<CoupleNote?> = _sharedNote.asStateFlow()
+
+    private val _notesList = MutableStateFlow<List<CoupleNote>>(loadNotesList())
+    val notes: StateFlow<List<CoupleNote>> = _notesList.asStateFlow()
+
+    private val _chatMessages = MutableStateFlow<List<ChatMessage>>(loadChatMessages())
+    val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
 
     private fun generateUniqueLoveCode(): String {
         val prefixes = listOf("AMOUR", "LOVE", "ROSE", "SOUL", "HEART", "CHERI")
@@ -313,5 +324,212 @@ class CoupleRepository(context: Context) {
         }
         prefs.edit().putString("call_history_json", array.toString()).apply()
         _callHistory.value = trimmed
+    }
+
+    private fun loadSharedNote(): CoupleNote? {
+        val jsonStr = prefs.getString("shared_note_json", null) ?: return null
+        return try {
+            val obj = JSONObject(jsonStr)
+            val note = CoupleNote(
+                id = obj.getString("id"),
+                content = obj.getString("content"),
+                authorCode = obj.optString("authorCode"),
+                authorName = obj.optString("authorName"),
+                createdAtEpochMs = obj.getLong("createdAtEpochMs"),
+                isFromPartner = obj.optBoolean("isFromPartner", false)
+            )
+            if (note.isExpired) {
+                prefs.edit().remove("shared_note_json").apply()
+                null
+            } else {
+                note
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun checkNoteExpiry() {
+        val current = _sharedNote.value
+        if (current != null && current.isExpired) {
+            deleteSharedNote()
+        }
+    }
+
+    fun saveSharedNote(note: CoupleNote) {
+        if (note.isExpired) {
+            deleteSharedNote()
+            return
+        }
+        val obj = JSONObject().apply {
+            put("id", note.id)
+            put("content", note.content)
+            put("authorCode", note.authorCode)
+            put("authorName", note.authorName)
+            put("createdAtEpochMs", note.createdAtEpochMs)
+            put("isFromPartner", note.isFromPartner)
+        }
+        prefs.edit().putString("shared_note_json", obj.toString()).apply()
+        _sharedNote.value = note
+    }
+
+    fun deleteSharedNote() {
+        prefs.edit().remove("shared_note_json").apply()
+        _sharedNote.value = null
+    }
+
+    private fun loadNotesList(): List<CoupleNote> {
+        val jsonStr = prefs.getString("couple_notes_json", null)
+        if (jsonStr.isNullOrBlank()) {
+            return defaultNotesList()
+        }
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<CoupleNote>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    CoupleNote(
+                        id = obj.getString("id"),
+                        title = obj.optString("title", ""),
+                        content = obj.getString("content"),
+                        authorCode = obj.optString("authorCode"),
+                        authorName = obj.optString("authorName"),
+                        createdAtEpochMs = obj.getLong("createdAtEpochMs"),
+                        updatedAtEpochMs = obj.optLong("updatedAtEpochMs", obj.getLong("createdAtEpochMs")),
+                        isFromPartner = obj.optBoolean("isFromPartner", false),
+                        isShared = obj.optBoolean("isShared", true)
+                    )
+                )
+            }
+            if (list.isEmpty()) defaultNotesList() else list
+        } catch (_: Exception) {
+            defaultNotesList()
+        }
+    }
+
+    private fun defaultNotesList(): List<CoupleNote> {
+        return listOf(
+            CoupleNote(
+                id = "note_welcome",
+                title = "Welcome to Our Private Sanctuary ❤️",
+                content = "This is our exclusive space to write love notes, secret reminders, and sweet thoughts meant only for our eyes.",
+                authorCode = _profile.value.myPairCode,
+                authorName = _profile.value.userName,
+                createdAtEpochMs = System.currentTimeMillis() - (2 * 60 * 60 * 1000L),
+                updatedAtEpochMs = System.currentTimeMillis() - (2 * 60 * 60 * 1000L),
+                isFromPartner = false,
+                isShared = true
+            )
+        )
+    }
+
+    fun addOrUpdateNote(note: CoupleNote) {
+        val current = _notesList.value.toMutableList()
+        val index = current.indexOfFirst { it.id == note.id }
+        if (index >= 0) {
+            current[index] = note
+        } else {
+            current.add(0, note)
+        }
+        saveNotesList(current)
+        if (note.isShared) {
+            saveSharedNote(note)
+        }
+    }
+
+    fun deleteNote(noteId: String) {
+        val current = _notesList.value.filter { it.id != noteId }
+        saveNotesList(current)
+        if (_sharedNote.value?.id == noteId) {
+            deleteSharedNote()
+        }
+    }
+
+    private fun saveNotesList(list: List<CoupleNote>) {
+        val array = JSONArray()
+        list.forEach { note ->
+            val obj = JSONObject().apply {
+                put("id", note.id)
+                put("title", note.title)
+                put("content", note.content)
+                put("authorCode", note.authorCode)
+                put("authorName", note.authorName)
+                put("createdAtEpochMs", note.createdAtEpochMs)
+                put("updatedAtEpochMs", note.updatedAtEpochMs)
+                put("isFromPartner", note.isFromPartner)
+                put("isShared", note.isShared)
+            }
+            array.put(obj)
+        }
+        prefs.edit().putString("couple_notes_json", array.toString()).apply()
+        _notesList.value = list
+    }
+
+    private fun loadChatMessages(): List<ChatMessage> {
+        val jsonStr = prefs.getString("chat_messages_json", null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(jsonStr)
+            val list = mutableListOf<ChatMessage>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    ChatMessage(
+                        id = obj.optString("id", UUID.randomUUID().toString()),
+                        fromCode = obj.optString("fromCode"),
+                        toCode = obj.optString("toCode"),
+                        senderName = obj.optString("senderName"),
+                        content = obj.optString("content"),
+                        messageType = obj.optString("messageType", "text"),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                        isOutgoing = obj.optBoolean("isOutgoing", true),
+                        isRead = obj.optBoolean("isRead", false)
+                    )
+                )
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveChatMessage(msg: ChatMessage) {
+        val current = _chatMessages.value.toMutableList()
+        if (current.none { it.id == msg.id }) {
+            current.add(msg)
+            val trimmed = if (current.size > 200) current.takeLast(200) else current
+            persistChatMessages(trimmed)
+            _chatMessages.value = trimmed
+        }
+    }
+
+    fun setChatMessages(list: List<ChatMessage>) {
+        val trimmed = if (list.size > 200) list.takeLast(200) else list
+        persistChatMessages(trimmed)
+        _chatMessages.value = trimmed
+    }
+
+    fun clearChatMessages() {
+        prefs.edit().remove("chat_messages_json").apply()
+        _chatMessages.value = emptyList()
+    }
+
+    private fun persistChatMessages(list: List<ChatMessage>) {
+        val arr = JSONArray()
+        list.forEach { msg ->
+            val obj = JSONObject().apply {
+                put("id", msg.id)
+                put("fromCode", msg.fromCode)
+                put("toCode", msg.toCode)
+                put("senderName", msg.senderName)
+                put("content", msg.content)
+                put("messageType", msg.messageType)
+                put("timestamp", msg.timestamp)
+                put("isOutgoing", msg.isOutgoing)
+                put("isRead", msg.isRead)
+            }
+            arr.put(obj)
+        }
+        prefs.edit().putString("chat_messages_json", arr.toString()).apply()
     }
 }

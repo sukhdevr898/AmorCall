@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.BuildConfig
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -173,7 +174,7 @@ fun SplashScreen(onFinish: () -> Unit) {
                     border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.6f))
                 ) {
                     Text(
-                        text = "v2.0",
+                        text = "v${BuildConfig.VERSION_NAME}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = LoveGold,

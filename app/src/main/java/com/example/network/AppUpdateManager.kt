@@ -109,11 +109,11 @@ class AppUpdateManager private constructor() {
             val remoteVersionName = json.optString("versionName", "")
             val downloadUrl = json.optString(
                 "downloadUrl",
-                "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.0.apk"
+                "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.0.1.apk"
             )
             val browserUrl = json.optString(
                 "browserUrl",
-                "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.0.apk"
+                "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.0.1.apk"
             )
             val releaseNotes = json.optString("releaseNotes", "New update available with bug fixes and improvements.")
 

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Golden Sun behind cloud -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M48,42m-14,0a14,14 0 1,0 28,0a14,14 0 1,0 -28,0" />
+    <!-- Sun rays -->
+    <path
+        android:strokeColor="#FBBF24"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M48,22 L48,26 M48,58 L48,62 M28,42 L32,42 M64,42 L68,42 M34,28 L37,31 M59,53 L62,56 M34,56 L37,53 M59,31 L62,28" />
+    <!-- White puffy cloud in front -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,74 h-30 c-6.6,0 -12,-5.4 -12,-12 0,-5.7 4,-10.5 9.4,-11.7 1.2,-7 7.3,-12.3 14.6,-12.3 6.8,0 12.6,4.6 14.3,11 1.2,-0.5 2.4,-0.8 3.7,-0.8 5.5,0 10,4.5 10,10 0,8.7 -7,15.8 -10,15.8 z" />
+</vector>

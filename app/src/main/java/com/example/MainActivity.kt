@@ -46,6 +46,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        com.example.privacy.PrivacyIconManager.init(this)
+
         CallStateManager.onEnterPipRequested = { enterPipMode() }
         handleIntent(intent)
 
