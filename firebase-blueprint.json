@@ -1,0 +1,135 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile for Duora paired couples",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Auth UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "Display nickname" },
+        "partnerCode": { "type": "string", "description": "Unique pairing code e.g. DUORA-7X9K3" },
+        "pairedUserId": { "type": "string", "description": "UID of connected partner" },
+        "pairedPartnerCode": { "type": "string", "description": "Partner pairing code" },
+        "avatarUrl": { "type": "string", "description": "Avatar image URL or empty" },
+        "statusMessage": { "type": "string", "description": "Romantic status message" },
+        "online": { "type": "boolean", "description": "Current presence state" },
+        "lastSeenEpochMs": { "type": "number", "description": "Last presence ping timestamp" },
+        "fcmToken": { "type": "string", "description": "Push notification token" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp()" }
+      },
+      "required": ["userId", "displayName", "partnerCode", "createdAt", "updatedAt"]
+    },
+    "Couple": {
+      "title": "Couple",
+      "description": "Private relationship link connecting two partners",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string", "description": "Unique couple ID" },
+        "memberUids": { "type": "array", "description": "Array of 2 member UIDs" },
+        "anniversaryDate": { "type": "string", "description": "Anniversary date string" },
+        "coupleNickname": { "type": "string", "description": "Couple shared nickname" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp via serverTimestamp()" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp via serverTimestamp()" }
+      },
+      "required": ["coupleId", "memberUids", "createdAt", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Real-time chat message between paired lovers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Message ID" },
+        "coupleId": { "type": "string", "description": "Associated couple ID" },
+        "senderId": { "type": "string", "description": "UID of message sender" },
+        "senderName": { "type": "string", "description": "Display name of sender" },
+        "text": { "type": "string", "description": "Message content" },
+        "type": { "type": "string", "description": "TEXT, IMAGE, VOICE, or HEART" },
+        "mediaUrl": { "type": "string", "description": "Optional image or audio URL" },
+        "voiceDurationSec": { "type": "number", "description": "Duration in seconds for voice notes" },
+        "isRead": { "type": "boolean", "description": "Read receipt status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "coupleId", "senderId", "text", "type", "createdAt", "updatedAt"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "Shared couple note or category entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Note document ID" },
+        "coupleId": { "type": "string", "description": "Associated couple ID" },
+        "authorId": { "type": "string", "description": "UID of author" },
+        "authorName": { "type": "string", "description": "Author display name" },
+        "title": { "type": "string", "description": "Note title" },
+        "content": { "type": "string", "description": "Note markdown or text body" },
+        "category": { "type": "string", "description": "PLANS, IMPORTANT, THOUGHTS, SHOPPING, DREAMS, QUOTES, MEMORIES" },
+        "isShared": { "type": "boolean", "description": "Whether visible to partner" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "coupleId", "authorId", "title", "content", "category", "createdAt", "updatedAt"]
+    },
+    "CallSignal": {
+      "title": "CallSignal",
+      "description": "Real-time call alert and signaling channel for voice and video calling",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Call session ID" },
+        "coupleId": { "type": "string", "description": "Associated couple ID" },
+        "callerId": { "type": "string", "description": "Caller UID" },
+        "callerName": { "type": "string", "description": "Caller display name" },
+        "recipientId": { "type": "string", "description": "Recipient partner UID" },
+        "callType": { "type": "string", "description": "VOICE or VIDEO" },
+        "status": { "type": "string", "description": "RINGING, ACCEPTED, REJECTED, or ENDED" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "coupleId", "callerId", "recipientId", "callType", "status", "createdAt", "updatedAt"]
+    },
+    "PairRequest": {
+      "title": "PairRequest",
+      "description": "Incoming and outgoing partner pairing connection request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Request ID" },
+        "fromUserId": { "type": "string", "description": "Requester UID" },
+        "fromCode": { "type": "string", "description": "Requester pairing code" },
+        "fromName": { "type": "string", "description": "Requester display name" },
+        "toCode": { "type": "string", "description": "Target partner pairing code" },
+        "status": { "type": "string", "description": "PENDING, ACCEPTED, or DECLINED" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["id", "fromUserId", "fromCode", "fromName", "toCode", "status", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles and partner connection state"
+    },
+    "/couples/{coupleId}": {
+      "schema": { "$ref": "#/entities/Couple" },
+      "description": "Couple link entity"
+    },
+    "/couples/{coupleId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Real-time chat messages between lovers"
+    },
+    "/couples/{coupleId}/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/Note" },
+      "description": "Shared couple notes"
+    },
+    "/couples/{coupleId}/call_signals/{signalId}": {
+      "schema": { "$ref": "#/entities/CallSignal" },
+      "description": "Realtime incoming call signals and alerts"
+    },
+    "/pair_requests/{requestId}": {
+      "schema": { "$ref": "#/entities/PairRequest" },
+      "description": "Pairing requests exchanged by couple code"
+    }
+  }
+}

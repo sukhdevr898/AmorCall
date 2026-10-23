@@ -64,6 +64,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.CallType
+import com.example.ui.theme.DuoraHotPink
+import com.example.ui.theme.DuoraCardBorder
+import com.example.ui.theme.DuoraSoftBlush
 import com.example.ui.theme.DuoraPaleSky
 import com.example.ui.theme.DuoraRaspberry
 import com.example.ui.theme.LoveAccentGreen

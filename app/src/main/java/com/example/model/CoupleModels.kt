@@ -115,6 +115,8 @@ data class ChatMessage(
     val messageType: String = "text",
     val timestamp: Long = System.currentTimeMillis(),
     val isOutgoing: Boolean = true,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    val voiceDurationSeconds: Int = 0,
+    val mediaUrl: String? = null
 )
 

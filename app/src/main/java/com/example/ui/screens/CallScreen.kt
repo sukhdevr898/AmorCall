@@ -336,11 +336,20 @@ fun CallScreen(
                     }
                 } else if (callSession.type == CallType.VOICE) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        PartnerAvatarCircle(
-                            avatarUri = profile.avatarUri,
-                            sizeDp = 140
+                        PulsingHeartRing(baseSize = 150.dp) {
+                            PartnerAvatarCircle(
+                                avatarUri = profile.avatarUri,
+                                sizeDp = 136
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(24.dp))
+                        // Real-time audio waveform visualizer (Sheet 4)
+                        AudioCallWaveformVisualizer(
+                            modifier = Modifier
+                                .width(220.dp)
+                                .height(38.dp)
                         )
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
                         Text(
                             text = "Tap anywhere to send Love Hearts ❤️",
                             fontSize = 12.sp,
@@ -773,5 +782,33 @@ private fun PipCallLayout(
         }
 
         FloatingHeartsOverlay(hearts = floatingHearts)
+    }
+}
+
+@Composable
+fun AudioCallWaveformVisualizer(
+    modifier: Modifier = Modifier
+) {
+    val barRatios = listOf(0.3f, 0.6f, 0.85f, 0.45f, 0.95f, 0.7f, 1.0f, 0.8f, 0.5f, 0.9f, 0.65f, 0.4f, 0.75f, 0.9f, 0.35f, 0.6f)
+
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val count = barRatios.size
+        val barWidth = 4.dp.toPx()
+        val spacing = (size.width - (count * barWidth)) / (count - 1)
+        val maxHeight = size.height
+
+        barRatios.forEachIndexed { i, ratio ->
+            val h = maxHeight * ratio
+            val x = i * (barWidth + spacing)
+            val y = (maxHeight - h) / 2f
+            drawRoundRect(
+                brush = Brush.verticalGradient(
+                    listOf(Color(0xFFFF558F), Color(0xFFFF2D6C))
+                ),
+                topLeft = androidx.compose.ui.geometry.Offset(x, y),
+                size = androidx.compose.ui.geometry.Size(barWidth, h),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx())
+            )
+        }
     }
 }

@@ -38,9 +38,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import kotlin.random.Random
+import com.example.data.firebase.FirebaseCoupleRepository
+import com.google.firebase.Firebase
+import com.google.firebase.auth.auth
 
 enum class AppScreen {
     SPLASH,
+    AUTH,
     ONBOARDING,
     DASHBOARD,
     MEMORIES,
@@ -50,9 +54,12 @@ enum class AppScreen {
 
 class LoveCallViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = CoupleRepository(application)
+    private val firebaseRepo = FirebaseCoupleRepository.getInstance(application)
     private val audioHaptics = CallAudioHaptics(application)
     private val signalingClient = SignalingClient.getInstance()
     private val audioStreamManager = AudioStreamManager(application)
+    private var activeCallSignalId: String? = null
+    private var lastNotifiedMessageId: String? = null
 
     val profile: StateFlow<CoupleProfile> = repository.profile
     val memories: StateFlow<List<MemoryPhoto>> = repository.memories
@@ -232,6 +239,58 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         }
+
+        // Observe real-time Firestore messages, notes, and call signals for the couple
+        viewModelScope.launch {
+            profile.collect { prof ->
+                if (prof.isPaired && prof.partnerPairCode.isNotBlank()) {
+                    val coupleId = firebaseRepo.getCoupleId(prof.myPairCode, prof.partnerPairCode)
+
+                    // Realtime Messages from Firestore
+                    launch {
+                        firebaseRepo.observeMessages(coupleId).collect { msgs ->
+                            if (msgs.isNotEmpty()) {
+                                repository.setChatMessages(msgs)
+                                val latest = msgs.firstOrNull()
+                                if (latest != null && !latest.isOutgoing && latest.id != lastNotifiedMessageId) {
+                                    lastNotifiedMessageId = latest.id
+                                    CallNotificationHelper.showMessageNotification(
+                                        context = getApplication(),
+                                        senderName = prof.partnerName.ifBlank { "My Love" },
+                                        messageText = latest.content
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Realtime Notes from Firestore
+                    launch {
+                        firebaseRepo.observeNotes(coupleId).collect { notesList ->
+                            for (n in notesList) {
+                                repository.addOrUpdateNote(n)
+                            }
+                        }
+                    }
+
+                    // Realtime Call Signals & Alerts from Firestore
+                    launch {
+                        firebaseRepo.observeCallSignals(coupleId).collect { signal ->
+                            if (signal != null && signal.recipientId == prof.myPairCode && signal.status == "RINGING") {
+                                if (_callSession.value.status == CallStatus.IDLE) {
+                                    val type = if (signal.callType.equals("VIDEO", ignoreCase = true)) CallType.VIDEO else CallType.VOICE
+                                    triggerIncomingCall(type)
+                                }
+                            } else if (signal != null && signal.status in listOf("REJECTED", "ENDED")) {
+                                if (_callSession.value.status != CallStatus.IDLE) {
+                                    handlePartnerEndedCall()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun syncCallStateToService() {
@@ -263,11 +322,36 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onSplashFinished() {
-        if (profile.value.isOnboardingCompleted) {
+        if (Firebase.auth.currentUser == null) {
+            _currentScreen.value = AppScreen.AUTH
+        } else if (profile.value.isOnboardingCompleted) {
             _currentScreen.value = AppScreen.DASHBOARD
         } else {
             _currentScreen.value = AppScreen.ONBOARDING
         }
+    }
+
+    fun onAuthSuccess(userId: String, email: String, displayName: String) {
+        val current = profile.value
+        val updated = current.copy(
+            userName = displayName.ifBlank { current.userName },
+            isOnboardingCompleted = true
+        )
+        repository.saveProfile(updated)
+        viewModelScope.launch {
+            firebaseRepo.syncUserProfile(
+                displayName = updated.userName,
+                partnerCode = updated.myPairCode,
+                pairedUserId = null,
+                pairedPartnerCode = updated.partnerPairCode.ifBlank { null }
+            )
+        }
+        _currentScreen.value = if (updated.isPaired) AppScreen.DASHBOARD else AppScreen.PAIRING
+    }
+
+    fun signOut() {
+        Firebase.auth.signOut()
+        _currentScreen.value = AppScreen.AUTH
     }
 
     fun completeOnboarding(partnerName: String, partnerNickname: String, partnerCode: String) {
@@ -365,12 +449,18 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         audioHaptics.startOutgoingRinging(viewModelScope)
         syncCallStateToService()
 
-        // Send signal to partner via WebSocket
+        // Send signal to partner via WebSocket & Firestore
         signalingClient.sendCallInitiate(
             to = profile.value.partnerPairCode,
             callerName = profile.value.userName.ifBlank { "My Love" },
             callType = type.name
         )
+        if (profile.value.isPaired && profile.value.partnerPairCode.isNotBlank()) {
+            val coupleId = firebaseRepo.getCoupleId(profile.value.myPairCode, profile.value.partnerPairCode)
+            viewModelScope.launch {
+                activeCallSignalId = firebaseRepo.sendCallSignal(coupleId, profile.value.partnerPairCode, type)
+            }
+        }
 
         // Ringing timeout (40 seconds)
         simulatedAnswerJob?.cancel()
@@ -463,6 +553,13 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             signalingClient.sendCallAccept(profile.value.partnerPairCode)
         }
 
+        activeCallSignalId?.let { sigId ->
+            val coupleId = firebaseRepo.getCoupleId(profile.value.myPairCode, profile.value.partnerPairCode)
+            viewModelScope.launch {
+                firebaseRepo.updateCallSignalStatus(coupleId, sigId, "ACCEPTED")
+            }
+        }
+
         syncCallStateToService()
 
         callTimerJob?.cancel()
@@ -487,6 +584,14 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
 
         if (notifyPartner) {
             signalingClient.sendCallDecline(profile.value.partnerPairCode)
+        }
+
+        activeCallSignalId?.let { sigId ->
+            val coupleId = firebaseRepo.getCoupleId(profile.value.myPairCode, profile.value.partnerPairCode)
+            viewModelScope.launch {
+                firebaseRepo.updateCallSignalStatus(coupleId, sigId, "REJECTED")
+            }
+            activeCallSignalId = null
         }
 
         repository.recordCall(
@@ -590,6 +695,14 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
 
         if (notifyPartner) {
             signalingClient.sendCallEnd(profile.value.partnerPairCode)
+        }
+
+        activeCallSignalId?.let { sigId ->
+            val coupleId = firebaseRepo.getCoupleId(profile.value.myPairCode, profile.value.partnerPairCode)
+            viewModelScope.launch {
+                firebaseRepo.updateCallSignalStatus(coupleId, sigId, "ENDED")
+            }
+            activeCallSignalId = null
         }
 
         val duration = _callSession.value.durationSeconds
@@ -837,6 +950,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         )
         repository.addOrUpdateNote(note)
         if (isShared && prof.isPaired && prof.partnerPairCode.isNotBlank()) {
+            val coupleId = firebaseRepo.getCoupleId(prof.myPairCode, prof.partnerPairCode)
+            viewModelScope.launch {
+                firebaseRepo.saveNote(coupleId, note.title, note.content, isShared = isShared, existingId = note.id)
+            }
             signalingClient.sendCoupleNote(
                 to = prof.partnerPairCode,
                 noteId = note.id,
@@ -851,6 +968,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         val prof = profile.value
         repository.deleteNote(noteId)
         if (prof.isPaired && prof.partnerPairCode.isNotBlank()) {
+            val coupleId = firebaseRepo.getCoupleId(prof.myPairCode, prof.partnerPairCode)
+            viewModelScope.launch {
+                firebaseRepo.deleteNote(coupleId, noteId)
+            }
             signalingClient.sendDeleteNote(
                 to = prof.partnerPairCode,
                 noteId = noteId
@@ -879,6 +1000,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         )
         repository.saveChatMessage(msg)
         if (partnerCode.isNotBlank()) {
+            val coupleId = firebaseRepo.getCoupleId(prof.myPairCode, partnerCode)
+            viewModelScope.launch {
+                firebaseRepo.sendMessage(coupleId, trimmed)
+            }
             signalingClient.sendChatMessage(
                 to = partnerCode,
                 id = msg.id,

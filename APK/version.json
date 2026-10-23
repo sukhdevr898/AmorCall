@@ -1,10 +1,10 @@
 {
-  "versionCode": 7,
-  "versionName": "2.1.1",
+  "versionCode": 8,
+  "versionName": "2.1.2",
   "minSupportedVersion": "1.0",
   "appName": "Duora",
-  "downloadUrl": "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.1.1.apk",
-  "browserUrl": "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.1.1.apk",
+  "downloadUrl": "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.1.2.apk",
+  "browserUrl": "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.1.2.apk",
   "repoUrl": "https://github.com/sukhdevr898/AmorCall",
-  "releaseNotes": "• App version 2.1.1 release\n• Real-time heads-up incoming message notifications with partner direct action\n• Overhauled Chat UI with Scaffold-pinned header and isolated composer to eliminate keyboard lag\n• Reverse-anchored messages list preventing keyboard jitter and maintaining recent messages visibility\n• Ultra-premium floating dock bottom navigation bar with animated pill tabs, unread indicators, and Pale Sky/Raspberry accents\n• Typing indicator network debouncing and long-press clipboard copy on messages"
+  "releaseNotes": "• App version 2.1.2 release\n• Firebase Firestore and Authentication integration\n• Real-time video/voice call signaling & notification alerts system\n• Redesigned UI matching visual design sheets with custom backgrounds and floating navigation dock\n• In-app alerts, direct call actions, and live notes sync"
 }

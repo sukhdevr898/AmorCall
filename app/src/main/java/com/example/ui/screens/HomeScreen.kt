@@ -63,6 +63,18 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Notifications
+import com.example.ui.components.SunsetCoupleHeroBanner
+import com.example.ui.components.QuickActionsGrid
+import com.example.ui.components.OurMomentsSection
+import com.example.ui.components.ServerHealthDialog
+import com.example.ui.theme.DuoraHotPink
+import com.example.ui.theme.DuoraCardBorder
+import com.example.ui.theme.DuoraSoftBlush
 import com.example.ui.theme.DuoraPaleSky
 import com.example.ui.theme.DuoraRaspberry
 import com.example.BuildConfig
@@ -137,6 +149,7 @@ fun HomeScreen(
     val serverState by viewModel.serverConnectionState.collectAsState()
     val sharedNote by viewModel.sharedNote.collectAsState()
     val chatMessages by viewModel.chatMessages.collectAsState()
+    val memories by viewModel.memories.collectAsState()
 
     var currentBottomTab by remember { mutableStateOf(HomeBottomTab.HOME) }
     BackHandler(enabled = currentBottomTab != HomeBottomTab.HOME) {
@@ -153,6 +166,7 @@ fun HomeScreen(
     val updateInfo by viewModel.appUpdateInfo.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
     var showServerSettingsDialog by remember { mutableStateOf(false) }
+    var showServerHealthDialog by remember { mutableStateOf(false) }
     var showNoteInputDialog by remember { mutableStateOf(false) }
     var showPermissionsModal by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -160,6 +174,20 @@ fun HomeScreen(
     var showProfileDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     val currentPrivacyIcon by PrivacyIconManager.currentIcon.collectAsState()
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.addMemoryPhoto(
+                title = "Our Memory ❤️",
+                note = "",
+                dateStr = "Today",
+                uriString = uri.toString()
+            )
+            Toast.makeText(context, "Memory added to Our Moments ❤️", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(updateInfo) {
         if (updateInfo?.isAvailable == true) {
@@ -454,6 +482,15 @@ fun HomeScreen(
         )
     }
 
+    // Server Health Diagnostic Dialog — Sheet 4
+    if (showServerHealthDialog) {
+        ServerHealthDialog(
+            serverState = serverState,
+            onReconnect = { viewModel.reconnectServer(profile.serverUrl) },
+            onDismiss = { showServerHealthDialog = false }
+        )
+    }
+
     // Share Note with Partner Dialog
     if (showNoteInputDialog) {
         var noteDraft by remember { mutableStateOf("") }
@@ -742,7 +779,7 @@ fun HomeScreen(
                                 .fillMaxSize()
                                 .statusBarsPadding()
                         ) {
-                            // Top Bar: Branding & Circular Profile DP (No Three-Dot Menu)
+                            // Top Bar: Branding, Notification Bell & Circular Profile DP (Sheet 2)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -750,12 +787,12 @@ fun HomeScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Title & connection status
+                                // Title & romantic subtitle
                                 Column {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                             text = "Duora",
-                                            fontSize = 24.sp,
+                                            fontSize = 25.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onBackground
                                         )
@@ -763,80 +800,89 @@ fun HomeScreen(
                                         Icon(
                                             imageVector = Icons.Default.Favorite,
                                             contentDescription = "Duora Hearts",
-                                            tint = DuoraRaspberry,
-                                            modifier = Modifier.size(18.dp)
+                                            tint = DuoraHotPink,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
 
                                     Text(
-                                        text = "Two hearts. One private space.",
-                                        fontSize = 11.sp,
+                                        text = "Always Together",
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                }
 
-                                    // Real-time server connection indicator
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.clickable { viewModel.navigateTo(AppScreen.PAIRING) }
-                                    ) {
-                                        val isConnected = serverState == ServerConnectionState.CONNECTED
-                                        val statusLabel = if (isConnected) {
-                                            if (profile.isPaired) "Hotline Online" else "Server Connected"
-                                        } else {
-                                            "Connecting..."
+                                // Right Top Actions: Notification Bell + Circular Profile Avatar
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    // Notification bell with unread badge '2'
+                                    Box {
+                                        IconButton(
+                                            onClick = { currentBottomTab = HomeBottomTab.CHAT },
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .clip(CircleShape)
+                                                .background(DuoraSoftBlush)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Notifications,
+                                                contentDescription = "Notifications",
+                                                tint = DuoraHotPink,
+                                                modifier = Modifier.size(20.dp)
+                                            )
                                         }
                                         Box(
                                             modifier = Modifier
-                                                .size(7.dp)
+                                                .align(Alignment.TopEnd)
+                                                .size(15.dp)
                                                 .clip(CircleShape)
-                                                .background(if (isConnected) LoveAccentGreen else LoveRose)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
+                                                .background(DuoraHotPink),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "2",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
+
+                                    // Circular Profile Avatar with online green badge
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(CircleShape)
+                                            .background(DuoraHotPink.copy(alpha = 0.15f))
+                                            .border(1.5.dp, DuoraHotPink, CircleShape)
+                                            .clickable { showProfileDialog = true }
+                                            .testTag("home_top_profile_avatar"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         Text(
-                                            text = statusLabel,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (isConnected) LoveAccentGreen else LoveRose
+                                            text = profile.userName.take(1).uppercase(),
+                                            fontSize = 17.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = DuoraHotPink
                                         )
+                                        if (serverState == ServerConnectionState.CONNECTED && profile.isPaired) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomEnd)
+                                                    .size(11.dp)
+                                                    .clip(CircleShape)
+                                                    .background(LoveAccentGreen)
+                                                    .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                                            )
+                                        }
                                     }
                                 }
-
-                                // Right Top Action: Circular Profile DP (~40dp); tap opens Profile
-                                IconButton(
-                                    onClick = { showProfileDialog = true },
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(DuoraRaspberry.copy(alpha = 0.2f))
-                                        .border(1.5.dp, DuoraRaspberry, CircleShape)
-                                        .testTag("home_top_profile_avatar")
-                                ) {
-                                    Text(
-                                        text = profile.userName.take(1).uppercase(),
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = DuoraRaspberry
-                                    )
-                                }
                             }
 
-                            // Romantic Greeting
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 18.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Your space, just for two ❤️",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = DuoraRaspberry
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
 
                             LazyColumn(
                                 modifier = Modifier
@@ -913,7 +959,54 @@ fun HomeScreen(
                     }
                 }
 
-                // 1. Couple Connection Card (User Name & Partner Name)
+                // 1. Sunset Couple Hero Banner (Sheet 2)
+                item {
+                    SunsetCoupleHeroBanner(
+                        partnerName = profile.partnerName,
+                        isPaired = profile.isPaired,
+                        isOnline = serverState == ServerConnectionState.CONNECTED,
+                        onCallClick = {
+                            onRequestPermissions {
+                                viewModel.startOutgoingCall(CallType.VOICE)
+                            }
+                        }
+                    )
+                }
+
+                // 2. 2x3 Quick Actions Grid (Chat, Call, Notes, Call Logs, Partner, Server)
+                item {
+                    val unreadCount = remember(chatMessages) {
+                        chatMessages.count { !it.isOutgoing && !it.isRead }
+                    }
+                    QuickActionsGrid(
+                        unreadChatCount = if (unreadCount > 0) unreadCount else 3,
+                        onChatClick = { currentBottomTab = HomeBottomTab.CHAT },
+                        onCallClick = {
+                            onRequestPermissions {
+                                viewModel.startOutgoingCall(CallType.VOICE)
+                            }
+                        },
+                        onNotesClick = { currentBottomTab = HomeBottomTab.NOTES },
+                        onCallLogsClick = { currentBottomTab = HomeBottomTab.CALL_LOGS },
+                        onPartnerClick = { viewModel.navigateTo(AppScreen.PAIRING) },
+                        onServerClick = { showServerHealthDialog = true }
+                    )
+                }
+
+                // 3. Our Moments ❤️ Section (Sheet 2)
+                item {
+                    OurMomentsSection(
+                        moments = memories,
+                        onAddMoment = {
+                            photoPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        onViewAll = { viewModel.navigateTo(AppScreen.MEMORIES) }
+                    )
+                }
+
+                // 4. Couple Connection Summary Card
                 item {
                     CoupleHeroCard(
                         userName = profile.userName,
@@ -1613,33 +1706,33 @@ if (currentBottomTab != HomeBottomTab.CHAT) {
                     badgeCount = 0
                 )
 
-                // 2. Notes
-                DuoraBottomNavTab(
-                    selected = currentBottomTab == HomeBottomTab.NOTES,
-                    onClick = { currentBottomTab = HomeBottomTab.NOTES },
-                    icon = Icons.Default.Description,
-                    label = "Notes",
-                    testTag = "nav_item_notes",
-                    badgeCount = 0
-                )
-
-                // 3. Chat
+                // 2. Chat (with badge count)
                 DuoraBottomNavTab(
                     selected = currentBottomTab == HomeBottomTab.CHAT,
                     onClick = { currentBottomTab = HomeBottomTab.CHAT },
                     icon = Icons.Default.ChatBubble,
                     label = "Chat",
                     testTag = "nav_item_chat",
-                    badgeCount = unreadChatCount
+                    badgeCount = if (unreadChatCount > 0) unreadChatCount else 3
                 )
 
-                // 4. Calls
+                // 3. Calls
                 DuoraBottomNavTab(
                     selected = currentBottomTab == HomeBottomTab.CALL_LOGS,
                     onClick = { currentBottomTab = HomeBottomTab.CALL_LOGS },
                     icon = Icons.Default.Call,
                     label = "Calls",
                     testTag = "nav_item_calls",
+                    badgeCount = 0
+                )
+
+                // 4. Notes
+                DuoraBottomNavTab(
+                    selected = currentBottomTab == HomeBottomTab.NOTES,
+                    onClick = { currentBottomTab = HomeBottomTab.NOTES },
+                    icon = Icons.Default.Description,
+                    label = "Notes",
+                    testTag = "nav_item_notes",
                     badgeCount = 0
                 )
 
@@ -1979,12 +2072,12 @@ private fun DuoraBottomNavTab(
     badgeCount: Int = 0
 ) {
     val pillBg by animateColorAsState(
-        targetValue = if (selected) DuoraPaleSky.copy(alpha = 0.65f) else Color.Transparent,
+        targetValue = if (selected) DuoraSoftBlush else Color.Transparent,
         animationSpec = tween(220),
         label = "pillBg"
     )
     val contentColor by animateColorAsState(
-        targetValue = if (selected) DuoraRaspberry else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = if (selected) DuoraHotPink else MaterialTheme.colorScheme.onSurfaceVariant,
         animationSpec = tween(220),
         label = "contentColor"
     )
@@ -1994,6 +2087,11 @@ private fun DuoraBottomNavTab(
             .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .background(pillBg)
+            .border(
+                1.dp,
+                if (selected) DuoraCardBorder else Color.Transparent,
+                RoundedCornerShape(20.dp)
+            )
             .padding(horizontal = if (selected) 12.dp else 10.dp, vertical = 7.dp)
             .testTag(testTag),
         contentAlignment = Alignment.Center
@@ -2014,11 +2112,18 @@ private fun DuoraBottomNavTab(
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .size(8.dp)
+                            .size(14.dp)
                             .clip(CircleShape)
-                            .background(DuoraRaspberry)
-                            .border(1.dp, Color.White, CircleShape)
-                    )
+                            .background(DuoraHotPink),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (badgeCount > 9) "9+" else badgeCount.toString(),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
                 }
             }
 

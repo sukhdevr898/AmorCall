@@ -1,0 +1,125 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isCoupleMember(coupleId) {
+      return isSignedIn() && (
+        request.auth.uid in get(/databases/$(database)/documents/couples/$(coupleId)).data.memberUids
+      );
+    }
+
+    // --- Validation functions ---
+
+    function isValidUser(data) {
+      return data.userId is string
+        && data.userId == request.auth.uid
+        && data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 60
+        && data.partnerCode is string && data.partnerCode.size() > 0 && data.partnerCode.size() <= 20
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCouple(data) {
+      return data.coupleId is string && data.coupleId.size() > 0
+        && data.memberUids is list && data.memberUids.size() == 2
+        && request.auth.uid in data.memberUids
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidMessage(data) {
+      return data.id is string
+        && data.coupleId is string
+        && data.senderId is string && data.senderId == request.auth.uid
+        && data.text is string && data.text.size() <= 5000
+        && data.type is string
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidNote(data) {
+      return data.id is string
+        && data.coupleId is string
+        && data.authorId is string && data.authorId == request.auth.uid
+        && data.title is string && data.title.size() <= 200
+        && data.content is string && data.content.size() <= 10000
+        && data.category is string
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCallSignal(data) {
+      return data.id is string
+        && data.coupleId is string
+        && data.callerId is string
+        && data.recipientId is string
+        && data.callType in ['VOICE', 'VIDEO']
+        && data.status in ['RINGING', 'ACCEPTED', 'REJECTED', 'ENDED']
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidPairRequest(data) {
+      return data.id is string
+        && data.fromUserId == request.auth.uid
+        && data.fromCode is string
+        && data.toCode is string
+        && data.status in ['PENDING', 'ACCEPTED', 'DECLINED']
+        && data.createdAt is timestamp && data.createdAt <= request.time
+        && data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- Collections ---
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+
+    match /couples/{coupleId} {
+      allow read: if isSignedIn() && (request.auth.uid in resource.data.memberUids);
+      allow create: if isSignedIn() && isValidCouple(request.resource.data);
+      allow update: if isCoupleMember(coupleId) && isValidCouple(request.resource.data);
+      allow delete: if isCoupleMember(coupleId);
+
+      match /messages/{messageId} {
+        allow read: if isCoupleMember(coupleId);
+        allow create: if isCoupleMember(coupleId) && isValidMessage(request.resource.data);
+        allow update: if isCoupleMember(coupleId);
+        allow delete: if isCoupleMember(coupleId) && resource.data.senderId == request.auth.uid;
+      }
+
+      match /notes/{noteId} {
+        allow read: if isCoupleMember(coupleId);
+        allow create: if isCoupleMember(coupleId) && isValidNote(request.resource.data);
+        allow update: if isCoupleMember(coupleId);
+        allow delete: if isCoupleMember(coupleId);
+      }
+
+      match /call_signals/{signalId} {
+        allow read: if isCoupleMember(coupleId);
+        allow create: if isCoupleMember(coupleId) && isValidCallSignal(request.resource.data);
+        allow update: if isCoupleMember(coupleId);
+        allow delete: if isCoupleMember(coupleId);
+      }
+    }
+
+    match /pair_requests/{requestId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidPairRequest(request.resource.data);
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && (resource.data.fromUserId == request.auth.uid);
+    }
+  }
+}

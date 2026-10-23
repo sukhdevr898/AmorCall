@@ -257,6 +257,13 @@ fun AppNavigation(
                     onFinish = { viewModel.onSplashFinished() }
                 )
             }
+            AppScreen.AUTH -> {
+                com.example.ui.screens.AuthScreen(
+                    onAuthSuccess = { uid, email, name ->
+                        viewModel.onAuthSuccess(uid, email, name)
+                    }
+                )
+            }
             AppScreen.ONBOARDING -> {
                 com.example.ui.screens.OnboardingScreen(
                     currentProfile = profile,

@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Dns
@@ -73,8 +74,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.BuildConfig
 import com.example.privacy.PrivacyIconManager
+import com.example.ui.theme.DuoraCardBorder
+import com.example.ui.theme.DuoraHotPink
 import com.example.ui.theme.DuoraPaleSky
 import com.example.ui.theme.DuoraRaspberry
+import com.example.ui.theme.DuoraSoftBlush
 import com.example.ui.theme.LoveAccentGreen
 import com.example.ui.theme.LoveGold
 import com.example.ui.theme.LoveRose
@@ -186,8 +190,8 @@ fun SettingsTab(
                     .fillMaxWidth()
                     .testTag("settings_profile_card"),
                 shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = androidx.compose.foundation.BorderStroke(1.2.dp, MaterialTheme.colorScheme.outline)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.2.dp, DuoraCardBorder)
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(
@@ -198,17 +202,17 @@ fun SettingsTab(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(50.dp)
+                                    .size(52.dp)
                                     .clip(CircleShape)
-                                    .background(DuoraRaspberry.copy(alpha = 0.2f))
-                                    .border(1.5.dp, DuoraRaspberry, CircleShape),
+                                    .background(DuoraHotPink.copy(alpha = 0.15f))
+                                    .border(1.5.dp, DuoraHotPink, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = profile.userName.take(1).uppercase(),
                                     fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = DuoraRaspberry
+                                    color = DuoraHotPink
                                 )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
@@ -220,9 +224,14 @@ fun SettingsTab(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (profile.isPaired) "Paired with ${profile.partnerName}" else "Unpaired",
+                                    text = "@${profile.userName.lowercase().replace(" ", "_").ifBlank { "duora_love" }}",
                                     fontSize = 12.sp,
-                                    color = if (profile.isPaired) LoveAccentGreen else DuoraRaspberry,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = if (profile.isPaired) "Paired with ${profile.partnerName} ❤️" else "Unpaired",
+                                    fontSize = 11.sp,
+                                    color = if (profile.isPaired) LoveAccentGreen else DuoraHotPink,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -233,8 +242,8 @@ fun SettingsTab(
                             modifier = Modifier
                                 .size(38.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surface)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                                .background(DuoraSoftBlush)
+                                .border(1.dp, DuoraCardBorder, CircleShape)
                                 .testTag("settings_edit_profile_button")
                         ) {
                             Icon(
@@ -438,6 +447,40 @@ fun SettingsTab(
                 onClick = { showAboutDialog = true },
                 testTag = "settings_row_about"
             )
+        }
+
+        // Logout Row matching Sheet 3
+        item {
+            Spacer(modifier = Modifier.height(14.dp))
+            Surface(
+                onClick = { viewModel.signOut() },
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xFFFFF0F3),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFB3C6)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("settings_logout_button")
+            ) {
+                Row(
+                    modifier = Modifier.padding(vertical = 14.dp, horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = "Logout",
+                        tint = Color(0xFFE53955),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Logout",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE53955)
+                    )
+                }
+            }
         }
 
         item { Spacer(modifier = Modifier.height(90.dp)) }

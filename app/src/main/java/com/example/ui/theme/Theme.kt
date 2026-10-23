@@ -48,11 +48,11 @@ private val SlateDarkColorScheme = darkColorScheme(
 )
 
 private val DuoraLightColorScheme = lightColorScheme(
-    primary = DuoraRaspberry,
+    primary = DuoraHotPink,
     onPrimary = Color.White,
     primaryContainer = DuoraPaleSky,
-    onPrimaryContainer = DuoraRaspberry,
-    secondary = DuoraRaspberry,
+    onPrimaryContainer = DuoraHotPink,
+    secondary = DuoraRose,
     onSecondary = Color.White,
     secondaryContainer = DuoraPaleSky,
     onSecondaryContainer = DuoraLightPrimaryText,
@@ -62,7 +62,7 @@ private val DuoraLightColorScheme = lightColorScheme(
     onBackground = DuoraLightPrimaryText,
     surface = DuoraLightSurface,
     onSurface = DuoraLightPrimaryText,
-    surfaceVariant = Color(0xFFF3EEFF),
+    surfaceVariant = DuoraSoftBlush,
     onSurfaceVariant = DuoraLightSecondaryText,
     outline = DuoraLightOutline
 )

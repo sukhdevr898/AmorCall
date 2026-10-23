@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.CallRecord
 import com.example.model.CallType
+import com.example.ui.theme.DuoraCardBorder
 import com.example.ui.theme.DuoraPaleSky
 import com.example.ui.theme.DuoraRaspberry
 import com.example.ui.theme.LoveAccentGreen
@@ -417,8 +418,8 @@ private fun CallLogItemCard(
             .fillMaxWidth()
             .testTag("call_log_item_${record.id}"),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.2.dp, DuoraCardBorder)
     ) {
         Row(
             modifier = Modifier
