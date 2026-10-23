@@ -19,6 +19,12 @@ enum class AppTheme {
     LOVE
 }
 
+enum class PresenceStatus(val label: String) {
+    ONLINE("Online"),
+    AWAY("Away"),
+    IN_CALL("In a call")
+}
+
 data class CoupleProfile(
     val userName: String = "You",
     val partnerName: String = "My Love",
@@ -29,7 +35,7 @@ data class CoupleProfile(
     val relationshipStartDateEpochMs: Long = System.currentTimeMillis() - (520L * 24 * 60 * 60 * 1000L),
     val partnerStatus: String = "Thinking of you always ❤️",
     val avatarUri: String? = null,
-    val serverUrl: String = "ws://10.0.2.2:3000",
+    val serverUrl: String = "ws://amorcall.onrender.com/",
     val isOnboardingCompleted: Boolean = false,
     val isNotificationsMuted: Boolean = false,
     val appTheme: AppTheme = AppTheme.LOVE

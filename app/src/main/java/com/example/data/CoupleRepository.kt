@@ -73,7 +73,7 @@ class CoupleRepository(context: Context) {
         )
         val status = prefs.getString("partner_status", "Thinking of you always ❤️") ?: "Thinking of you always ❤️"
         val avatarUri = prefs.getString("avatar_uri", null)
-        val serverUrl = prefs.getString("server_url", "ws://10.0.2.2:3000") ?: "ws://10.0.2.2:3000"
+        val serverUrl = "ws://amorcall.onrender.com/"
         val isOnboardingCompleted = prefs.getBoolean("is_onboarding_completed", false)
         val isNotificationsMuted = prefs.getBoolean("is_notifications_muted", false)
         val themeStr = prefs.getString("app_theme", com.example.model.AppTheme.LOVE.name) ?: com.example.model.AppTheme.LOVE.name

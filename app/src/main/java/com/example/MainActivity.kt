@@ -17,13 +17,26 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.calling.CallActionReceiver
 import com.example.calling.CallNotificationHelper
@@ -242,50 +255,81 @@ fun AppNavigation(
     val callSession by viewModel.callSession.collectAsState()
     val currentScreen by viewModel.currentScreen.collectAsState()
     val profile by viewModel.profile.collectAsState()
+    val isScreenLoading by viewModel.isScreenLoading.collectAsState()
 
-    // Active full-screen call takes priority
-    if (callSession.status != CallStatus.IDLE) {
-        CallScreen(
-            viewModel = viewModel,
-            callSession = callSession,
-            onEnterPip = onEnterPip
-        )
-    } else {
-        when (currentScreen) {
-            AppScreen.SPLASH -> {
-                com.example.ui.screens.SplashScreen(
-                    onFinish = { viewModel.onSplashFinished() }
-                )
-            }
-            AppScreen.AUTH -> {
-                com.example.ui.screens.AuthScreen(
-                    onAuthSuccess = { uid, email, name ->
-                        viewModel.onAuthSuccess(uid, email, name)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Active full-screen call takes priority
+        if (callSession.status != CallStatus.IDLE) {
+            CallScreen(
+                viewModel = viewModel,
+                callSession = callSession,
+                onEnterPip = onEnterPip
+            )
+        } else {
+            AnimatedContent(
+                targetState = currentScreen,
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(250))
+                },
+                label = "ScreenTransition"
+            ) { screen ->
+                when (screen) {
+                    AppScreen.SPLASH -> {
+                        com.example.ui.screens.SplashScreen(
+                            onFinish = { viewModel.onSplashFinished() }
+                        )
                     }
-                )
-            }
-            AppScreen.ONBOARDING -> {
-                com.example.ui.screens.OnboardingScreen(
-                    currentProfile = profile,
-                    onComplete = { partnerName, partnerNickname, partnerCode ->
-                        viewModel.completeOnboarding(partnerName, partnerNickname, partnerCode)
+                    AppScreen.AUTH -> {
+                        com.example.ui.screens.AuthScreen(
+                            onAuthSuccess = { uid, email, name ->
+                                viewModel.onAuthSuccess(uid, email, name)
+                            }
+                        )
                     }
+                    AppScreen.ONBOARDING -> {
+                        com.example.ui.screens.OnboardingScreen(
+                            currentProfile = profile,
+                            onComplete = { partnerName, partnerNickname, partnerCode ->
+                                viewModel.completeOnboarding(partnerName, partnerNickname, partnerCode)
+                            }
+                        )
+                    }
+                    AppScreen.DASHBOARD -> {
+                        HomeScreen(
+                            viewModel = viewModel,
+                            onRequestPermissions = onRequestPermissions
+                        )
+                    }
+                    AppScreen.MEMORIES -> {
+                        MemoriesScreen(viewModel = viewModel)
+                    }
+                    AppScreen.PAIRING -> {
+                        PairingScreen(viewModel = viewModel)
+                    }
+                    AppScreen.DEVELOPER -> {
+                        DeveloperScreen(viewModel = viewModel)
+                    }
+                }
+            }
+        }
+
+        // Animated Screen Transition Overlay
+        AnimatedVisibility(
+            visible = isScreenLoading,
+            enter = fadeIn(tween(150)),
+            exit = fadeOut(tween(200))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x80000000)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = com.example.ui.theme.DuoraHotPink,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(44.dp)
                 )
-            }
-            AppScreen.DASHBOARD -> {
-                HomeScreen(
-                    viewModel = viewModel,
-                    onRequestPermissions = onRequestPermissions
-                )
-            }
-            AppScreen.MEMORIES -> {
-                MemoriesScreen(viewModel = viewModel)
-            }
-            AppScreen.PAIRING -> {
-                PairingScreen(viewModel = viewModel)
-            }
-            AppScreen.DEVELOPER -> {
-                DeveloperScreen(viewModel = viewModel)
             }
         }
     }

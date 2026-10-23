@@ -15,9 +15,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -349,138 +353,7 @@ fun HomeScreen(
         )
     }
 
-    // Server Settings Dialog
-    if (showServerSettingsDialog) {
-        var serverInput by remember(profile.serverUrl) { mutableStateOf(profile.serverUrl) }
-        AlertDialog(
-            onDismissRequest = { showServerSettingsDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Dns,
-                        contentDescription = "Server Settings",
-                        tint = LoveGold,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Signaling Server",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Duora connects calls, video, and notes in real time through this WebSocket server.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = when (serverState) {
-                            ServerConnectionState.CONNECTED -> Color(0x3310B981)
-                            ServerConnectionState.CONNECTING -> Color(0x33FBBF24)
-                            ServerConnectionState.DISCONNECTED -> Color(0x33F43F5E)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        when (serverState) {
-                                            ServerConnectionState.CONNECTED -> LoveAccentGreen
-                                            ServerConnectionState.CONNECTING -> LoveGold
-                                            ServerConnectionState.DISCONNECTED -> LoveRose
-                                        }
-                                    )
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = when (serverState) {
-                                    ServerConnectionState.CONNECTED -> "Status: Connected to Server"
-                                    ServerConnectionState.CONNECTING -> "Status: Connecting..."
-                                    ServerConnectionState.DISCONNECTED -> "Status: Disconnected / Offline"
-                                },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = when (serverState) {
-                                    ServerConnectionState.CONNECTED -> LoveAccentGreen
-                                    ServerConnectionState.CONNECTING -> LoveGold
-                                    ServerConnectionState.DISCONNECTED -> LoveRose
-                                }
-                            )
-                        }
-                    }
-
-                    OutlinedTextField(
-                        value = serverInput,
-                        onValueChange = { serverInput = it },
-                        label = { Text("Server WebSocket URL") },
-                        placeholder = { Text("ws://10.0.2.2:3000 or wss://...") },
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = LoveRose,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("dialog_server_url_input")
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { serverInput = "ws://10.0.2.2:3000" },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Emulator", fontSize = 11.sp)
-                        }
-                        OutlinedButton(
-                            onClick = { serverInput = "ws://localhost:3000" },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Localhost", fontSize = 11.sp)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val clean = serverInput.trim()
-                        if (clean.isNotBlank()) {
-                            viewModel.reconnectServer(clean)
-                        }
-                        showServerSettingsDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
-                    modifier = Modifier.testTag("dialog_save_server_button")
-                ) {
-                    Text("Save & Connect", fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showServerSettingsDialog = false }) {
-                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(20.dp)
-        )
-    }
+    // Server settings are permanently set to ws://amorcall.onrender.com/ (no manual change allowed)
 
     // Server Health Diagnostic Dialog — Sheet 4
     if (showServerHealthDialog) {
@@ -791,23 +664,29 @@ fun HomeScreen(
                                 Column {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = "Duora",
-                                            fontSize = 25.sp,
-                                            fontWeight = FontWeight.Bold,
+                                            text = "Du",
+                                            fontSize = 26.sp,
+                                            fontWeight = FontWeight.ExtraBold,
                                             color = MaterialTheme.colorScheme.onBackground
                                         )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Icon(
-                                            imageVector = Icons.Default.Favorite,
-                                            contentDescription = "Duora Hearts",
-                                            tint = DuoraHotPink,
-                                            modifier = Modifier.size(20.dp)
+                                        Text(
+                                            text = "♥",
+                                            fontSize = 23.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = DuoraHotPink,
+                                            modifier = Modifier.padding(horizontal = 1.dp)
+                                        )
+                                        Text(
+                                            text = "ra",
+                                            fontSize = 26.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.onBackground
                                         )
                                     }
 
                                     Text(
                                         text = "Always Together",
-                                        fontSize = 12.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -818,7 +697,7 @@ fun HomeScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    // Notification bell with unread badge '2'
+                                    // Notification bell with red badge dot
                                     Box {
                                         IconButton(
                                             onClick = { currentBottomTab = HomeBottomTab.CHAT },
@@ -830,54 +709,37 @@ fun HomeScreen(
                                             Icon(
                                                 imageVector = Icons.Default.Notifications,
                                                 contentDescription = "Notifications",
-                                                tint = DuoraHotPink,
+                                                tint = Color(0xFF33202C),
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
                                         Box(
                                             modifier = Modifier
                                                 .align(Alignment.TopEnd)
-                                                .size(15.dp)
+                                                .padding(top = 2.dp, end = 2.dp)
+                                                .size(10.dp)
                                                 .clip(CircleShape)
-                                                .background(DuoraHotPink),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = "2",
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color.White
-                                            )
-                                        }
+                                                .background(DuoraHotPink)
+                                                .border(1.5.dp, Color.White, CircleShape)
+                                        )
                                     }
 
-                                    // Circular Profile Avatar with online green badge
+                                    // Circular Profile Avatar from design reference
                                     Box(
                                         modifier = Modifier
                                             .size(42.dp)
                                             .clip(CircleShape)
-                                            .background(DuoraHotPink.copy(alpha = 0.15f))
                                             .border(1.5.dp, DuoraHotPink, CircleShape)
                                             .clickable { showProfileDialog = true }
                                             .testTag("home_top_profile_avatar"),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            text = profile.userName.take(1).uppercase(),
-                                            fontSize = 17.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = DuoraHotPink
+                                        Image(
+                                            painter = painterResource(id = R.drawable.avatar_partner_demo),
+                                            contentDescription = "User Avatar",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
                                         )
-                                        if (serverState == ServerConnectionState.CONNECTED && profile.isPaired) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .align(Alignment.BottomEnd)
-                                                    .size(11.dp)
-                                                    .clip(CircleShape)
-                                                    .background(LoveAccentGreen)
-                                                    .border(1.5.dp, MaterialTheme.colorScheme.surface, CircleShape)
-                                            )
-                                        }
                                     }
                                 }
                             }
@@ -959,12 +821,12 @@ fun HomeScreen(
                     }
                 }
 
-                // 1. Sunset Couple Hero Banner (Sheet 2)
+                // 1. Sunset Couple Hero Banner (Image 4)
                 item {
+                    val partnerPresence by viewModel.partnerPresence.collectAsState()
                     SunsetCoupleHeroBanner(
                         partnerName = profile.partnerName,
-                        isPaired = profile.isPaired,
-                        isOnline = serverState == ServerConnectionState.CONNECTED,
+                        partnerPresence = partnerPresence,
                         onCallClick = {
                             onRequestPermissions {
                                 viewModel.startOutgoingCall(CallType.VOICE)

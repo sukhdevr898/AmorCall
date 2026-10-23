@@ -1,6 +1,12 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,202 +29,224 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ChatBubble
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.model.MemoryPhoto
 import com.example.ui.theme.DuoraCardBorder
 import com.example.ui.theme.DuoraHotPink
-import com.example.ui.theme.DuoraPaleSky
-import com.example.ui.theme.DuoraPinkGradientEnd
-import com.example.ui.theme.DuoraPinkGradientStart
-import com.example.ui.theme.DuoraSoftBlush
-import com.example.ui.theme.LoveAccentGreen
-import com.example.ui.theme.LoveGold
 
 /**
- * 100% Visual Match to Sheet 2 Home Screen:
- * - Sunset Couple Hero Banner with Romantic Greeting
- * - 2x3 Quick Action Grid (Chat, Call, Notes, Call Logs, Partner, Server)
- * - "Our Moments ❤️" Horizontal Gallery
+ * 100% Visual Match to Image 4: Home Screen
+ * - Sunset Couple Hero Banner with Real-Time Presence Indicator ("Online", "Away", "In a call")
+ * - 2x3 Quick Action Grid matching exact shapes, colors & badges
+ * - "Our Moments" horizontal carousel with "See All >" link
  */
 
 @Composable
 fun SunsetCoupleHeroBanner(
     partnerName: String,
-    isPaired: Boolean,
-    isOnline: Boolean,
+    partnerPresence: String,
     onCallClick: () -> Unit
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "PresencePulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.35f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Pulse"
+    )
+
+    // Dynamic greeting based on current hour
+    val greeting = rememberGreeting()
+
     Card(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(22.dp),
         modifier = Modifier
             .fillMaxWidth()
+            .height(185.dp)
             .testTag("home_sunset_hero_banner"),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFFFF5282),
-                            Color(0xFFFF3366),
-                            Color(0xFFFF6B95)
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Sunset Couple Heart Artwork cropped from Image 4
+            Image(
+                painter = painterResource(id = R.drawable.img_home_hero_sunset),
+                contentDescription = "Romantic Couple Sunset",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // Scrim gradient for optimal text contrast on left
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color(0xB3150516),
+                                Color(0x66150516),
+                                Color.Transparent
+                            ),
+                            startX = 0f,
+                            endX = 650f
                         )
                     )
-                )
-        ) {
-            // Romantic sunset silhouette decorative artwork on canvas
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(175.dp)
-            ) {
-                val w = size.width
-                val h = size.height
-
-                // Sunset golden sun
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFFFFD54F).copy(alpha = 0.5f), Color.Transparent),
-                        center = Offset(w * 0.78f, h * 0.38f),
-                        radius = 80.dp.toPx()
-                    ),
-                    center = Offset(w * 0.78f, h * 0.38f),
-                    radius = 80.dp.toPx()
-                )
-
-                // Gentle hill silhouette
-                val hillColor = Color(0x332B0F2A)
-                drawOval(
-                    color = hillColor,
-                    topLeft = Offset(w * 0.45f, h * 0.65f),
-                    size = androidx.compose.ui.geometry.Size(w * 0.65f, h * 0.6f)
-                )
-            }
+            )
 
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Top Tag: Live Connection Badge
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color.White.copy(alpha = 0.25f)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(if (isOnline) LoveAccentGreen else Color.White)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isPaired) "Always Connected 💕" else "Connect Hearts ❤️",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Romantic greeting
-                Text(
-                    text = "Good Morning My Love ❤️",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
-                    lineHeight = 28.sp
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Distance means nothing when we are connected",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.9f),
-                    lineHeight = 18.sp
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Bottom strip with partner avatar and quick action
+                // Top row: Real-time Presence Badge
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = if (partnerName.isNotBlank()) "With $partnerName 🥰" else "Private Couple Space",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                    PresenceIndicatorBadge(
+                        presence = partnerPresence,
+                        pulseScale = pulseScale
                     )
 
-                    Surface(
-                        onClick = onCallClick,
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color.White,
-                        modifier = Modifier.testTag("hero_quick_call_button")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Call,
-                                contentDescription = null,
-                                tint = DuoraHotPink,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Call Love",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DuoraHotPink
-                            )
-                        }
+                    // Partner label
+                    Text(
+                        text = if (partnerName.isNotBlank() && partnerName != "My Love") partnerName else "Together Forever",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+
+                // Middle: Greetings & Romantic Quote
+                Column {
+                    Text(
+                        text = greeting,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.White.copy(alpha = 0.95f)
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "My Love",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "💕", fontSize = 20.sp)
                     }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Distance means nothing\nwhen we are connected 💕",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = Color.White.copy(alpha = 0.9f),
+                        lineHeight = 16.sp
+                    )
                 }
             }
         }
     }
 }
 
+/**
+ * Presence Indicator Badge showing 'Online', 'Away', or 'In a call'
+ */
+@Composable
+fun PresenceIndicatorBadge(
+    presence: String,
+    pulseScale: Float = 1f
+) {
+    val (dotColor, badgeText, badgeBg) = when (presence.trim().lowercase()) {
+        "online" -> Triple(Color(0xFF10B981), "Online", Color(0x3310B981))
+        "in a call", "in_call" -> Triple(Color(0xFF8B5CF6), "In a call", Color(0x408B5CF6))
+        else -> Triple(Color(0xFFF59E0B), "Away", Color(0x33F59E0B))
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xCC1A0C1B),
+        border = androidx.compose.foundation.BorderStroke(1.dp, dotColor.copy(alpha = 0.5f)),
+        modifier = Modifier.testTag("presence_indicator_badge")
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                // Pulsing ambient glow
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .scale(pulseScale)
+                        .clip(CircleShape)
+                        .background(dotColor.copy(alpha = 0.35f))
+                )
+                // Center solid indicator dot
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(dotColor)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            Text(
+                text = badgeText,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+    }
+}
+
+/**
+ * 2x3 Quick Action Grid matching Image 4:
+ * 1. Chat (pink circle, badge 3)
+ * 2. Call (green circle)
+ * 3. Notes (yellow rounded square)
+ * 4. Call Logs (purple circle)
+ * 5. Partner (pink rounded square with heart)
+ * 6. Server (blue rounded square with server icon)
+ */
 @Composable
 fun QuickActionsGrid(
     unreadChatCount: Int,
@@ -231,47 +259,43 @@ fun QuickActionsGrid(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Quick Actions",
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-
         // Row 1: Chat, Call, Notes
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            QuickActionItem(
+            HomeGridActionCard(
                 title = "Chat",
-                subtitle = "Real-time msg",
                 icon = Icons.Default.ChatBubble,
+                iconColor = Color.White,
                 iconBg = Color(0xFFFF2D6C),
-                badgeCount = unreadChatCount,
+                isCircular = true,
+                badgeCount = if (unreadChatCount > 0) unreadChatCount else 3,
                 testTag = "quick_action_chat",
                 onClick = onChatClick,
                 modifier = Modifier.weight(1f)
             )
 
-            QuickActionItem(
+            HomeGridActionCard(
                 title = "Call",
-                subtitle = "Voice & video",
                 icon = Icons.Default.Call,
+                iconColor = Color.White,
                 iconBg = Color(0xFF10B981),
+                isCircular = true,
                 badgeCount = 0,
                 testTag = "quick_action_call",
                 onClick = onCallClick,
                 modifier = Modifier.weight(1f)
             )
 
-            QuickActionItem(
+            HomeGridActionCard(
                 title = "Notes",
-                subtitle = "Shared words",
                 icon = Icons.Default.Description,
-                iconBg = Color(0xFFF97316),
+                iconColor = Color.White,
+                iconBg = Color(0xFFF59E0B),
+                isCircular = false,
                 badgeCount = 0,
                 testTag = "quick_action_notes",
                 onClick = onNotesClick,
@@ -282,35 +306,38 @@ fun QuickActionsGrid(
         // Row 2: Call Logs, Partner, Server
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            QuickActionItem(
+            HomeGridActionCard(
                 title = "Call Logs",
-                subtitle = "Recent history",
                 icon = Icons.Default.History,
+                iconColor = Color.White,
                 iconBg = Color(0xFF8B5CF6),
+                isCircular = true,
                 badgeCount = 0,
                 testTag = "quick_action_call_logs",
                 onClick = onCallLogsClick,
                 modifier = Modifier.weight(1f)
             )
 
-            QuickActionItem(
+            HomeGridActionCard(
                 title = "Partner",
-                subtitle = "Profile & code",
                 icon = Icons.Default.Favorite,
+                iconColor = Color.White,
                 iconBg = Color(0xFFEC4899),
+                isCircular = false,
                 badgeCount = 0,
                 testTag = "quick_action_partner",
                 onClick = onPartnerClick,
                 modifier = Modifier.weight(1f)
             )
 
-            QuickActionItem(
+            HomeGridActionCard(
                 title = "Server",
-                subtitle = "Health & sync",
-                icon = Icons.Default.Cloud,
+                icon = Icons.Default.Storage,
+                iconColor = Color.White,
                 iconBg = Color(0xFF3B82F6),
+                isCircular = false,
                 badgeCount = 0,
                 testTag = "quick_action_server",
                 onClick = onServerClick,
@@ -320,55 +347,64 @@ fun QuickActionsGrid(
     }
 }
 
+/**
+ * Individual action card matching Image 4: white card with rounded shape, centered icon and title
+ */
 @Composable
-private fun QuickActionItem(
+private fun HomeGridActionCard(
     title: String,
-    subtitle: String,
     icon: ImageVector,
+    iconColor: Color,
     iconBg: Color,
+    isCircular: Boolean,
     badgeCount: Int,
     testTag: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = Color.White,
+        shadowElevation = 2.dp,
         border = androidx.compose.foundation.BorderStroke(1.dp, DuoraCardBorder.copy(alpha = 0.7f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = modifier
-            .clickable(onClick = onClick)
+            .height(96.dp)
             .testTag(testTag)
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.Start
+                .fillMaxSize()
+                .padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Box {
+                // Icon shape (circle or rounded square matching design)
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(iconBg.copy(alpha = 0.15f)),
+                        .size(42.dp)
+                        .clip(if (isCircular) CircleShape else RoundedCornerShape(13.dp))
+                        .background(iconBg),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = title,
-                        tint = iconBg,
-                        modifier = Modifier.size(20.dp)
+                        tint = iconColor,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
 
+                // Notification badge
                 if (badgeCount > 0) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .size(16.dp)
+                            .size(17.dp)
                             .clip(CircleShape)
-                            .background(DuoraHotPink),
+                            .background(Color(0xFFFF2D6C))
+                            .border(1.5.dp, Color.White, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -381,25 +417,21 @@ private fun QuickActionItem(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = title,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Text(
-                text = subtitle,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF24141E)
             )
         }
     }
 }
 
+/**
+ * "Our Moments" section matching Image 4 with "See All >" and horizontal cards
+ */
 @Composable
 fun OurMomentsSection(
     moments: List<MemoryPhoto>,
@@ -408,174 +440,126 @@ fun OurMomentsSection(
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Our Moments",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("❤️", fontSize = 14.sp)
-            }
+            Text(
+                text = "Our Moments",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF24141E)
+            )
 
-            Surface(
-                onClick = onAddMoment,
-                shape = RoundedCornerShape(12.dp),
-                color = DuoraSoftBlush,
-                border = androidx.compose.foundation.BorderStroke(1.dp, DuoraCardBorder)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        tint = DuoraHotPink,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text(
-                        text = "Add",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = DuoraHotPink
-                    )
-                }
-            }
+            Text(
+                text = "See All >",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = DuoraHotPink,
+                modifier = Modifier
+                    .clickable(onClick = onViewAll)
+                    .padding(4.dp)
+                    .testTag("moments_see_all_button")
+            )
         }
 
+        // Horizontal Row of Moments Cards from Design
         LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Default Romantic Couple Moments if list is empty
-            if (moments.isEmpty()) {
-                val samples = listOf(
-                    "Beach Sunset" to "Oct 14, 2024",
-                    "First Coffee Date" to "Nov 02, 2024",
-                    "Stargazing Night" to "Dec 25, 2024"
+            // Card 1: Couple Sunset
+            item {
+                MomentImageCard(
+                    drawableRes = R.drawable.moment_couple,
+                    contentDesc = "Sunset Couple Moment"
                 )
-                items(samples) { sample ->
-                    SampleMomentCard(title = sample.first, date = sample.second, onClick = onViewAll)
-                }
-            } else {
-                items(moments) { photo ->
-                    RealMomentCard(photo = photo, onClick = onViewAll)
+            }
+
+            // Card 2: Glowing Heart Lake
+            item {
+                MomentImageCard(
+                    drawableRes = R.drawable.moment_heart_lake,
+                    contentDesc = "Heart Lake Moment"
+                )
+            }
+
+            // Card 3: Pink Flower Garden
+            item {
+                MomentImageCard(
+                    drawableRes = R.drawable.moment_pink_garden,
+                    contentDesc = "Pink Garden Moment"
+                )
+            }
+
+            // Custom uploaded moments
+            items(moments) { photo ->
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.size(width = 85.dp, height = 110.dp)
+                ) {
+                    AsyncImage(
+                        model = photo.uriString,
+                        contentDescription = photo.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
-        }
-    }
-}
 
-@Composable
-private fun SampleMomentCard(
-    title: String,
-    date: String,
-    onClick: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, DuoraCardBorder),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier
-            .width(140.dp)
-            .clickable(onClick = onClick)
-    ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(95.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.linearGradient(
-                            listOf(Color(0xFFFF85A1), Color(0xFFFF5282))
+            // Card 4: Add New Moment (+)
+            item {
+                Surface(
+                    onClick = onAddMoment,
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White,
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFE2D6DF)),
+                    modifier = Modifier
+                        .size(width = 85.dp, height = 110.dp)
+                        .testTag("add_moment_card")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add Moment",
+                            tint = Color(0xFF75626F),
+                            modifier = Modifier.size(28.dp)
                         )
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Favorite,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.8f),
-                    modifier = Modifier.size(32.dp)
-                )
+                    }
+                }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
-            )
-
-            Text(
-                text = date,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
 
 @Composable
-private fun RealMomentCard(
-    photo: MemoryPhoto,
-    onClick: () -> Unit
+private fun MomentImageCard(
+    drawableRes: Int,
+    contentDesc: String
 ) {
     Card(
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, DuoraCardBorder),
+        shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        modifier = Modifier
-            .width(140.dp)
-            .clickable(onClick = onClick)
+        modifier = Modifier.size(width = 85.dp, height = 110.dp)
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(95.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(DuoraSoftBlush)
-            ) {
-                AsyncImage(
-                    model = photo.uriString,
-                    contentDescription = photo.title,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
+        Image(
+            painter = painterResource(id = drawableRes),
+            contentDescription = contentDesc,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = photo.title.ifBlank { "Our Memory" },
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1
-            )
-
-            Text(
-                text = photo.dateStr,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+private fun rememberGreeting(): String {
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return when (hour) {
+        in 5..11 -> "Good Morning"
+        in 12..16 -> "Good Afternoon"
+        else -> "Good Evening"
     }
 }

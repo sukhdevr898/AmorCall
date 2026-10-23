@@ -107,6 +107,7 @@ class FirebaseCoupleRepository(
             "avatarUrl" to avatarUrl,
             "statusMessage" to statusMessage,
             "online" to isOnline,
+            "presence" to (if (isOnline) "Online" else "Away"),
             "lastSeenEpochMs" to System.currentTimeMillis(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -125,6 +126,50 @@ class FirebaseCoupleRepository(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to sync user profile: ${e.message}", e)
         }
+    }
+
+    suspend fun updateUserPresence(presence: String) {
+        val uid = currentUserId ?: return
+        val docRef = db.collection("users").document(uid)
+        val payload = mapOf(
+            "presence" to presence,
+            "online" to (presence != "Away"),
+            "lastSeenEpochMs" to System.currentTimeMillis(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        try {
+            docRef.update(payload).await()
+            Log.d(TAG, "User presence updated to: $presence")
+        } catch (e: Exception) {
+            Log.w(TAG, "Presence update error: ${e.message}")
+        }
+    }
+
+    fun observePartnerPresence(partnerCode: String): Flow<String?> = callbackFlow {
+        val cleanCode = partnerCode.trim().uppercase()
+        if (cleanCode.isBlank()) {
+            trySend(null)
+            close()
+            return@callbackFlow
+        }
+        val listener = db.collection("users")
+            .whereEqualTo("partnerCode", cleanCode)
+            .limit(1)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e(TAG, "Error observing partner presence: ${error.message}")
+                    return@addSnapshotListener
+                }
+                val doc = snapshot?.documents?.firstOrNull()
+                if (doc != null) {
+                    val presence = doc.getString("presence")
+                        ?: if (doc.getBoolean("online") == true) "Online" else "Away"
+                    trySend(presence)
+                } else {
+                    trySend(null)
+                }
+            }
+        awaitClose { listener.remove() }
     }
 
     // ----------------------------------------------------

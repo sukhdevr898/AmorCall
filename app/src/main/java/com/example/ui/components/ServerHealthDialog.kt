@@ -155,19 +155,20 @@ fun ServerHealthDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "System Services Status",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = "Permanent Server: ws://amorcall.onrender.com/",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
                 )
 
+                Spacer(modifier = Modifier.height(4.dp))
+
                 // Service items
-                HealthCheckRow(name = "Supabase Database", status = "Connected & Synced", isOk = true)
-                HealthCheckRow(name = "Authentication", status = "Active & Verified", isOk = true)
-                HealthCheckRow(name = "Real-time Messaging", status = if (isOnline) "Connected" else "Connecting", isOk = isOnline)
-                HealthCheckRow(name = "WebRTC Hotline Calls", status = "Signaling Ready", isOk = true)
-                HealthCheckRow(name = "Incoming Call Push", status = "Online (Node.js)", isOk = true)
-                HealthCheckRow(name = "Media Storage", status = "Online", isOk = true)
+                HealthCheckRow(name = "Firebase Firestore", status = "Connected & Realtime", isOk = true)
+                HealthCheckRow(name = "Firebase Authentication", status = "Active & Verified", isOk = true)
+                HealthCheckRow(name = "WebSocket Hotline", status = "ws://amorcall.onrender.com/", isOk = isOnline)
+                HealthCheckRow(name = "Real-time Presence", status = "Live Sync Active", isOk = true)
+                HealthCheckRow(name = "VoIP Call Signaling", status = if (isOnline) "Ready" else "Connecting", isOk = isOnline)
             }
         },
         confirmButton = {

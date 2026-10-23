@@ -69,6 +69,45 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     val chatMessages: StateFlow<List<ChatMessage>> = repository.chatMessages
     val serverConnectionState: StateFlow<ServerConnectionState> = signalingClient.connectionState
 
+    private val _partnerPresence = MutableStateFlow<String>("Online")
+    val partnerPresence: StateFlow<String> = _partnerPresence.asStateFlow()
+    private var partnerPresenceJob: Job? = null
+
+    private val _isScreenLoading = MutableStateFlow(false)
+    val isScreenLoading: StateFlow<Boolean> = _isScreenLoading.asStateFlow()
+
+    fun navigateToScreenWithLoading(screen: AppScreen) {
+        viewModelScope.launch {
+            _isScreenLoading.value = true
+            delay(280)
+            _currentScreen.value = screen
+            delay(120)
+            _isScreenLoading.value = false
+        }
+    }
+
+    fun observePartnerPresence(partnerCode: String) {
+        partnerPresenceJob?.cancel()
+        val clean = partnerCode.trim().uppercase()
+        if (clean.isBlank()) {
+            _partnerPresence.value = "Away"
+            return
+        }
+        partnerPresenceJob = viewModelScope.launch {
+            firebaseRepo.observePartnerPresence(clean).collect { presence ->
+                _partnerPresence.value = presence ?: "Away"
+            }
+        }
+    }
+
+    fun setMyPresence(presence: String) {
+        viewModelScope.launch {
+            try {
+                firebaseRepo.updateUserPresence(presence)
+            } catch (_: Exception) {}
+        }
+    }
+
     private val _isPartnerTyping = MutableStateFlow(false)
     val isPartnerTyping: StateFlow<Boolean> = _isPartnerTyping.asStateFlow()
 
@@ -322,12 +361,12 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onSplashFinished() {
-        if (Firebase.auth.currentUser == null) {
-            _currentScreen.value = AppScreen.AUTH
-        } else if (profile.value.isOnboardingCompleted) {
+        if (Firebase.auth.currentUser != null) {
             _currentScreen.value = AppScreen.DASHBOARD
+            setMyPresence("Online")
+            observePartnerPresence(profile.value.partnerPairCode)
         } else {
-            _currentScreen.value = AppScreen.ONBOARDING
+            _currentScreen.value = AppScreen.AUTH
         }
     }
 
@@ -343,13 +382,17 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                 displayName = updated.userName,
                 partnerCode = updated.myPairCode,
                 pairedUserId = null,
-                pairedPartnerCode = updated.partnerPairCode.ifBlank { null }
+                pairedPartnerCode = updated.partnerPairCode.ifBlank { null },
+                isOnline = true
             )
+            setMyPresence("Online")
         }
-        _currentScreen.value = if (updated.isPaired) AppScreen.DASHBOARD else AppScreen.PAIRING
+        observePartnerPresence(updated.partnerPairCode)
+        _currentScreen.value = AppScreen.DASHBOARD
     }
 
     fun signOut() {
+        setMyPresence("Away")
         Firebase.auth.signOut()
         _currentScreen.value = AppScreen.AUTH
     }
@@ -420,10 +463,8 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         repository.clearCallHistory()
     }
 
-    fun reconnectServer(newServerUrl: String) {
-        val updated = profile.value.copy(serverUrl = newServerUrl.trim())
-        repository.saveProfile(updated)
-        signalingClient.connect(updated.serverUrl, updated.myPairCode, updated.partnerPairCode)
+    fun reconnectServer(newServerUrl: String = "ws://amorcall.onrender.com/") {
+        signalingClient.connect("ws://amorcall.onrender.com/", profile.value.myPairCode, profile.value.partnerPairCode)
     }
 
     fun initiateCall(type: CallType) {
@@ -445,6 +486,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             isPartnerRinging = false,
             statusMessage = "Calling $partner..."
         )
+        setMyPresence("In a call")
         audioHaptics.setSpeakerphone(type == CallType.VIDEO)
         audioHaptics.startOutgoingRinging(viewModelScope)
         syncCallStateToService()
@@ -545,6 +587,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             statusMessage = "Connected"
         )
         audioHaptics.setSpeakerphone(speakerDefault)
+        setMyPresence("In a call")
 
         // Start real VoIP audio streaming
         audioStreamManager.start(profile.value.partnerPairCode, initialSpeakerOn = speakerDefault)
@@ -721,6 +764,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             status = CallStatus.ENDED,
             statusMessage = "Call Ended"
         )
+        setMyPresence("Online")
         syncCallStateToService()
         viewModelScope.launch {
             delay(1500)

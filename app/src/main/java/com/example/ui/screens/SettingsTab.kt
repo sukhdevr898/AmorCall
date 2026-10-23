@@ -394,8 +394,8 @@ fun SettingsTab(
             SettingsActionRow(
                 icon = Icons.Default.Dns,
                 iconTint = LoveGold,
-                title = "Server Settings & Health",
-                subtitle = "${profile.serverUrl} • Tap to test & config",
+                title = "Server Connection Health",
+                subtitle = "ws://amorcall.onrender.com/ • Tap to test connection",
                 onClick = onOpenServerDialog,
                 testTag = "settings_row_server"
             )
