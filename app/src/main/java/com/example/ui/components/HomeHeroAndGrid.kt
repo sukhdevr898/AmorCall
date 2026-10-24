@@ -69,6 +69,7 @@ import com.example.ui.theme.DuoraHotPink
 @Composable
 fun SunsetCoupleHeroBanner(
     partnerName: String,
+    partnerNickname: String = "",
     partnerPresence: String,
     onCallClick: () -> Unit
 ) {
@@ -158,15 +159,21 @@ fun SunsetCoupleHeroBanner(
 
                     Spacer(modifier = Modifier.height(2.dp))
 
+                    val partnerDisplayName = when {
+                        partnerName.isNotBlank() && !partnerName.equals("My Love", ignoreCase = true) -> partnerName
+                        partnerNickname.isNotBlank() && !partnerNickname.equals("My Love", ignoreCase = true) -> partnerNickname
+                        else -> "Sweetheart"
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "My Love",
-                            fontSize = 24.sp,
+                            text = partnerDisplayName,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "💕", fontSize = 20.sp)
+                        Text(text = "💕", fontSize = 18.sp)
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))

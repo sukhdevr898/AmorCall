@@ -826,6 +826,7 @@ fun HomeScreen(
                     val partnerPresence by viewModel.partnerPresence.collectAsState()
                     SunsetCoupleHeroBanner(
                         partnerName = profile.partnerName,
+                        partnerNickname = profile.partnerNickname,
                         partnerPresence = partnerPresence,
                         onCallClick = {
                             onRequestPermissions {
