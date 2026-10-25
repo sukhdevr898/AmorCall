@@ -17,3 +17,9 @@ local.properties
 .env
 debug.keystore
 *-debug.log
+-e 
+app/build/
+.build-outputs/
+.aistudio/
+public/assets/aistudio/*.png
+public/assets/aistudio/*.zip
