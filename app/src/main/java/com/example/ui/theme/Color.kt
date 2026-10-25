@@ -3,20 +3,31 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // Duora Brand Palette — 100% Visual Match to Design Reference
-// Vibrant Romantic Pink Primary & Soft Glowing Blush Gradients
-val DuoraHotPink = Color(0xFFFF2D6C)
-val DuoraPinkGradientStart = Color(0xFFFF558F)
-val DuoraPinkGradientEnd = Color(0xFFFF2D6C)
-val DuoraPaleSky = Color(0xFFFFEBF1)
-val DuoraSoftBlush = Color(0xFFFFF0F5)
-val DuoraRaspberry = DuoraHotPink // Primary brand actions, active icons, buttons
+// Exact Brand Colors from Design Specification:
+val DuoraPrimaryPink = Color(0xFFFF2D8D)
+val DuoraSecondaryPink = Color(0xFFFF5D88)
+val DuoraSoftBlush = Color(0xFFFBEAEB)
+val DuoraPaleLavender = Color(0xFFE8DEFF)
+val DuoraBg = Color(0xFFFFF6FA)
+val DuoraPrimaryText = Color(0xFF21102E)
+val DuoraSecondaryText = Color(0xFF89818E)
+val DuoraInputBorder = Color(0xFFE8DFE6)
+val DuoraSuccess = Color(0xFF16A765)
+val DuoraError = Color(0xFFE53945)
+
+// Aliases for backward compatibility
+val DuoraHotPink = DuoraPrimaryPink
+val DuoraPinkGradientStart = DuoraPrimaryPink
+val DuoraPinkGradientEnd = DuoraSecondaryPink
+val DuoraPaleSky = DuoraSoftBlush
+val DuoraRaspberry = DuoraPrimaryPink
 
 // Supporting Light Tokens
-val DuoraLightBg = Color(0xFFFFF7FA)
+val DuoraLightBg = DuoraBg
 val DuoraLightSurface = Color(0xFFFFFFFF)
-val DuoraLightPrimaryText = Color(0xFF22172A)
-val DuoraLightSecondaryText = Color(0xFF847790)
-val DuoraLightOutline = Color(0xFFFFDCE6)
+val DuoraLightPrimaryText = DuoraPrimaryText
+val DuoraLightSecondaryText = DuoraSecondaryText
+val DuoraLightOutline = DuoraInputBorder
 
 // Supporting Dark Tokens
 val DuoraDarkBg = Color(0xFF140D18)
