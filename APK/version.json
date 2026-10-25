@@ -1,10 +1,10 @@
 {
-  "versionCode": 8,
-  "versionName": "2.1.2",
+  "versionCode": 9,
+  "versionName": "2.1.2.1",
   "minSupportedVersion": "1.0",
   "appName": "Duora",
-  "downloadUrl": "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.1.2.apk",
-  "browserUrl": "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.1.2.apk",
+  "downloadUrl": "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.1.2.1.apk",
+  "browserUrl": "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.1.2.1.apk",
   "repoUrl": "https://github.com/sukhdevr898/AmorCall",
-  "releaseNotes": "• App version 2.1.2 release\n• Firebase Firestore and Authentication integration\n• Real-time video/voice call signaling & notification alerts system\n• Redesigned UI matching visual design sheets with custom backgrounds and floating navigation dock\n• In-app alerts, direct call actions, and live notes sync"
+  "releaseNotes": "• App version 2.1.2.1 release\n• Premium 7-layer animated Splash Screen with individual transparent assets, floating petals, and logo pulse\n• Pixel-perfect Login & Sign Up screens matching specification sheets with interactive states and password toggles\n• Real-time partner presence & video/voice call signaling\n• Permanent WebSocket signaling server integration"
 }
