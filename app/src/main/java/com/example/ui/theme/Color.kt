@@ -6,21 +6,30 @@ import androidx.compose.ui.graphics.Color
 // Exact Brand Colors from Design Specification:
 val DuoraPrimaryPink = Color(0xFFFF2D8D)
 val DuoraSecondaryPink = Color(0xFFFF5D88)
-val DuoraSoftBlush = Color(0xFFFBEAEB)
+val DuoraRaspberry = Color(0xFF5B3DF5)
 val DuoraPaleLavender = Color(0xFFE8DEFF)
 val DuoraBg = Color(0xFFFFF6FA)
+val DuoraCardBg = Color(0xFFFFFFFF)
 val DuoraPrimaryText = Color(0xFF21102E)
 val DuoraSecondaryText = Color(0xFF89818E)
 val DuoraInputBorder = Color(0xFFE8DFE6)
 val DuoraSuccess = Color(0xFF16A765)
 val DuoraError = Color(0xFFE53945)
 
-// Aliases for backward compatibility
+// Feature Card Icon Backgrounds matching design
+val DuoraChatBg = Color(0xFFFFE5EF)
+val DuoraCallBg = Color(0xFFE6F8EE)
+val DuoraNotesBg = Color(0xFFFFF6E5)
+val DuoraCallLogsBg = Color(0xFFF0EBFF)
+val DuoraPartnerBg = Color(0xFFFFE5EF)
+val DuoraServerBg = Color(0xFFE5F0FF)
+
+// Soft Blush and Aliases
+val DuoraSoftBlush = Color(0xFFFFF0F5)
 val DuoraHotPink = DuoraPrimaryPink
 val DuoraPinkGradientStart = DuoraPrimaryPink
 val DuoraPinkGradientEnd = DuoraSecondaryPink
 val DuoraPaleSky = DuoraSoftBlush
-val DuoraRaspberry = DuoraPrimaryPink
 
 // Supporting Light Tokens
 val DuoraLightBg = DuoraBg

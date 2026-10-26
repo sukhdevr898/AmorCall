@@ -45,4 +45,39 @@ class ExampleRobolectricTest {
     repo.setNotificationsMuted(true)
     assertTrue(repo.profile.value.isNotificationsMuted)
   }
+
+  @Test
+  fun `test splash to auth workflow`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.viewmodel.LoveCallViewModel(app)
+    assertEquals(com.example.viewmodel.AppScreen.SPLASH, vm.currentScreen.value)
+    vm.onSplashFinished()
+    val nextScreen = vm.currentScreen.value
+    assertTrue(
+      nextScreen == com.example.viewmodel.AppScreen.AUTH || nextScreen == com.example.viewmodel.AppScreen.DASHBOARD
+    )
+    // Now trigger onAuthSuccess
+    vm.onAuthSuccess("test_uid_123", "test@duora.app", "Test User")
+    assertEquals(com.example.viewmodel.AppScreen.DASHBOARD, vm.currentScreen.value)
+  }
+
+  @Test
+  fun `test main activity launch and transition to dashboard`() {
+    val controller = org.robolectric.Robolectric.buildActivity(MainActivity::class.java)
+    val activity = controller.setup().get()
+    assertNotNull(activity)
+
+    val vm = androidx.lifecycle.ViewModelProvider(activity)[com.example.viewmodel.LoveCallViewModel::class.java]
+    
+    vm.onSplashFinished()
+    org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
+
+    vm.onAuthSuccess("test_uid_456", "partner@duora.app", "Sweetheart")
+    org.robolectric.shadows.ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
+
+    assertEquals(com.example.viewmodel.AppScreen.DASHBOARD, vm.currentScreen.value)
+  }
+
+
+
 }

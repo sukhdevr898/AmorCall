@@ -72,6 +72,14 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.Toast
 import androidx.compose.material.icons.filled.Notifications
+import com.example.ui.home.components.HomeHeader
+import com.example.ui.home.components.HeroBanner
+import com.example.ui.home.components.FeatureGrid
+import com.example.ui.home.components.MomentsGallery
+import com.example.ui.navigation.DuoraBottomNavigationBar
+import com.example.ui.navigation.DuoraNavDestination
+import com.example.ui.notifications.NotificationPanelSheet
+import com.example.ui.profile.ProfileMenuSheet
 import com.example.ui.components.SunsetCoupleHeroBanner
 import com.example.ui.components.QuickActionsGrid
 import com.example.ui.components.OurMomentsSection
@@ -121,6 +129,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.model.CallStatus
+import com.example.ui.call.MiniCallPill
+import com.example.ui.chat.InAppMessageBanner
 import com.example.model.AppTheme
 import com.example.model.CallRecord
 import com.example.model.CallType
@@ -142,6 +153,7 @@ enum class HomeBottomTab {
     SETTINGS
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: LoveCallViewModel,
@@ -155,9 +167,19 @@ fun HomeScreen(
     val chatMessages by viewModel.chatMessages.collectAsState()
     val memories by viewModel.memories.collectAsState()
 
+    val callSession by viewModel.callSession.collectAsState()
+    val isCallScreenMinimized by viewModel.isCallScreenMinimized.collectAsState()
+    val inAppNotification by viewModel.inAppMessageNotification.collectAsState()
+    val isIndividualChatOpen by viewModel.isIndividualChatOpen.collectAsState()
+    val unreadChatCount by viewModel.unreadChatCount.collectAsState()
+
     var currentBottomTab by remember { mutableStateOf(HomeBottomTab.HOME) }
     BackHandler(enabled = currentBottomTab != HomeBottomTab.HOME) {
-        currentBottomTab = HomeBottomTab.HOME
+        if (currentBottomTab == HomeBottomTab.CHAT && isIndividualChatOpen) {
+            viewModel.closeIndividualChat()
+        } else {
+            currentBottomTab = HomeBottomTab.HOME
+        }
     }
 
     val targetTab by viewModel.targetBottomTab.collectAsState()
@@ -177,6 +199,8 @@ fun HomeScreen(
     var showPrivacyIconDialog by remember { mutableStateOf(false) }
     var showProfileDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
+    var showNotificationPanel by remember { mutableStateOf(false) }
+    var showProfileMenu by remember { mutableStateOf(false) }
     val currentPrivacyIcon by PrivacyIconManager.currentIcon.collectAsState()
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -487,8 +511,9 @@ fun HomeScreen(
     }
 
     // App Update Available Dialog
-    if (showUpdateDialog && updateInfo != null && updateInfo!!.isAvailable) {
-        val info = updateInfo!!
+    val currentUpdate = updateInfo
+    if (showUpdateDialog && currentUpdate != null && currentUpdate.isAvailable) {
+        val info = currentUpdate
         AlertDialog(
             onDismissRequest = { showUpdateDialog = false },
             title = {
@@ -652,97 +677,13 @@ fun HomeScreen(
                                 .fillMaxSize()
                                 .statusBarsPadding()
                         ) {
-                            // Top Bar: Branding, Notification Bell & Circular Profile DP (Sheet 2)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 18.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Title & romantic subtitle
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = "Du",
-                                            fontSize = 26.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
-                                        Text(
-                                            text = "♥",
-                                            fontSize = 23.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = DuoraHotPink,
-                                            modifier = Modifier.padding(horizontal = 1.dp)
-                                        )
-                                        Text(
-                                            text = "ra",
-                                            fontSize = 26.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
-                                    }
-
-                                    Text(
-                                        text = "Always Together",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-
-                                // Right Top Actions: Notification Bell + Circular Profile Avatar
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    // Notification bell with red badge dot
-                                    Box {
-                                        IconButton(
-                                            onClick = { currentBottomTab = HomeBottomTab.CHAT },
-                                            modifier = Modifier
-                                                .size(40.dp)
-                                                .clip(CircleShape)
-                                                .background(DuoraSoftBlush)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Notifications,
-                                                contentDescription = "Notifications",
-                                                tint = Color(0xFF33202C),
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.TopEnd)
-                                                .padding(top = 2.dp, end = 2.dp)
-                                                .size(10.dp)
-                                                .clip(CircleShape)
-                                                .background(DuoraHotPink)
-                                                .border(1.5.dp, Color.White, CircleShape)
-                                        )
-                                    }
-
-                                    // Circular Profile Avatar from design reference
-                                    Box(
-                                        modifier = Modifier
-                                            .size(42.dp)
-                                            .clip(CircleShape)
-                                            .border(1.5.dp, DuoraHotPink, CircleShape)
-                                            .clickable { showProfileDialog = true }
-                                            .testTag("home_top_profile_avatar"),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Image(
-                                            painter = painterResource(id = R.drawable.avatar_partner_demo),
-                                            contentDescription = "User Avatar",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                }
-                            }
+                            // Top Bar: Official Duora Logo, Notification Bell & Circular Profile Avatar
+                            HomeHeader(
+                                unreadNotificationCount = 1,
+                                isPartnerOnline = profile.partnerStatus.equals("online", ignoreCase = true),
+                                onNotificationClick = { showNotificationPanel = true },
+                                onProfileClick = { showProfileMenu = true }
+                            )
 
                             Spacer(modifier = Modifier.height(2.dp))
 
@@ -753,7 +694,8 @@ fun HomeScreen(
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                 // 0. Update Alert Banner (if update available)
-                if (updateInfo?.isAvailable == true) {
+                val bannerUpdate = updateInfo
+                if (bannerUpdate != null && bannerUpdate.isAvailable) {
                     item {
                         Surface(
                             onClick = { showUpdateDialog = true },
@@ -792,7 +734,7 @@ fun HomeScreen(
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
-                                            text = "Duora v${updateInfo!!.versionName} Available! 🎉",
+                                            text = "Duora v${bannerUpdate.versionName} Available! 🎉",
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -821,14 +763,11 @@ fun HomeScreen(
                     }
                 }
 
-                // 1. Sunset Couple Hero Banner (Image 4)
+                // 1. Romantic Hero Banner
                 item {
-                    val partnerPresence by viewModel.partnerPresence.collectAsState()
-                    SunsetCoupleHeroBanner(
+                    HeroBanner(
                         partnerName = profile.partnerName,
-                        partnerNickname = profile.partnerNickname,
-                        partnerPresence = partnerPresence,
-                        onCallClick = {
+                        onBannerClick = {
                             onRequestPermissions {
                                 viewModel.startOutgoingCall(CallType.VOICE)
                             }
@@ -836,13 +775,10 @@ fun HomeScreen(
                     )
                 }
 
-                // 2. 2x3 Quick Actions Grid (Chat, Call, Notes, Call Logs, Partner, Server)
+                // 2. Responsive 3-column Feature Grid (Chat, Call, Notes, Call Logs, Partner, Server)
                 item {
-                    val unreadCount = remember(chatMessages) {
-                        chatMessages.count { !it.isOutgoing && !it.isRead }
-                    }
-                    QuickActionsGrid(
-                        unreadChatCount = if (unreadCount > 0) unreadCount else 3,
+                    FeatureGrid(
+                        unreadChatCount = unreadChatCount,
                         onChatClick = { currentBottomTab = HomeBottomTab.CHAT },
                         onCallClick = {
                             onRequestPermissions {
@@ -856,20 +792,7 @@ fun HomeScreen(
                     )
                 }
 
-                // 3. Our Moments ❤️ Section (Sheet 2)
-                item {
-                    OurMomentsSection(
-                        moments = memories,
-                        onAddMoment = {
-                            photoPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
-                        onViewAll = { viewModel.navigateTo(AppScreen.MEMORIES) }
-                    )
-                }
-
-                // 4. Couple Connection Summary Card
+                // 3. Couple Connection Summary Card
                 item {
                     CoupleHeroCard(
                         userName = profile.userName,
@@ -1186,314 +1109,8 @@ fun HomeScreen(
                     }
                 }
 
-                // 2. Calling Features: One-Tap Voice & Video Calls
                 item {
-                    Text(
-                        text = "Direct Hotline Calling",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.padding(start = 2.dp, top = 2.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Voice Call Button
-                        Button(
-                            onClick = {
-                                onRequestPermissions {
-                                    viewModel.startOutgoingCall(CallType.VOICE)
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(64.dp)
-                                .testTag("one_tap_voice_call_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        brush = Brush.horizontalGradient(
-                                            listOf(DuoraRaspberry, LoveRose)
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Call,
-                                        contentDescription = "Voice Call",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Voice",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                        }
-
-                        // Video Call Button
-                        Button(
-                            onClick = {
-                                onRequestPermissions {
-                                    viewModel.startOutgoingCall(CallType.VIDEO)
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(64.dp)
-                                .testTag("one_tap_video_call_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        brush = Brush.horizontalGradient(
-                                            listOf(Color(0xFFBE185D), LoveRose)
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Videocam,
-                                        contentDescription = "Video Call",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Video",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                        }
-
-                        // Message Button
-                        Button(
-                            onClick = { currentBottomTab = HomeBottomTab.CHAT },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(64.dp)
-                                .testTag("one_tap_message_button"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        brush = Brush.horizontalGradient(
-                                            listOf(Color(0xFF6366F1), DuoraRaspberry)
-                                        )
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ChatBubble,
-                                        contentDescription = "Message",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "Message",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Latest Message Preview Card
-                if (chatMessages.isNotEmpty()) {
-                    item {
-                        val lastMsg = chatMessages.last()
-                        Surface(
-                            onClick = { currentBottomTab = HomeBottomTab.CHAT },
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("latest_message_preview_card")
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(CircleShape)
-                                            .background(DuoraRaspberry.copy(alpha = 0.2f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.ChatBubble,
-                                            contentDescription = null,
-                                            tint = DuoraRaspberry,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = if (lastMsg.isOutgoing) "You: ${lastMsg.content}" else "${profile.partnerName}: ${lastMsg.content}",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1
-                                        )
-                                        Text(
-                                            text = "Tap to open chat",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = DuoraRaspberry.copy(alpha = 0.15f),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, DuoraRaspberry.copy(alpha = 0.4f))
-                                ) {
-                                    Text(
-                                        text = "Chat",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = DuoraRaspberry,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 3. Recent Calls Section with Clear Button
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Recent Calls",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            if (callHistory.isNotEmpty()) {
-                                Text(
-                                    text = "View All",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = DuoraRaspberry,
-                                    modifier = Modifier
-                                        .clickable { currentBottomTab = HomeBottomTab.CALL_LOGS }
-                                        .testTag("view_all_calls_button")
-                                        .padding(4.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    if (callHistory.isEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Call,
-                                    contentDescription = "No Calls",
-                                    tint = LoveRose.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(32.dp)
-                                )
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Text(
-                                    text = "No call logs yet",
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Tap Voice Call or Video Call above to connect instantly with ${profile.partnerName} ❤️",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 12.sp,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            callHistory.take(8).forEach { record ->
-                                CallRecordRow(
-                                    record = record,
-                                    partnerName = profile.partnerName
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
@@ -1531,88 +1148,90 @@ fun HomeScreen(
                 }
             }
 
-// Floating Rounded Island Dock Bottom Bar (Hidden on full-screen Chat)
-if (currentBottomTab != HomeBottomTab.CHAT) {
-    val unreadChatCount = remember(chatMessages) {
-        chatMessages.count { !it.isOutgoing && !it.isRead }
-    }
+// Bottom Navigation Bar matching design reference
+val currentNavDestination = when (currentBottomTab) {
+    HomeBottomTab.HOME -> DuoraNavDestination.HOME
+    HomeBottomTab.CHAT -> DuoraNavDestination.CHAT
+    HomeBottomTab.CALL_LOGS -> DuoraNavDestination.CALL
+    HomeBottomTab.NOTES -> DuoraNavDestination.NOTES
+    HomeBottomTab.SETTINGS -> DuoraNavDestination.SETTINGS
+}
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Surface(
-            shape = RoundedCornerShape(32.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp,
-            shadowElevation = 10.dp,
-            border = androidx.compose.foundation.BorderStroke(1.2.dp, DuoraRaspberry.copy(alpha = 0.25f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 1. Home
-                DuoraBottomNavTab(
-                    selected = currentBottomTab == HomeBottomTab.HOME,
-                    onClick = { currentBottomTab = HomeBottomTab.HOME },
-                    icon = Icons.Default.Home,
-                    label = "Home",
-                    testTag = "nav_item_home",
-                    badgeCount = 0
-                )
-
-                // 2. Chat (with badge count)
-                DuoraBottomNavTab(
-                    selected = currentBottomTab == HomeBottomTab.CHAT,
-                    onClick = { currentBottomTab = HomeBottomTab.CHAT },
-                    icon = Icons.Default.ChatBubble,
-                    label = "Chat",
-                    testTag = "nav_item_chat",
-                    badgeCount = if (unreadChatCount > 0) unreadChatCount else 3
-                )
-
-                // 3. Calls
-                DuoraBottomNavTab(
-                    selected = currentBottomTab == HomeBottomTab.CALL_LOGS,
-                    onClick = { currentBottomTab = HomeBottomTab.CALL_LOGS },
-                    icon = Icons.Default.Call,
-                    label = "Calls",
-                    testTag = "nav_item_calls",
-                    badgeCount = 0
-                )
-
-                // 4. Notes
-                DuoraBottomNavTab(
-                    selected = currentBottomTab == HomeBottomTab.NOTES,
-                    onClick = { currentBottomTab = HomeBottomTab.NOTES },
-                    icon = Icons.Default.Description,
-                    label = "Notes",
-                    testTag = "nav_item_notes",
-                    badgeCount = 0
-                )
-
-                // 5. Settings
-                DuoraBottomNavTab(
-                    selected = currentBottomTab == HomeBottomTab.SETTINGS,
-                    onClick = { currentBottomTab = HomeBottomTab.SETTINGS },
-                    icon = Icons.Default.Settings,
-                    label = "Settings",
-                    testTag = "nav_item_settings",
-                    badgeCount = 0
-                )
+val shouldShowBottomBar = !(currentBottomTab == HomeBottomTab.CHAT && isIndividualChatOpen)
+if (shouldShowBottomBar) {
+    DuoraBottomNavigationBar(
+        currentDestination = currentNavDestination,
+        unreadChatCount = unreadChatCount,
+        onDestinationSelected = { destination ->
+            currentBottomTab = when (destination) {
+                DuoraNavDestination.HOME -> HomeBottomTab.HOME
+                DuoraNavDestination.CHAT -> HomeBottomTab.CHAT
+                DuoraNavDestination.CALL -> HomeBottomTab.CALL_LOGS
+                DuoraNavDestination.NOTES -> HomeBottomTab.NOTES
+                DuoraNavDestination.SETTINGS -> HomeBottomTab.SETTINGS
             }
         }
-    }
+    )
 }
         }
+
+        // In-App Floating Message Notification Banner
+        InAppMessageBanner(
+            message = inAppNotification,
+            onOpenChat = {
+                viewModel.openChatFromInAppNotification()
+                currentBottomTab = HomeBottomTab.CHAT
+            },
+            onDismiss = {
+                viewModel.dismissInAppMessageNotification()
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        // In-App Floating Mini Call Pill
+        if (isCallScreenMinimized && (callSession.status == CallStatus.CONNECTED || callSession.status == CallStatus.RECONNECTING)) {
+            MiniCallPill(
+                partnerName = profile.partnerName.ifBlank { "My Love 💕" },
+                durationSeconds = callSession.durationSeconds,
+                isReconnecting = callSession.status == CallStatus.RECONNECTING,
+                isMuted = callSession.isMuted,
+                isSpeakerOn = callSession.isSpeakerOn,
+                onExpand = { viewModel.expandCallScreen() },
+                onToggleMute = { viewModel.toggleMute() },
+                onToggleSpeaker = { viewModel.toggleSpeaker() },
+                onEndCall = { viewModel.endCall() },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 10.dp)
+            )
+        }
+    }
+
+    // Notification Panel Sheet from Design Reference
+    if (showNotificationPanel) {
+        NotificationPanelSheet(
+            onDismissRequest = { showNotificationPanel = false }
+        )
+    }
+
+    // Profile & Settings Menu Sheet from Design Reference
+    if (showProfileMenu) {
+        ProfileMenuSheet(
+            partnerName = profile.partnerName,
+            isOnline = profile.partnerStatus.equals("online", ignoreCase = true),
+            onDismissRequest = { showProfileMenu = false },
+            onPartnerPairingClick = { viewModel.navigateTo(AppScreen.PAIRING) },
+            onThemeClick = { showThemeDialog = true },
+            onServerSettingsClick = { showServerHealthDialog = true },
+            onProfileClick = { showProfileDialog = true },
+            onPrivacySecurityClick = { showPrivacyIconDialog = true },
+            onHelpSupportClick = { showAboutDialog = true },
+            onLogoutClick = { viewModel.signOut() }
+        )
     }
 }
 

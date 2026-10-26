@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.RemoteInput
 import com.example.MainActivity
 import com.example.model.CallType
 
@@ -29,6 +30,8 @@ object CallNotificationHelper {
     const val ACTION_END_CALL = "com.example.ACTION_END_CALL"
     const val ACTION_TOGGLE_MUTE = "com.example.ACTION_TOGGLE_MUTE"
     const val ACTION_TOGGLE_SPEAKER = "com.example.ACTION_TOGGLE_SPEAKER"
+    const val ACTION_REPLY_MESSAGE = "com.example.ACTION_REPLY_MESSAGE"
+    const val KEY_TEXT_REPLY = "key_duora_text_reply"
 
     fun initChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -270,9 +273,13 @@ object CallNotificationHelper {
     fun showMessageNotification(
         context: Context,
         senderName: String,
-        messageText: String
+        messageText: String,
+        messageType: String = "text",
+        mediaUrl: String? = null
     ) {
         initChannels(context)
+
+        val partnerDisplayName = if (senderName.isNotBlank()) senderName else "My Love 💕"
 
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -285,16 +292,110 @@ object CallNotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
+        // Android RemoteInput Quick Reply (Sheet 14: Quick Reply from Notification)
+        val remoteInput = RemoteInput.Builder(KEY_TEXT_REPLY)
+            .setLabel("Reply to $partnerDisplayName...")
+            .build()
+
+        val replyIntent = Intent(context, MessageReplyReceiver::class.java).apply {
+            action = ACTION_REPLY_MESSAGE
+        }
+        val replyPendingIntent = PendingIntent.getBroadcast(
+            context,
+            121,
+            replyIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        )
+
+        val replyAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_send,
+            "Reply ❤️",
+            replyPendingIntent
+        )
+            .addRemoteInput(remoteInput)
+            .setAllowGeneratedReplies(true)
+            .build()
+
+        val openAction = NotificationCompat.Action.Builder(
+            android.R.drawable.sym_action_chat,
+            "Open Chat",
+            pendingIntent
+        ).build()
+
+        val displayContent = when (messageType) {
+            "image" -> "📷 Sent a photo ❤️"
+            "video" -> "🎥 Sent a video"
+            "voice" -> "🎙️ Voice note"
+            else -> messageText
+        }
+
+        val builder = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.sym_action_chat)
-            .setContentTitle(if (senderName.isNotBlank()) senderName else "Partner")
-            .setContentText(messageText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(messageText))
+            .setContentTitle("Duora • $partnerDisplayName")
+            .setContentText(displayContent)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .addAction(replyAction)
+            .addAction(openAction)
+
+        // Sheet 15: Media thumbnail if image
+        if (messageType == "image" && !mediaUrl.isNullOrBlank()) {
+            try {
+                val uri = android.net.Uri.parse(mediaUrl)
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                    if (bitmap != null) {
+                        builder.setLargeIcon(bitmap)
+                        builder.setStyle(
+                            NotificationCompat.BigPictureStyle()
+                                .bigPicture(bitmap)
+                                .setSummaryText(displayContent)
+                        )
+                    }
+                }
+            } catch (_: Exception) {
+                builder.setStyle(NotificationCompat.BigTextStyle().bigText(displayContent))
+            }
+        } else {
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(displayContent))
+        }
+
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(MESSAGE_NOTIFICATION_ID, builder.build())
+    }
+
+    fun showReplyConfirmationNotification(
+        context: Context,
+        partnerName: String,
+        repliedText: String
+    ) {
+        initChannels(context)
+
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(EXTRA_ACTION, ACTION_OPEN_CHAT)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            122,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.sym_action_chat)
+            .setContentTitle("Duora • $partnerName")
+            .setContentText("You: $repliedText")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("You replied: $repliedText ❤️"))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
             .build()
 
         val notificationManager =

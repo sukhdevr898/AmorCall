@@ -28,11 +28,13 @@ enum class ServerConnectionState {
 }
 
 sealed class SignalingEvent {
-    data class IncomingCall(val from: String, val callerName: String, val callType: String) : SignalingEvent()
-    data class CallRinging(val from: String) : SignalingEvent()
-    data class CallAccepted(val from: String) : SignalingEvent()
-    data class CallDeclined(val from: String) : SignalingEvent()
-    data class CallEnded(val from: String) : SignalingEvent()
+    data class IncomingCall(val from: String, val callerName: String, val callType: String, val callId: String = "") : SignalingEvent()
+    data class CallRinging(val from: String, val callId: String = "") : SignalingEvent()
+    data class CallAccepted(val from: String, val callId: String = "") : SignalingEvent()
+    data class CallDeclined(val from: String, val callId: String = "") : SignalingEvent()
+    data class CallEnded(val from: String, val callId: String = "", val reason: String = "NORMAL", val statusMessage: String = "Call ended") : SignalingEvent()
+    data class CallReconnecting(val callId: String, val from: String, val gracePeriodSeconds: Int = 15) : SignalingEvent()
+    data class CallReconnected(val callId: String) : SignalingEvent()
     data class CallUnavailable(val reason: String) : SignalingEvent()
     data class PartnerStatus(val isOnline: Boolean) : SignalingEvent()
     data class AudioChunk(val from: String, val audioData: String) : SignalingEvent()
@@ -187,28 +189,53 @@ class SignalingClient private constructor() {
                     val from = json.optString("from")
                     val callerName = json.optString("callerName", "My Love")
                     val callType = json.optString("callType", "VOICE")
+                    val callId = json.optString("callId", "")
                     scope.launch {
-                        _events.emit(SignalingEvent.IncomingCall(from, callerName, callType))
+                        _events.emit(SignalingEvent.IncomingCall(from, callerName, callType, callId))
                     }
                 }
                 "call_ringing" -> {
+                    val from = json.optString("from")
+                    val callId = json.optString("callId", "")
                     scope.launch {
-                        _events.emit(SignalingEvent.CallRinging(json.optString("from")))
+                        _events.emit(SignalingEvent.CallRinging(from, callId))
                     }
                 }
                 "call_accepted" -> {
+                    val from = json.optString("from")
+                    val callId = json.optString("callId", "")
                     scope.launch {
-                        _events.emit(SignalingEvent.CallAccepted(json.optString("from")))
+                        _events.emit(SignalingEvent.CallAccepted(from, callId))
                     }
                 }
                 "call_declined" -> {
+                    val from = json.optString("from")
+                    val callId = json.optString("callId", "")
                     scope.launch {
-                        _events.emit(SignalingEvent.CallDeclined(json.optString("from")))
+                        _events.emit(SignalingEvent.CallDeclined(from, callId))
                     }
                 }
                 "call_ended" -> {
+                    val from = json.optString("from")
+                    val callId = json.optString("callId", "")
+                    val reason = json.optString("reason", "NORMAL")
+                    val statusMsg = json.optString("statusMessage", "Call ended")
                     scope.launch {
-                        _events.emit(SignalingEvent.CallEnded(json.optString("from")))
+                        _events.emit(SignalingEvent.CallEnded(from, callId, reason, statusMsg))
+                    }
+                }
+                "call_reconnecting" -> {
+                    val from = json.optString("from")
+                    val callId = json.optString("callId", "")
+                    val grace = json.optInt("gracePeriodSeconds", 15)
+                    scope.launch {
+                        _events.emit(SignalingEvent.CallReconnecting(callId, from, grace))
+                    }
+                }
+                "call_reconnected" -> {
+                    val callId = json.optString("callId", "")
+                    scope.launch {
+                        _events.emit(SignalingEvent.CallReconnected(callId))
                     }
                 }
                 "call_unavailable" -> {
@@ -344,49 +371,64 @@ class SignalingClient private constructor() {
         send(payload)
     }
 
-    fun sendCallInitiate(to: String, callerName: String, callType: String) {
+    fun sendCallInitiate(to: String, callerName: String, callType: String, callId: String = "") {
         val payload = JSONObject().apply {
             put("type", "call_initiate")
             put("from", currentMyCode)
             put("to", to.uppercase().trim())
             put("callerName", callerName)
             put("callType", callType)
+            if (callId.isNotBlank()) put("callId", callId)
         }
         send(payload)
     }
 
-    fun sendCallRinging(to: String) {
+    fun sendCallRinging(to: String, callId: String = "") {
         val payload = JSONObject().apply {
             put("type", "call_ringing")
             put("from", currentMyCode)
             put("to", to.uppercase().trim())
+            if (callId.isNotBlank()) put("callId", callId)
         }
         send(payload)
     }
 
-    fun sendCallAccept(to: String) {
+    fun sendCallAccept(to: String, callId: String = "") {
         val payload = JSONObject().apply {
             put("type", "call_accept")
             put("from", currentMyCode)
             put("to", to.uppercase().trim())
+            if (callId.isNotBlank()) put("callId", callId)
         }
         send(payload)
     }
 
-    fun sendCallDecline(to: String) {
+    fun sendCallHeartbeat(callId: String, to: String = "") {
+        val payload = JSONObject().apply {
+            put("type", "call_heartbeat")
+            put("from", currentMyCode)
+            put("callId", callId)
+            if (to.isNotBlank()) put("to", to.uppercase().trim())
+        }
+        send(payload)
+    }
+
+    fun sendCallDecline(to: String, callId: String = "") {
         val payload = JSONObject().apply {
             put("type", "call_decline")
             put("from", currentMyCode)
             put("to", to.uppercase().trim())
+            if (callId.isNotBlank()) put("callId", callId)
         }
         send(payload)
     }
 
-    fun sendCallEnd(to: String) {
+    fun sendCallEnd(to: String, callId: String = "") {
         val payload = JSONObject().apply {
             put("type", "call_end")
             put("from", currentMyCode)
             put("to", to.uppercase().trim())
+            if (callId.isNotBlank()) put("callId", callId)
         }
         send(payload)
     }

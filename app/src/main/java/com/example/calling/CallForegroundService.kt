@@ -51,8 +51,8 @@ class CallForegroundService : Service() {
                 } else {
                     context.startService(intent)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to start CallForegroundService", e)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Could not start CallForegroundService: ${t.message}")
             }
         }
 
@@ -60,8 +60,9 @@ class CallForegroundService : Service() {
             val intent = Intent(context, CallForegroundService::class.java)
             try {
                 context.stopService(intent)
-            } catch (_: Exception) {}
+            } catch (_: Throwable) {}
         }
+
 
         fun updateCallProgress(
             context: Context,
@@ -197,25 +198,36 @@ class CallForegroundService : Service() {
     ) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                var serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
-                if (isCallActive) {
+                var serviceType = if (isCallActive) {
+                    var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                         }
                         if (callType == CallType.VIDEO && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
                         }
                     }
+                    type
+                } else {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
                 }
                 startForeground(CallNotificationHelper.SERVICE_NOTIFICATION_ID, notification, serviceType)
             } else {
                 startForeground(CallNotificationHelper.SERVICE_NOTIFICATION_ID, notification)
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed startForeground: ${e.message}")
             try {
-                startForeground(CallNotificationHelper.SERVICE_NOTIFICATION_ID, notification)
-            } catch (_: Exception) {}
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(CallNotificationHelper.SERVICE_NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                } else {
+                    startForeground(CallNotificationHelper.SERVICE_NOTIFICATION_ID, notification)
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "Fatal startForeground error, stopping self gracefully", t)
+                stopSelf()
+            }
         }
     }
 

@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
@@ -34,7 +37,7 @@
             android:name=".calling.CallForegroundService"
             android:exported="false"
             android:stopWithTask="false"
-            android:foregroundServiceType="phoneCall|microphone|camera" />
+            android:foregroundServiceType="phoneCall|microphone|camera|dataSync|specialUse" />
 
         <receiver
             android:name=".calling.CallActionReceiver"
@@ -46,6 +49,15 @@
                 <action android:name="com.example.ACTION_TOGGLE_SPEAKER" />
                 <action android:name="com.example.ACTION_ANSWER" />
                 <action android:name="com.example.ACTION_DECLINE" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".calling.MessageReplyReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.ACTION_REPLY_MESSAGE" />
             </intent-filter>
         </receiver>
 

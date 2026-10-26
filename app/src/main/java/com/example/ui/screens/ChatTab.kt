@@ -12,10 +12,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,7 +30,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -47,18 +44,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -82,7 +75,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
@@ -91,30 +83,360 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
 import com.example.calling.CallNotificationHelper
 import com.example.model.CallType
 import com.example.model.ChatMessage
 import com.example.network.ServerConnectionState
+import com.example.ui.chat.ChatAttachmentSheet
+import com.example.ui.chat.ChatAttachmentType
+import com.example.ui.chat.ChatBubbleItem
+import com.example.ui.chat.ChatMediaViewerDialog
+import com.example.ui.chat.ChatMessageOptionsSheet
+import com.example.ui.chat.ChatReplyPreview
+import com.example.ui.chat.ChatVoiceRecorder
+import com.example.ui.chat.ReplyContext
 import com.example.ui.theme.DuoraCardBorder
 import com.example.ui.theme.DuoraHotPink
-import com.example.ui.theme.DuoraPaleSky
 import com.example.ui.theme.DuoraPinkGradientEnd
 import com.example.ui.theme.DuoraPinkGradientStart
 import com.example.ui.theme.DuoraSoftBlush
 import com.example.ui.theme.LoveAccentGreen
-import com.example.ui.theme.LoveGold
 import com.example.viewmodel.LoveCallViewModel
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun ChatTab(
     viewModel: LoveCallViewModel,
     onRequestPermissions: (() -> Unit) -> Unit,
     onBack: () -> Unit = {}
+) {
+    val isIndividualChatOpen by viewModel.isIndividualChatOpen.collectAsState()
+
+    if (isIndividualChatOpen) {
+        IndividualChatView(
+            viewModel = viewModel,
+            onRequestPermissions = onRequestPermissions,
+            onBack = { viewModel.closeIndividualChat() }
+        )
+    } else {
+        ChatListView(
+            viewModel = viewModel,
+            onRequestPermissions = onRequestPermissions,
+            onOpenConversation = { viewModel.openIndividualChat() },
+            onBack = onBack
+        )
+    }
+}
+
+@Composable
+fun ChatListView(
+    viewModel: LoveCallViewModel,
+    onRequestPermissions: (() -> Unit) -> Unit,
+    onOpenConversation: () -> Unit,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+
+    val profile by viewModel.profile.collectAsState()
+    val chatMessages by viewModel.chatMessages.collectAsState()
+    val isPartnerTyping by viewModel.isPartnerTyping.collectAsState()
+    val serverState by viewModel.serverConnectionState.collectAsState()
+    val unreadChatCount by viewModel.unreadChatCount.collectAsState()
+
+    var searchQuery by remember { mutableStateOf("") }
+    val isConnected = serverState == ServerConnectionState.CONNECTED
+    val isPartnerOnline = isConnected && profile.isPaired
+
+    val lastMessage = chatMessages.lastOrNull()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        // Top Header
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp,
+            shadowElevation = 2.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Chats",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isPartnerOnline) LoveAccentGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isPartnerOnline) LoveAccentGreen else Color.Gray)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isPartnerOnline) "Partner Online" else "Private Space",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isPartnerOnline) LoveAccentGreen else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Clean search bar for message filtering
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        BasicTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("chat_search_input"),
+                            decorationBox = { innerTextField ->
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Search messages...",
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Partner Conversation Item
+        val partnerNameDisplay = profile.partnerNickname.ifBlank { profile.partnerName.ifBlank { "My Partner" } }
+        val matchesSearch = searchQuery.isBlank() ||
+                partnerNameDisplay.contains(searchQuery, ignoreCase = true) ||
+                (lastMessage?.content?.contains(searchQuery, ignoreCase = true) == true)
+
+        if (matchesSearch) {
+            Surface(
+                onClick = onOpenConversation,
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, DuoraCardBorder.copy(alpha = 0.5f)),
+                shadowElevation = 1.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .testTag("partner_conversation_item")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Avatar with online indicator
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd)))
+                            .padding(2.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = partnerNameDisplay.take(1).uppercase(),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = DuoraHotPink
+                        )
+
+                        if (isPartnerOnline) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(13.dp)
+                                    .clip(CircleShape)
+                                    .background(LoveAccentGreen)
+                                    .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    // Center Details
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = partnerNameDisplay,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+
+                            // Timestamp
+                            if (lastMessage != null) {
+                                Text(
+                                    text = lastMessage.timestampFormatted,
+                                    fontSize = 11.sp,
+                                    color = if (unreadChatCount > 0) DuoraHotPink else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (unreadChatCount > 0) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (isPartnerTyping) {
+                                    Text(
+                                        text = "typing... ❤️",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = DuoraHotPink
+                                    )
+                                } else if (lastMessage != null) {
+                                    if (lastMessage.isOutgoing) {
+                                        Icon(
+                                            imageVector = Icons.Default.DoneAll,
+                                            contentDescription = "Delivered",
+                                            tint = if (lastMessage.isRead) DuoraHotPink else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "You: ${lastMessage.content}",
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                    } else {
+                                        Text(
+                                            text = lastMessage.content,
+                                            fontSize = 13.sp,
+                                            color = if (unreadChatCount > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = if (unreadChatCount > 0) FontWeight.SemiBold else FontWeight.Normal,
+                                            maxLines = 1
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Tap to open your love chat ❤️",
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            // Unread Badge (ONLY if unreadChatCount > 0)
+                            if (unreadChatCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .height(20.dp)
+                                        .widthIn(min = 20.dp)
+                                        .clip(CircleShape)
+                                        .background(DuoraHotPink)
+                                        .padding(horizontal = 6.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (unreadChatCount > 99) "99+" else unreadChatCount.toString(),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Search result empty
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "No messages found matching \"$searchQuery\"",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun IndividualChatView(
+    viewModel: LoveCallViewModel,
+    onRequestPermissions: (() -> Unit) -> Unit,
+    onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
 
@@ -128,24 +450,64 @@ fun ChatTab(
     val scope = rememberCoroutineScope()
     var showMenu by remember { mutableStateOf(false) }
 
+    // Chat Interactive State
+    var showAttachmentSheet by remember { mutableStateOf(false) }
+    var isVoiceRecording by remember { mutableStateOf(false) }
+    var replyContext by remember { mutableStateOf<ReplyContext?>(null) }
+    var selectedMessageForOptions by remember { mutableStateOf<ChatMessage?>(null) }
+    var selectedMediaForViewer by remember { mutableStateOf<ChatMessage?>(null) }
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
-            viewModel.sendChatMessage("[Photo] $uri")
+            viewModel.sendChatMessage(
+                text = "Photo shared ❤️",
+                type = "image",
+                mediaUrl = uri.toString(),
+                replyToId = replyContext?.id,
+                replyToSender = replyContext?.sender,
+                replyToText = replyContext?.text,
+                replyToType = replyContext?.type
+            )
+            replyContext = null
             scope.launch { listState.scrollToItem(0) }
             Toast.makeText(context, "Photo shared with ${profile.partnerName} ❤️", Toast.LENGTH_SHORT).show()
         }
     }
 
+    val videoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.sendChatMessage(
+                text = "Video shared 🎥",
+                type = "video",
+                mediaUrl = uri.toString(),
+                replyToId = replyContext?.id,
+                replyToSender = replyContext?.sender,
+                replyToText = replyContext?.text,
+                replyToType = replyContext?.type
+            )
+            replyContext = null
+            scope.launch { listState.scrollToItem(0) }
+            Toast.makeText(context, "Video shared with ${profile.partnerName} ❤️", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Mark messages as read when opening ChatTab and clear notification
     LaunchedEffect(Unit) {
+        viewModel.markChatAsRead()
         viewModel.requestChatHistory()
         CallNotificationHelper.clearMessageNotification(context)
     }
 
+    // Auto-scroll when sending or receiving only if close to bottom
     LaunchedEffect(chatMessages.size) {
         if (chatMessages.isNotEmpty()) {
-            listState.scrollToItem(0)
+            if (listState.firstVisibleItemIndex <= 1) {
+                listState.animateScrollToItem(0)
+            }
         }
     }
 
@@ -154,7 +516,6 @@ fun ChatTab(
 
     Scaffold(
         topBar = {
-            // Pinned Chat Top Bar — matches Sheet 3 design
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -196,11 +557,7 @@ fun ChatTab(
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd)
-                                    )
-                                )
+                                .background(Brush.linearGradient(listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd)))
                                 .padding(2.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.surface),
@@ -227,14 +584,12 @@ fun ChatTab(
                         Spacer(modifier = Modifier.width(10.dp))
 
                         Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = profile.partnerName.ifBlank { "My Love ❤️" },
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
+                            Text(
+                                text = profile.partnerName.ifBlank { "My Love ❤️" },
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                             Text(
                                 text = if (isPartnerOnline) "Online • Private Space" else "Private Space",
                                 fontSize = 11.sp,
@@ -322,10 +677,11 @@ fun ChatTab(
                                     }
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Clear Chat View") },
+                                    text = { Text("Mark All As Read") },
                                     onClick = {
                                         showMenu = false
-                                        Toast.makeText(context, "Messages stored securely", Toast.LENGTH_SHORT).show()
+                                        viewModel.markChatAsRead()
+                                        Toast.makeText(context, "All messages marked as read", Toast.LENGTH_SHORT).show()
                                     }
                                 )
                             }
@@ -335,87 +691,80 @@ fun ChatTab(
             }
         },
         bottomBar = {
-            // Composer anchored at bottom with smooth imePadding
-            ChatBottomComposer(
-                partnerName = profile.partnerName.ifBlank { "Partner" },
-                onSendMessage = { text ->
-                    viewModel.sendChatMessage(text)
-                    viewModel.setChatTyping(false)
-                    scope.launch { listState.scrollToItem(0) }
-                },
-                onSendVoiceMessage = {
-                    viewModel.sendChatMessage("[Voice Note 0:08]")
-                    scope.launch { listState.scrollToItem(0) }
-                    Toast.makeText(context, "Voice note sent ❤️", Toast.LENGTH_SHORT).show()
-                },
-                onPickPhoto = {
-                    photoPickerLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
+            ) {
+                // Floating Quoted Reply preview banner
+                replyContext?.let { reply ->
+                    ChatReplyPreview(
+                        replyContext = reply,
+                        onDismiss = { replyContext = null }
                     )
-                },
-                onTypingStateChange = { isTyping ->
-                    viewModel.setChatTyping(isTyping)
                 }
-            )
+
+                if (isVoiceRecording) {
+                    ChatVoiceRecorder(
+                        onCancel = { isVoiceRecording = false },
+                        onSendVoiceNote = { durationSec ->
+                            isVoiceRecording = false
+                            viewModel.sendChatMessage(
+                                text = "Voice Note (${durationSec}s)",
+                                type = "voice",
+                                voiceDurationSec = durationSec,
+                                replyToId = replyContext?.id,
+                                replyToSender = replyContext?.sender,
+                                replyToText = replyContext?.text,
+                                replyToType = replyContext?.type
+                            )
+                            replyContext = null
+                            scope.launch { listState.scrollToItem(0) }
+                            Toast.makeText(context, "Voice note sent ❤️", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                } else {
+                    ChatComposerBar(
+                        partnerName = profile.partnerName.ifBlank { "Partner" },
+                        onSendMessage = { text ->
+                            viewModel.sendChatMessage(
+                                text = text,
+                                replyToId = replyContext?.id,
+                                replyToSender = replyContext?.sender,
+                                replyToText = replyContext?.text,
+                                replyToType = replyContext?.type
+                            )
+                            replyContext = null
+                            viewModel.setChatTyping(false)
+                            scope.launch { listState.scrollToItem(0) }
+                        },
+                        onStartVoiceRecording = {
+                            isVoiceRecording = true
+                        },
+                        onOpenAttachmentSheet = {
+                            showAttachmentSheet = true
+                        },
+                        onTypingStateChange = { isTyping ->
+                            viewModel.setChatTyping(isTyping)
+                        }
+                    )
+                }
+            }
         },
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { innerPadding ->
-        // Background with subtle romantic floating heart pattern
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            RomanticBackgroundPattern()
+            ChatRomanticPattern()
 
             if (chatMessages.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(76.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(38.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    Text(
-                        text = "Your Private Conversation",
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = "Say something sweet to ${profile.partnerName.ifBlank { "your partner" }}.\nMessages are protected with end-to-end privacy for only you two.",
-                        fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 19.sp
-                    )
-                }
+                ChatEmptyState(partnerName = profile.partnerName)
             } else {
                 LazyColumn(
                     state = listState,
@@ -460,55 +809,127 @@ fun ChatTab(
                         ChatBubbleItem(
                             message = message,
                             partnerName = profile.partnerName,
-                            isServerConnected = isConnected
+                            isServerConnected = isConnected,
+                            onLongClick = { msg ->
+                                selectedMessageForOptions = msg
+                            },
+                            onMediaClick = { msg ->
+                                selectedMediaForViewer = msg
+                            },
+                            onQuotedClick = { quoteId ->
+                                val targetIndex = chatMessages.asReversed().indexOfFirst { it.id == quoteId }
+                                if (targetIndex >= 0) {
+                                    scope.launch { listState.animateScrollToItem(targetIndex) }
+                                }
+                            }
                         )
                     }
                 }
             }
         }
     }
-}
 
-@Composable
-private fun RomanticBackgroundPattern() {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val pinkDot = Color(0xFFFF2D6C).copy(alpha = 0.04f)
-        val step = 48.dp.toPx()
-        val width = size.width
-        val height = size.height
-
-        var y = 0f
-        while (y < height) {
-            var x = 0f
-            while (x < width) {
-                drawCircle(
-                    color = pinkDot,
-                    radius = 3.dp.toPx(),
-                    center = Offset(x, y)
-                )
-                x += step
+    // Attachment Sheet
+    if (showAttachmentSheet) {
+        ChatAttachmentSheet(
+            onDismissRequest = { showAttachmentSheet = false },
+            onSelectAttachment = { type ->
+                when (type) {
+                    ChatAttachmentType.GALLERY -> {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                    ChatAttachmentType.VIDEO -> {
+                        videoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+                        )
+                    }
+                    ChatAttachmentType.VOICE_NOTE -> {
+                        isVoiceRecording = true
+                    }
+                    ChatAttachmentType.LOCATION -> {
+                        viewModel.sendChatMessage("📍 Our Favorite Romantic Spot")
+                        Toast.makeText(context, "Location pin sent ❤️", Toast.LENGTH_SHORT).show()
+                    }
+                    ChatAttachmentType.STICKER -> {
+                        viewModel.sendChatMessage("💖 You have my entire heart forever 🌹💍")
+                    }
+                    ChatAttachmentType.AUDIO -> {
+                        viewModel.sendChatMessage("🎵 Playing our love song for you")
+                    }
+                    ChatAttachmentType.DOCUMENT -> {
+                        viewModel.sendChatMessage("📄 Love_Letter_For_You.pdf", type = "file", fileName = "Love_Letter_For_You.pdf", fileSize = "1.2 MB")
+                    }
+                    ChatAttachmentType.CAMERA -> {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                    ChatAttachmentType.CONTACT -> {
+                        viewModel.sendChatMessage("👤 Contact: ${profile.partnerName} (${profile.partnerNickname})")
+                    }
+                }
             }
-            y += step
-        }
+        )
+    }
+
+    // Message Long-Press Action Sheet
+    selectedMessageForOptions?.let { msg ->
+        ChatMessageOptionsSheet(
+            message = msg,
+            onDismissRequest = { selectedMessageForOptions = null },
+            onReply = { messageToReply ->
+                replyContext = ReplyContext(
+                    id = messageToReply.id,
+                    sender = if (messageToReply.isOutgoing) "You" else profile.partnerName.ifBlank { "Partner" },
+                    text = messageToReply.content,
+                    type = messageToReply.messageType
+                )
+            },
+            onCopy = { messageToCopy ->
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("Duora Message", messageToCopy.content)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+            },
+            onForward = {
+                Toast.makeText(context, "Message forwarded ❤️", Toast.LENGTH_SHORT).show()
+            },
+            onToggleStar = { messageToStar ->
+                viewModel.toggleStarMessage(messageToStar.id)
+            },
+            onDelete = { messageToDelete ->
+                viewModel.deleteChatMessage(messageToDelete.id)
+                Toast.makeText(context, "Message deleted", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    // Media Viewer Dialog
+    selectedMediaForViewer?.let { mediaMsg ->
+        ChatMediaViewerDialog(
+            mediaUrl = mediaMsg.mediaUrl ?: mediaMsg.content.removePrefix("[Photo]").trim(),
+            mediaType = mediaMsg.messageType,
+            caption = if (mediaMsg.content.startsWith("[Photo]")) null else mediaMsg.content,
+            onDismissRequest = { selectedMediaForViewer = null }
+        )
     }
 }
 
 @Composable
-private fun ChatBottomComposer(
+private fun ChatComposerBar(
     partnerName: String,
     onSendMessage: (String) -> Unit,
-    onSendVoiceMessage: () -> Unit,
-    onPickPhoto: () -> Unit,
+    onStartVoiceRecording: () -> Unit,
+    onOpenAttachmentSheet: () -> Unit,
     onTypingStateChange: (Boolean) -> Unit
 ) {
     var messageInput by remember { mutableStateOf("") }
     val isInputEmpty = messageInput.trim().isEmpty()
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding()
-            .imePadding(),
+        modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 4.dp,
         shadowElevation = 8.dp,
@@ -519,7 +940,7 @@ private fun ChatBottomComposer(
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)
         ) {
-            // Quick reply chips row — Sheet 3
+            // Quick reply chips row
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -547,14 +968,13 @@ private fun ChatBottomComposer(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Rounded pill composer row with emoji, input, paperclip attachment, and circular send/mic button
+            // Rounded pill composer row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Pill input box
                 Surface(
                     shape = RoundedCornerShape(26.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -567,7 +987,6 @@ private fun ChatBottomComposer(
                             .padding(horizontal = 10.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Smiley Icon
                         IconButton(
                             onClick = { messageInput += " ❤️" },
                             modifier = Modifier.size(34.dp)
@@ -580,7 +999,6 @@ private fun ChatBottomComposer(
                             )
                         }
 
-                        // Message Text Field
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -589,7 +1007,7 @@ private fun ChatBottomComposer(
                         ) {
                             if (messageInput.isEmpty()) {
                                 Text(
-                                    text = "Type a message...",
+                                    text = "Type a sweet message...",
                                     fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -626,9 +1044,9 @@ private fun ChatBottomComposer(
                             )
                         }
 
-                        // Attachment Paperclip Icon
+                        // Attachment button
                         IconButton(
-                            onClick = onPickPhoto,
+                            onClick = onOpenAttachmentSheet,
                             modifier = Modifier.size(34.dp)
                         ) {
                             Icon(
@@ -643,7 +1061,7 @@ private fun ChatBottomComposer(
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Floating circular pink gradient send or voice mic button
+                // Send or Voice Note Button
                 IconButton(
                     onClick = {
                         val clean = messageInput.trim()
@@ -651,17 +1069,13 @@ private fun ChatBottomComposer(
                             onSendMessage(clean)
                             messageInput = ""
                         } else {
-                            onSendVoiceMessage()
+                            onStartVoiceRecording()
                         }
                     },
                     modifier = Modifier
                         .size(46.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd)
-                            )
-                        )
+                        .background(Brush.linearGradient(listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd)))
                         .testTag("chat_send_button")
                 ) {
                     Icon(
@@ -676,321 +1090,71 @@ private fun ChatBottomComposer(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ChatBubbleItem(
-    message: ChatMessage,
-    partnerName: String,
-    isServerConnected: Boolean
-) {
-    val isMe = message.isOutgoing
-    val context = LocalContext.current
-    val timeFormatter = remember { SimpleDateFormat("hh:mm a", Locale.getDefault()) }
-    val formattedTime = remember(message.timestamp) { timeFormatter.format(Date(message.timestamp)) }
-
-    val isVoiceMessage = message.content.startsWith("[Voice Note")
-    val isPhotoMessage = message.content.startsWith("[Photo]")
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isMe) Arrangement.End else Arrangement.Start
+private fun ChatEmptyState(partnerName: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Column(
-            horizontalAlignment = if (isMe) Alignment.End else Alignment.Start,
-            modifier = Modifier.widthIn(max = 290.dp)
+        Box(
+            modifier = Modifier
+                .size(76.dp)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd))),
+            contentAlignment = Alignment.Center
         ) {
-            when {
-                // 1. Voice Note Bubble with Audio Waveform
-                isVoiceMessage -> {
-                    VoiceMessageBubble(
-                        isMe = isMe,
-                        time = formattedTime,
-                        isRead = message.isRead,
-                        isServerConnected = isServerConnected
-                    )
-                }
-                // 2. Photo Message Bubble with Heart Reaction Badge
-                isPhotoMessage -> {
-                    PhotoMessageBubble(
-                        isMe = isMe,
-                        photoUri = message.content.removePrefix("[Photo]").trim(),
-                        time = formattedTime,
-                        isRead = message.isRead,
-                        isServerConnected = isServerConnected
-                    )
-                }
-                // 3. Regular Text Bubble
-                else -> {
-                    Card(
-                        shape = RoundedCornerShape(
-                            topStart = 20.dp,
-                            topEnd = 20.dp,
-                            bottomStart = if (isMe) 20.dp else 4.dp,
-                            bottomEnd = if (isMe) 4.dp else 20.dp
-                        ),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isMe) Color.Transparent else MaterialTheme.colorScheme.surface
-                        ),
-                        border = if (!isMe) androidx.compose.foundation.BorderStroke(1.2.dp, DuoraCardBorder) else null,
-                        modifier = Modifier
-                            .combinedClickable(
-                                onClick = {},
-                                onLongClick = {
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("Duora Message", message.content)
-                                    clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-                            .then(
-                                if (isMe) Modifier.background(
-                                    brush = Brush.horizontalGradient(
-                                        listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd)
-                                    ),
-                                    shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp)
-                                ) else Modifier
-                            )
-                    ) {
-                        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
-                            Text(
-                                text = message.content,
-                                color = if (isMe) Color.White else MaterialTheme.colorScheme.onSurface,
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp
-                            )
-
-                            Spacer(modifier = Modifier.height(3.dp))
-
-                            Row(
-                                modifier = Modifier.align(Alignment.End),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = formattedTime,
-                                    fontSize = 10.sp,
-                                    color = if (isMe) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-
-                                if (isMe) {
-                                    val stateIcon = when {
-                                        message.isRead -> Icons.Default.DoneAll
-                                        isServerConnected -> Icons.Default.Check
-                                        else -> Icons.Default.Schedule
-                                    }
-                                    Icon(
-                                        imageVector = stateIcon,
-                                        contentDescription = if (message.isRead) "Read" else "Sent",
-                                        tint = if (message.isRead) LoveGold else Color.White.copy(alpha = 0.85f),
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun VoiceMessageBubble(
-    isMe: Boolean,
-    time: String,
-    isRead: Boolean,
-    isServerConnected: Boolean
-) {
-    var isPlaying by remember { mutableStateOf(false) }
-
-    Card(
-        shape = RoundedCornerShape(20.dp, 20.dp, if (isMe) 4.dp else 20.dp, if (isMe) 20.dp else 4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isMe) Color.Transparent else MaterialTheme.colorScheme.surface
-        ),
-        border = if (!isMe) androidx.compose.foundation.BorderStroke(1.2.dp, DuoraCardBorder) else null,
-        modifier = Modifier.then(
-            if (isMe) Modifier.background(
-                brush = Brush.horizontalGradient(listOf(DuoraPinkGradientStart, DuoraPinkGradientEnd)),
-                shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp)
-            ) else Modifier
-        )
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                // Play / Pause Circle
-                IconButton(
-                    onClick = { isPlaying = !isPlaying },
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(if (isMe) Color.White.copy(alpha = 0.25f) else DuoraSoftBlush)
-                ) {
-                    Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        contentDescription = "Play Voice Note",
-                        tint = if (isMe) Color.White else DuoraHotPink,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                // Audio Waveform Visualizer Graphic
-                AudioWaveformBars(
-                    isPlaying = isPlaying,
-                    barColor = if (isMe) Color.White else DuoraHotPink,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(26.dp)
-                )
-
-                Text(
-                    text = "0:08",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (isMe) Color.White else MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            Spacer(modifier = Modifier.height(2.dp))
-
-            Row(
-                modifier = Modifier.align(Alignment.End),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = time,
-                    fontSize = 10.sp,
-                    color = if (isMe) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (isMe) {
-                    Icon(
-                        imageVector = if (isRead) Icons.Default.DoneAll else Icons.Default.Check,
-                        contentDescription = null,
-                        tint = if (isRead) LoveGold else Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.size(13.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AudioWaveformBars(
-    isPlaying: Boolean,
-    barColor: Color,
-    modifier: Modifier = Modifier
-) {
-    val barHeights = listOf(0.4f, 0.7f, 0.9f, 0.5f, 0.8f, 1.0f, 0.6f, 0.75f, 0.45f, 0.85f, 0.6f, 0.35f, 0.7f, 0.9f, 0.5f)
-
-    Canvas(modifier = modifier) {
-        val totalBars = barHeights.size
-        val barWidth = 3.dp.toPx()
-        val spacing = (size.width - (totalBars * barWidth)) / (totalBars - 1)
-        val maxHeight = size.height
-
-        barHeights.forEachIndexed { index, ratio ->
-            val h = maxHeight * ratio
-            val x = index * (barWidth + spacing)
-            val y = (maxHeight - h) / 2f
-            drawRoundRect(
-                color = barColor,
-                topLeft = Offset(x, y),
-                size = androidx.compose.ui.geometry.Size(barWidth, h),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx(), 2.dp.toPx())
+            Icon(
+                imageVector = Icons.Default.Favorite,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(38.dp)
             )
         }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        Text(
+            text = "Your Private Conversation",
+            fontSize = 19.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Text(
+            text = "Say something sweet to ${partnerName.ifBlank { "your partner" }}.\nMessages are protected with end-to-end privacy for only you two.",
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            lineHeight = 19.sp
+        )
     }
 }
 
 @Composable
-private fun PhotoMessageBubble(
-    isMe: Boolean,
-    photoUri: String,
-    time: String,
-    isRead: Boolean,
-    isServerConnected: Boolean
-) {
-    Card(
-        shape = RoundedCornerShape(18.dp),
-        border = androidx.compose.foundation.BorderStroke(1.2.dp, DuoraCardBorder),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        modifier = Modifier.widthIn(max = 240.dp)
-    ) {
-        Column(modifier = Modifier.padding(6.dp)) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(DuoraSoftBlush)
-            ) {
-                if (photoUri.isNotBlank()) {
-                    AsyncImage(
-                        model = photoUri,
-                        contentDescription = "Photo from partner",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = null,
-                            tint = DuoraHotPink,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                }
+private fun ChatRomanticPattern() {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val pinkDot = Color(0xFFFF2D6C).copy(alpha = 0.04f)
+        val step = 48.dp.toPx()
+        val width = size.width
+        val height = size.height
 
-                // Heart reaction badge overlay
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color.White,
-                    shadowElevation = 3.dp,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("❤️", fontSize = 11.sp)
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text("1", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DuoraHotPink)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = time,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+        var y = 0f
+        while (y < height) {
+            var x = 0f
+            while (x < width) {
+                drawCircle(
+                    color = pinkDot,
+                    radius = 3.dp.toPx(),
+                    center = Offset(x, y)
                 )
-                if (isMe) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = if (isRead) Icons.Default.DoneAll else Icons.Default.Check,
-                        contentDescription = null,
-                        tint = if (isRead) LoveGold else DuoraHotPink,
-                        modifier = Modifier.size(13.dp)
-                    )
-                }
+                x += step
             }
+            y += step
         }
     }
 }

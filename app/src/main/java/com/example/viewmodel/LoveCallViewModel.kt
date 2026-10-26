@@ -67,6 +67,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     val sharedNote: StateFlow<CoupleNote?> = repository.sharedNote
     val notes: StateFlow<List<CoupleNote>> = repository.notes
     val chatMessages: StateFlow<List<ChatMessage>> = repository.chatMessages
+    val unreadChatCount: StateFlow<Int> = chatMessages.map { list ->
+        list.count { !it.isOutgoing && !it.isRead && !it.isDeleted }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     val serverConnectionState: StateFlow<ServerConnectionState> = signalingClient.connectionState
 
     private val _partnerPresence = MutableStateFlow<String>("Online")
@@ -140,9 +143,63 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     private val _targetBottomTab = MutableStateFlow<String?>(null)
     val targetBottomTab: StateFlow<String?> = _targetBottomTab.asStateFlow()
 
+    private val _inCallMessageOverlay = MutableStateFlow<ChatMessage?>(null)
+    val inCallMessageOverlay: StateFlow<ChatMessage?> = _inCallMessageOverlay.asStateFlow()
+
+    private val _inAppMessageNotification = MutableStateFlow<ChatMessage?>(null)
+    val inAppMessageNotification: StateFlow<ChatMessage?> = _inAppMessageNotification.asStateFlow()
+
+    private val _isCallScreenMinimized = MutableStateFlow(false)
+    val isCallScreenMinimized: StateFlow<Boolean> = _isCallScreenMinimized.asStateFlow()
+
+    fun minimizeCallScreen() {
+        _isCallScreenMinimized.value = true
+    }
+
+    fun expandCallScreen() {
+        _isCallScreenMinimized.value = false
+    }
+
+    private val _isIndividualChatOpen = MutableStateFlow(false)
+    val isIndividualChatOpen: StateFlow<Boolean> = _isIndividualChatOpen.asStateFlow()
+
+    fun openIndividualChat() {
+        _isIndividualChatOpen.value = true
+        _isChatOpen.value = true
+        _inAppMessageNotification.value = null
+        markChatAsRead()
+    }
+
+    fun closeIndividualChat() {
+        _isIndividualChatOpen.value = false
+        _isChatOpen.value = false
+    }
+
+    fun dismissInAppMessageNotification() {
+        _inAppMessageNotification.value = null
+    }
+
+    fun openChatFromInAppNotification() {
+        _inAppMessageNotification.value = null
+        _currentScreen.value = AppScreen.DASHBOARD
+        _targetBottomTab.value = "CHAT"
+        openIndividualChat()
+    }
+
+    fun dismissInCallMessageOverlay() {
+        _inCallMessageOverlay.value = null
+    }
+
+    fun openChatFromCall() {
+        _inCallMessageOverlay.value = null
+        minimizeCallScreen()
+        openChatTab()
+    }
+
     fun openChatTab() {
         _currentScreen.value = AppScreen.DASHBOARD
         _targetBottomTab.value = "CHAT"
+        openIndividualChat()
     }
 
     fun clearTargetBottomTab() {
@@ -170,6 +227,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
 
     private var callTimerJob: Job? = null
     private var simulatedAnswerJob: Job? = null
+    private var callHeartbeatJob: Job? = null
+    private var reconnectGraceJob: Job? = null
+    private var isCallRecordedForCurrentSession = false
 
     init {
         CallNotificationHelper.initChannels(application)
@@ -203,7 +263,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         } else {
                             CallType.VOICE
                         }
-                        triggerIncomingCall(type)
+                        triggerIncomingCall(type, incomingCallId = event.callId)
                     }
                     is SignalingEvent.CallRinging -> {
                         if (_callSession.value.status == CallStatus.OUTGOING_RINGING) {
@@ -214,13 +274,19 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         }
                     }
                     is SignalingEvent.CallAccepted -> {
-                        acceptCall(isOutgoingInitiated = true)
+                        acceptCall(isOutgoingInitiated = true, incomingCallId = event.callId)
                     }
                     is SignalingEvent.CallDeclined -> {
                         handlePartnerDeclinedCall()
                     }
                     is SignalingEvent.CallEnded -> {
-                        handlePartnerEndedCall()
+                        handlePartnerEndedCall(reason = event.reason, customMessage = event.statusMessage)
+                    }
+                    is SignalingEvent.CallReconnecting -> {
+                        handleCallReconnecting(event.callId, event.gracePeriodSeconds)
+                    }
+                    is SignalingEvent.CallReconnected -> {
+                        handleCallReconnected(event.callId)
                     }
                     is SignalingEvent.CallUnavailable -> {
                         handlePartnerUnavailable()
@@ -262,11 +328,32 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         repository.saveChatMessage(event.message)
                         if (!event.message.isOutgoing) {
                             val partner = profile.value.partnerName.ifBlank { "Partner" }
-                            com.example.calling.CallNotificationHelper.showMessageNotification(
-                                context = getApplication(),
-                                senderName = partner,
-                                messageText = event.message.content
-                            )
+                            if (_callSession.value.status != CallStatus.IDLE) {
+                                _inCallMessageOverlay.value = event.message
+                                viewModelScope.launch {
+                                    delay(5000)
+                                    if (_inCallMessageOverlay.value?.id == event.message.id) {
+                                        _inCallMessageOverlay.value = null
+                                    }
+                                }
+                            }
+                            if (!_isChatOpen.value) {
+                                // Phase 7: Trigger floating in-app notification banner
+                                _inAppMessageNotification.value = event.message
+                                viewModelScope.launch {
+                                    delay(4500)
+                                    if (_inAppMessageNotification.value?.id == event.message.id) {
+                                        _inAppMessageNotification.value = null
+                                    }
+                                }
+                                com.example.calling.CallNotificationHelper.showMessageNotification(
+                                    context = getApplication(),
+                                    senderName = partner,
+                                    messageText = event.message.content,
+                                    messageType = event.message.messageType,
+                                    mediaUrl = event.message.mediaUrl
+                                )
+                            }
                         }
                     }
                     is SignalingEvent.ChatTyping -> {
@@ -293,11 +380,24 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                                 val latest = msgs.firstOrNull()
                                 if (latest != null && !latest.isOutgoing && latest.id != lastNotifiedMessageId) {
                                     lastNotifiedMessageId = latest.id
-                                    CallNotificationHelper.showMessageNotification(
-                                        context = getApplication(),
-                                        senderName = prof.partnerName.ifBlank { "My Love" },
-                                        messageText = latest.content
-                                    )
+                                    if (_callSession.value.status != CallStatus.IDLE) {
+                                        _inCallMessageOverlay.value = latest
+                                        viewModelScope.launch {
+                                            delay(5000)
+                                            if (_inCallMessageOverlay.value?.id == latest.id) {
+                                                _inCallMessageOverlay.value = null
+                                            }
+                                        }
+                                    }
+                                    if (!_isChatOpen.value) {
+                                        CallNotificationHelper.showMessageNotification(
+                                            context = getApplication(),
+                                            senderName = prof.partnerName.ifBlank { "My Love" },
+                                            messageText = latest.content,
+                                            messageType = latest.messageType,
+                                            mediaUrl = latest.mediaUrl
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -361,34 +461,76 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onSplashFinished() {
-        if (Firebase.auth.currentUser != null) {
-            _currentScreen.value = AppScreen.DASHBOARD
-            setMyPresence("Online")
-            observePartnerPresence(profile.value.partnerPairCode)
-        } else {
+        try {
+            val app = getApplication<Application>()
+            if (com.google.firebase.FirebaseApp.getApps(app).isEmpty()) {
+                com.google.firebase.FirebaseApp.initializeApp(app)
+            }
+            val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            if (currentUser != null) {
+                _currentScreen.value = AppScreen.DASHBOARD
+                setMyPresence("Online")
+                observePartnerPresence(profile.value.partnerPairCode)
+            } else {
+                _currentScreen.value = AppScreen.AUTH
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("LoveCallViewModel", "Auth check error on splash finish", e)
             _currentScreen.value = AppScreen.AUTH
         }
     }
 
     fun onAuthSuccess(userId: String, email: String, displayName: String) {
-        val current = profile.value
-        val updated = current.copy(
-            userName = displayName.ifBlank { current.userName },
-            isOnboardingCompleted = true
-        )
-        repository.saveProfile(updated)
-        viewModelScope.launch {
-            firebaseRepo.syncUserProfile(
-                displayName = updated.userName,
-                partnerCode = updated.myPairCode,
-                pairedUserId = null,
-                pairedPartnerCode = updated.partnerPairCode.ifBlank { null },
-                isOnline = true
+        android.util.Log.i("DuoraAuth", "==================================================")
+        android.util.Log.i("DuoraAuth", "onAuthSuccess START: userId=$userId, email=$email, displayName=$displayName")
+
+        try {
+            val current = profile.value
+            val updated = current.copy(
+                userName = displayName.ifBlank { current.userName },
+                isOnboardingCompleted = true
             )
-            setMyPresence("Online")
+            android.util.Log.d("DuoraAuth", "Step 1: Saving updated profile to local repository: $updated")
+            repository.saveProfile(updated)
+            android.util.Log.d("DuoraAuth", "Step 1 SUCCESS: Local profile saved successfully.")
+        } catch (e: Throwable) {
+            android.util.Log.e("DuoraAuth", "Step 1 ERROR: Failed to save profile to repository", e)
         }
-        observePartnerPresence(updated.partnerPairCode)
-        _currentScreen.value = AppScreen.DASHBOARD
+
+        viewModelScope.launch {
+            try {
+                android.util.Log.d("DuoraAuth", "Step 2: Syncing profile with Firebase repository...")
+                val current = profile.value
+                firebaseRepo.syncUserProfile(
+                    displayName = current.userName,
+                    partnerCode = current.myPairCode,
+                    pairedUserId = null,
+                    pairedPartnerCode = current.partnerPairCode.ifBlank { null },
+                    isOnline = true
+                )
+                setMyPresence("Online")
+                android.util.Log.d("DuoraAuth", "Step 2 SUCCESS: Firebase user profile synced.")
+            } catch (e: Throwable) {
+                android.util.Log.e("DuoraAuth", "Step 2 ERROR: Firebase profile sync failed", e)
+            }
+        }
+
+        try {
+            android.util.Log.d("DuoraAuth", "Step 3: Setting up partner presence observer for code=${profile.value.partnerPairCode}")
+            observePartnerPresence(profile.value.partnerPairCode)
+            android.util.Log.d("DuoraAuth", "Step 3 SUCCESS: Partner presence listener attached.")
+        } catch (e: Throwable) {
+            android.util.Log.e("DuoraAuth", "Step 3 ERROR: Failed to observe partner presence", e)
+        }
+
+        try {
+            android.util.Log.d("DuoraAuth", "Step 4: Triggering navigation to DASHBOARD destination (previous=${_currentScreen.value})")
+            _currentScreen.value = AppScreen.DASHBOARD
+            android.util.Log.i("DuoraAuth", "Step 4 SUCCESS: currentScreen successfully set to AppScreen.DASHBOARD")
+            android.util.Log.i("DuoraAuth", "==================================================")
+        } catch (e: Throwable) {
+            android.util.Log.e("DuoraAuth", "Step 4 CRITICAL ERROR: Navigation trigger failed", e)
+        }
     }
 
     fun signOut() {
@@ -463,6 +605,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         repository.clearCallHistory()
     }
 
+    fun deleteCallRecord(id: String) {
+        repository.deleteCallRecord(id)
+    }
+
     fun reconnectServer(newServerUrl: String = "ws://amorcall.onrender.com/") {
         signalingClient.connect("ws://amorcall.onrender.com/", profile.value.myPairCode, profile.value.partnerPairCode)
     }
@@ -478,7 +624,12 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         }
 
         val partner = profile.value.partnerName
+        val callId = "call_${System.currentTimeMillis()}_${Random.nextInt(1000, 9999)}"
+        isCallRecordedForCurrentSession = false
+        _isCallScreenMinimized.value = false
+
         _callSession.value = CallSession(
+            callId = callId,
             status = CallStatus.OUTGOING_RINGING,
             type = type,
             durationSeconds = 0,
@@ -495,7 +646,8 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         signalingClient.sendCallInitiate(
             to = profile.value.partnerPairCode,
             callerName = profile.value.userName.ifBlank { "My Love" },
-            callType = type.name
+            callType = type.name,
+            callId = callId
         )
         if (profile.value.isPaired && profile.value.partnerPairCode.isNotBlank()) {
             val coupleId = firebaseRepo.getCoupleId(profile.value.myPairCode, profile.value.partnerPairCode)
@@ -521,7 +673,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startSelfTestCall(type: CallType) {
+        isCallRecordedForCurrentSession = false
+        _isCallScreenMinimized.value = false
         _callSession.value = CallSession(
+            callId = "self_test_${System.currentTimeMillis()}",
             status = CallStatus.CONNECTED,
             type = type,
             durationSeconds = 0,
@@ -537,17 +692,24 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         callTimerJob = viewModelScope.launch {
             while (isActive) {
                 delay(1000)
-                _callSession.value = _callSession.value.copy(
-                    durationSeconds = _callSession.value.durationSeconds + 1
-                )
-                syncCallStateToService()
+                if (_callSession.value.status == CallStatus.CONNECTED) {
+                    _callSession.value = _callSession.value.copy(
+                        durationSeconds = _callSession.value.durationSeconds + 1
+                    )
+                    syncCallStateToService()
+                }
             }
         }
     }
 
-    fun triggerIncomingCall(type: CallType) {
+    fun triggerIncomingCall(type: CallType, incomingCallId: String = "") {
         val partner = profile.value.partnerName
+        val callId = if (incomingCallId.isNotBlank()) incomingCallId else "call_${System.currentTimeMillis()}"
+        isCallRecordedForCurrentSession = false
+        _isCallScreenMinimized.value = false
+
         _callSession.value = CallSession(
+            callId = callId,
             status = CallStatus.INCOMING_RINGING,
             type = type,
             durationSeconds = 0,
@@ -557,7 +719,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         )
         // Acknowledge back that destination device has received call and is ringing
         if (profile.value.partnerPairCode.isNotBlank()) {
-            signalingClient.sendCallRinging(profile.value.partnerPairCode)
+            signalingClient.sendCallRinging(profile.value.partnerPairCode, callId)
         }
 
         if (!profile.value.isNotificationsMuted) {
@@ -571,20 +733,27 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
-    fun acceptCall(isOutgoingInitiated: Boolean = false, incomingType: CallType? = null) {
+    fun acceptCall(isOutgoingInitiated: Boolean = false, incomingType: CallType? = null, incomingCallId: String = "") {
         simulatedAnswerJob?.cancel()
+        reconnectGraceJob?.cancel()
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.playConnectedChime()
 
         val currentType = incomingType ?: _callSession.value.type
         val speakerDefault = currentType == CallType.VIDEO
+        val callId = if (incomingCallId.isNotBlank()) incomingCallId else (_callSession.value.callId.ifBlank { "call_${System.currentTimeMillis()}" })
+        isCallRecordedForCurrentSession = false
+        _isCallScreenMinimized.value = false
+
         _callSession.value = _callSession.value.copy(
+            callId = callId,
             status = CallStatus.CONNECTED,
             type = currentType,
             durationSeconds = 0,
             isSpeakerOn = speakerDefault,
             isPartnerRinging = true,
-            statusMessage = "Connected"
+            statusMessage = "Connected",
+            isReconnecting = false
         )
         audioHaptics.setSpeakerphone(speakerDefault)
         setMyPresence("In a call")
@@ -593,7 +762,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         audioStreamManager.start(profile.value.partnerPairCode, initialSpeakerOn = speakerDefault)
 
         if (!isOutgoingInitiated) {
-            signalingClient.sendCallAccept(profile.value.partnerPairCode)
+            signalingClient.sendCallAccept(profile.value.partnerPairCode, callId)
         }
 
         activeCallSignalId?.let { sigId ->
@@ -604,29 +773,124 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         }
 
         syncCallStateToService()
+        startCallHeartbeats()
 
         callTimerJob?.cancel()
         callTimerJob = viewModelScope.launch {
             while (isActive) {
                 delay(1000)
-                _callSession.value = _callSession.value.copy(
-                    durationSeconds = _callSession.value.durationSeconds + 1
-                )
-                syncCallStateToService()
+                if (_callSession.value.status == CallStatus.CONNECTED) {
+                    _callSession.value = _callSession.value.copy(
+                        durationSeconds = _callSession.value.durationSeconds + 1
+                    )
+                    syncCallStateToService()
+                }
             }
         }
+    }
+
+    private fun startCallHeartbeats() {
+        callHeartbeatJob?.cancel()
+        callHeartbeatJob = viewModelScope.launch {
+            while (isActive) {
+                delay(5000)
+                val session = _callSession.value
+                if (session.status == CallStatus.CONNECTED || session.status == CallStatus.RECONNECTING) {
+                    signalingClient.sendCallHeartbeat(session.callId, profile.value.partnerPairCode)
+                    activeCallSignalId?.let { sigId ->
+                        val coupleId = firebaseRepo.getCoupleId(profile.value.myPairCode, profile.value.partnerPairCode)
+                        firebaseRepo.updateCallHeartbeat(coupleId, sigId)
+                    }
+                } else {
+                    break
+                }
+            }
+        }
+    }
+
+    fun handleCallReconnecting(callId: String, gracePeriodSeconds: Int = 15) {
+        val current = _callSession.value
+        if (current.status == CallStatus.CONNECTED) {
+            _callSession.value = current.copy(
+                status = CallStatus.RECONNECTING,
+                isReconnecting = true,
+                statusMessage = "Reconnecting with ${profile.value.partnerName}...",
+                reconnectGraceSecondsRemaining = gracePeriodSeconds
+            )
+            syncCallStateToService()
+
+            reconnectGraceJob?.cancel()
+            reconnectGraceJob = viewModelScope.launch {
+                for (sec in gracePeriodSeconds downTo 0) {
+                    delay(1000)
+                    if (_callSession.value.status == CallStatus.RECONNECTING) {
+                        _callSession.value = _callSession.value.copy(
+                            reconnectGraceSecondsRemaining = sec,
+                            statusMessage = "Reconnecting (${sec}s)..."
+                        )
+                    } else {
+                        break
+                    }
+                }
+                if (_callSession.value.status == CallStatus.RECONNECTING) {
+                    handleCallTimeout("Connection lost with partner")
+                }
+            }
+        }
+    }
+
+    fun handleCallReconnected(callId: String) {
+        reconnectGraceJob?.cancel()
+        if (_callSession.value.status == CallStatus.RECONNECTING) {
+            _callSession.value = _callSession.value.copy(
+                status = CallStatus.CONNECTED,
+                isReconnecting = false,
+                statusMessage = "Connected"
+            )
+            syncCallStateToService()
+        }
+    }
+
+    private fun handleCallTimeout(reason: String) {
+        callHeartbeatJob?.cancel()
+        reconnectGraceJob?.cancel()
+        callTimerJob?.cancel()
+        CallNotificationHelper.cancelNotification(getApplication())
+        audioHaptics.playEndCallTone()
+        audioHaptics.stopAll()
+        audioStreamManager.stop()
+        _remoteVideoBitmap.value = null
+
+        val duration = _callSession.value.durationSeconds
+        val type = _callSession.value.type
+
+        if (!isCallRecordedForCurrentSession && duration > 0) {
+            isCallRecordedForCurrentSession = true
+            repository.recordCall(type = type, durationSeconds = duration, isOutgoing = true)
+        }
+
+        _callSession.value = _callSession.value.copy(
+            status = CallStatus.ENDED,
+            isReconnecting = false,
+            statusMessage = reason
+        )
+        setMyPresence("Online")
+        syncCallStateToService()
     }
 
     fun declineCall(notifyPartner: Boolean = true) {
         simulatedAnswerJob?.cancel()
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        reconnectGraceJob?.cancel()
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.stopAll()
         audioStreamManager.stop()
         _remoteVideoBitmap.value = null
 
-        if (notifyPartner) {
-            signalingClient.sendCallDecline(profile.value.partnerPairCode)
+        val currentSession = _callSession.value
+        if (notifyPartner && profile.value.partnerPairCode.isNotBlank()) {
+            signalingClient.sendCallDecline(profile.value.partnerPairCode, currentSession.callId)
         }
 
         activeCallSignalId?.let { sigId ->
@@ -637,11 +901,14 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             activeCallSignalId = null
         }
 
-        repository.recordCall(
-            type = _callSession.value.type,
-            durationSeconds = 0,
-            isOutgoing = false
-        )
+        if (!isCallRecordedForCurrentSession) {
+            isCallRecordedForCurrentSession = true
+            repository.recordCall(
+                type = currentSession.type,
+                durationSeconds = 0,
+                isOutgoing = false
+            )
+        }
 
         _callSession.value = CallSession(status = CallStatus.IDLE)
         syncCallStateToService()
@@ -650,6 +917,8 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     fun handlePartnerDeclinedCall() {
         simulatedAnswerJob?.cancel()
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        reconnectGraceJob?.cancel()
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.playEndCallTone()
         audioHaptics.stopAll()
@@ -659,11 +928,14 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         val partner = profile.value.partnerName
         val declineMessage = "$partner call declined by partner"
 
-        repository.recordCall(
-            type = _callSession.value.type,
-            durationSeconds = 0,
-            isOutgoing = true
-        )
+        if (!isCallRecordedForCurrentSession) {
+            isCallRecordedForCurrentSession = true
+            repository.recordCall(
+                type = _callSession.value.type,
+                durationSeconds = 0,
+                isOutgoing = true
+            )
+        }
 
         _callSession.value = _callSession.value.copy(
             status = CallStatus.ENDED,
@@ -678,9 +950,11 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun handlePartnerEndedCall() {
+    fun handlePartnerEndedCall(reason: String = "NORMAL", customMessage: String = "") {
         simulatedAnswerJob?.cancel()
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        reconnectGraceJob?.cancel()
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.playEndCallTone()
         audioHaptics.stopAll()
@@ -688,9 +962,28 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         _remoteVideoBitmap.value = null
 
         val partner = profile.value.partnerName
+        val duration = _callSession.value.durationSeconds
+        val type = _callSession.value.type
+
+        if (!isCallRecordedForCurrentSession && duration > 0) {
+            isCallRecordedForCurrentSession = true
+            repository.recordCall(
+                type = type,
+                durationSeconds = duration,
+                isOutgoing = false
+            )
+        }
+
+        val displayMsg = when {
+            customMessage.isNotBlank() -> customMessage
+            reason == "DISCONNECTED_TIMEOUT" -> "Connection lost with partner"
+            reason == "HEARTBEAT_TIMEOUT" -> "Connection lost with partner"
+            else -> "$partner ended the call"
+        }
+
         _callSession.value = _callSession.value.copy(
             status = CallStatus.ENDED,
-            statusMessage = "$partner ended the call"
+            statusMessage = displayMsg
         )
 
         viewModelScope.launch {
@@ -704,6 +997,8 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     fun handlePartnerUnavailable() {
         simulatedAnswerJob?.cancel()
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        reconnectGraceJob?.cancel()
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.playEndCallTone()
         audioHaptics.stopAll()
@@ -730,14 +1025,17 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     fun endCall(notifyPartner: Boolean = true) {
         simulatedAnswerJob?.cancel()
         callTimerJob?.cancel()
+        callHeartbeatJob?.cancel()
+        reconnectGraceJob?.cancel()
         CallNotificationHelper.cancelNotification(getApplication())
         audioHaptics.playEndCallTone()
         audioHaptics.stopAll()
         audioStreamManager.stop()
         _remoteVideoBitmap.value = null
 
-        if (notifyPartner) {
-            signalingClient.sendCallEnd(profile.value.partnerPairCode)
+        val currentSession = _callSession.value
+        if (notifyPartner && profile.value.partnerPairCode.isNotBlank()) {
+            signalingClient.sendCallEnd(profile.value.partnerPairCode, currentSession.callId)
         }
 
         activeCallSignalId?.let { sigId ->
@@ -748,11 +1046,12 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             activeCallSignalId = null
         }
 
-        val duration = _callSession.value.durationSeconds
-        val type = _callSession.value.type
-        val wasConnected = _callSession.value.status == CallStatus.CONNECTED
+        val duration = currentSession.durationSeconds
+        val type = currentSession.type
+        val wasConnected = currentSession.status == CallStatus.CONNECTED || currentSession.status == CallStatus.RECONNECTING
 
-        if (wasConnected && duration > 0) {
+        if (!isCallRecordedForCurrentSession && wasConnected && duration > 0) {
+            isCallRecordedForCurrentSession = true
             repository.recordCall(
                 type = type,
                 durationSeconds = duration,
@@ -760,8 +1059,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             )
         }
 
-        _callSession.value = _callSession.value.copy(
+        _callSession.value = currentSession.copy(
             status = CallStatus.ENDED,
+            isReconnecting = false,
             statusMessage = "Call Ended"
         )
         setMyPresence("Online")
@@ -1027,26 +1327,81 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         repository.checkNoteExpiry()
     }
 
-    fun sendChatMessage(text: String) {
-        val trimmed = text.trim()
-        if (trimmed.isBlank()) return
+    fun markChatAsRead() {
+        repository.markMessagesAsRead()
         val prof = profile.value
         val partnerCode = prof.partnerPairCode.trim()
+        if (partnerCode.isNotBlank()) {
+            val coupleId = firebaseRepo.getCoupleId(prof.myPairCode, partnerCode)
+            viewModelScope.launch {
+                firebaseRepo.markMessagesAsRead(coupleId)
+            }
+        }
+    }
+
+    fun sendChatMessage(
+        text: String,
+        type: String = "text",
+        mediaUrl: String? = null,
+        voiceDurationSec: Int = 0,
+        fileName: String? = null,
+        fileSize: String? = null,
+        replyToId: String? = null,
+        replyToSender: String? = null,
+        replyToText: String? = null,
+        replyToType: String? = null
+    ) {
+        val trimmed = text.trim()
+        if (trimmed.isBlank() && mediaUrl.isNullOrBlank() && type != "voice") return
+        val prof = profile.value
+        val partnerCode = prof.partnerPairCode.trim()
+        val msgId = java.util.UUID.randomUUID().toString()
         val msg = ChatMessage(
-            id = java.util.UUID.randomUUID().toString(),
+            id = msgId,
             fromCode = prof.myPairCode,
             toCode = partnerCode,
-            senderName = "Me",
-            content = trimmed,
+            senderName = prof.userName.ifBlank { "Me" },
+            content = trimmed.ifBlank {
+                when (type) {
+                    "voice" -> "Voice Note"
+                    "image" -> "Photo"
+                    "video" -> "Video"
+                    "file" -> fileName ?: "Document"
+                    else -> "Message"
+                }
+            },
+            messageType = type,
             timestamp = System.currentTimeMillis(),
             isOutgoing = true,
-            isRead = false
+            isRead = false,
+            deliveryStatus = "SENT",
+            voiceDurationSeconds = voiceDurationSec,
+            mediaUrl = mediaUrl,
+            fileName = fileName,
+            fileSize = fileSize,
+            replyToId = replyToId,
+            replyToSender = replyToSender,
+            replyToText = replyToText,
+            replyToType = replyToType
         )
         repository.saveChatMessage(msg)
         if (partnerCode.isNotBlank()) {
             val coupleId = firebaseRepo.getCoupleId(prof.myPairCode, partnerCode)
             viewModelScope.launch {
-                firebaseRepo.sendMessage(coupleId, trimmed)
+                firebaseRepo.sendMessage(
+                    coupleId = coupleId,
+                    text = msg.content,
+                    type = type,
+                    mediaUrl = mediaUrl ?: "",
+                    voiceDurationSec = voiceDurationSec,
+                    fileName = fileName,
+                    fileSize = fileSize,
+                    replyToId = replyToId,
+                    replyToSender = replyToSender,
+                    replyToText = replyToText,
+                    replyToType = replyToType,
+                    clientMessageId = msgId
+                )
             }
             signalingClient.sendChatMessage(
                 to = partnerCode,
@@ -1056,6 +1411,22 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                 timestamp = msg.timestamp
             )
         }
+    }
+
+    fun deleteChatMessage(messageId: String) {
+        repository.deleteMessage(messageId)
+        val prof = profile.value
+        val partnerCode = prof.partnerPairCode.trim()
+        if (partnerCode.isNotBlank()) {
+            val coupleId = firebaseRepo.getCoupleId(prof.myPairCode, partnerCode)
+            viewModelScope.launch {
+                firebaseRepo.deleteMessage(coupleId, messageId)
+            }
+        }
+    }
+
+    fun toggleStarMessage(messageId: String) {
+        repository.toggleStarMessage(messageId)
     }
 
     private var lastSentTypingState: Boolean? = null

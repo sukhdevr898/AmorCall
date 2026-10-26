@@ -28,8 +28,9 @@ data class FirebaseCallSignal(
     val callerName: String = "",
     val recipientId: String = "",
     val callType: String = "VOICE", // VOICE or VIDEO
-    val status: String = "RINGING", // RINGING, ACCEPTED, REJECTED, ENDED
-    val createdAtEpochMs: Long = System.currentTimeMillis()
+    val status: String = "RINGING", // RINGING, ACCEPTED, RECONNECTING, REJECTED, ENDED
+    val createdAtEpochMs: Long = System.currentTimeMillis(),
+    val lastHeartbeatEpochMs: Long = System.currentTimeMillis()
 )
 
 data class FirebasePairRequest(
@@ -49,7 +50,7 @@ data class FirebasePairRequest(
 class FirebaseCoupleRepository(
     private val context: Context,
     private val db: FirebaseFirestore,
-    private val auth: FirebaseAuth = Firebase.auth
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 ) {
     companion object {
         private const val TAG = "FirebaseCoupleRepo"
@@ -60,9 +61,29 @@ class FirebaseCoupleRepository(
         fun getInstance(context: Context): FirebaseCoupleRepository {
             return instance ?: synchronized(this) {
                 instance ?: run {
-                    val dbId = context.getString(R.string.firestore_database_id)
-                    val firestore = FirebaseFirestore.getInstance(dbId)
-                    FirebaseCoupleRepository(context.applicationContext, firestore).also {
+                    val appContext = context.applicationContext ?: context
+                    try {
+                        if (com.google.firebase.FirebaseApp.getApps(appContext).isEmpty()) {
+                            com.google.firebase.FirebaseApp.initializeApp(appContext)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to initialize FirebaseApp", e)
+                    }
+
+                    val firestore = try {
+                        val dbId = appContext.getString(R.string.firestore_database_id)
+                        FirebaseFirestore.getInstance(dbId)
+                    } catch (_: Exception) {
+                        FirebaseFirestore.getInstance()
+                    }
+
+                    val authInstance = try {
+                        FirebaseAuth.getInstance()
+                    } catch (_: Exception) {
+                        Firebase.auth
+                    }
+
+                    FirebaseCoupleRepository(appContext, firestore, authInstance).also {
                         instance = it
                     }
                 }
@@ -225,7 +246,13 @@ class FirebaseCoupleRepository(
                     val isRead = doc.getBoolean("isRead") ?: false
                     val voiceDuration = (doc.getLong("voiceDurationSec") ?: 0L).toInt()
                     val mediaUrl = doc.getString("mediaUrl") ?: ""
+                    val fileName = doc.getString("fileName")
+                    val fileSize = doc.getString("fileSize")
                     val isFromMe = senderId == currentUserId
+                    val type = doc.getString("type")?.lowercase() ?: if (voiceDuration > 0) "voice" else if (mediaUrl.isNotBlank()) "image" else "text"
+                    val status = doc.getString("deliveryStatus") ?: if (isRead) "READ" else if (isFromMe) "SENT" else "DELIVERED"
+                    val isStarred = doc.getBoolean("isStarred") ?: false
+                    val isDeleted = doc.getBoolean("isDeleted") ?: false
 
                     ChatMessage(
                         id = id,
@@ -233,12 +260,21 @@ class FirebaseCoupleRepository(
                         toCode = "",
                         senderName = if (isFromMe) "You" else senderName.ifBlank { "Partner" },
                         content = text,
-                        messageType = if (voiceDuration > 0) "voice" else if (mediaUrl.isNotBlank()) "image" else "text",
+                        messageType = type,
                         timestamp = doc.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
                         isOutgoing = isFromMe,
                         isRead = isRead,
+                        deliveryStatus = status,
                         voiceDurationSeconds = voiceDuration,
-                        mediaUrl = mediaUrl.ifBlank { null }
+                        mediaUrl = mediaUrl.ifBlank { null },
+                        fileName = fileName,
+                        fileSize = fileSize,
+                        replyToId = doc.getString("replyToId"),
+                        replyToSender = doc.getString("replyToSender"),
+                        replyToText = doc.getString("replyToText"),
+                        replyToType = doc.getString("replyToType"),
+                        isStarred = isStarred,
+                        isDeleted = isDeleted
                     )
                 } catch (e: Exception) {
                     Log.w(TAG, "Error mapping message ${doc.id}: ${e.message}")
@@ -251,12 +287,19 @@ class FirebaseCoupleRepository(
     suspend fun sendMessage(
         coupleId: String,
         text: String,
-        type: String = "TEXT",
+        type: String = "text",
         mediaUrl: String = "",
-        voiceDurationSec: Int = 0
+        voiceDurationSec: Int = 0,
+        fileName: String? = null,
+        fileSize: String? = null,
+        replyToId: String? = null,
+        replyToSender: String? = null,
+        replyToText: String? = null,
+        replyToType: String? = null,
+        clientMessageId: String? = null
     ): Boolean {
         val uid = currentUserId ?: return false
-        val messageId = UUID.randomUUID().toString()
+        val messageId = clientMessageId ?: UUID.randomUUID().toString()
         val docRef = db.collection("couples").document(coupleId).collection("messages").document(messageId)
 
         val payload = hashMapOf<String, Any>(
@@ -269,9 +312,18 @@ class FirebaseCoupleRepository(
             "mediaUrl" to mediaUrl,
             "voiceDurationSec" to voiceDurationSec,
             "isRead" to false,
+            "deliveryStatus" to "SENT",
+            "isStarred" to false,
+            "isDeleted" to false,
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
+        if (fileName != null) payload["fileName"] = fileName
+        if (fileSize != null) payload["fileSize"] = fileSize
+        if (replyToId != null) payload["replyToId"] = replyToId
+        if (replyToSender != null) payload["replyToSender"] = replyToSender
+        if (replyToText != null) payload["replyToText"] = replyToText
+        if (replyToType != null) payload["replyToType"] = replyToType
 
         return try {
             docRef.set(payload).await()
@@ -279,6 +331,50 @@ class FirebaseCoupleRepository(
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to send message: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun markMessagesAsRead(coupleId: String) {
+        val uid = currentUserId ?: return
+        if (coupleId.isBlank()) return
+        try {
+            val unreadDocs = db.collection("couples").document(coupleId).collection("messages")
+                .whereNotEqualTo("senderId", uid)
+                .whereEqualTo("isRead", false)
+                .limit(50)
+                .get()
+                .await()
+
+            if (!unreadDocs.isEmpty) {
+                val batch = db.batch()
+                for (doc in unreadDocs.documents) {
+                    batch.update(doc.reference, mapOf(
+                        "isRead" to true,
+                        "deliveryStatus" to "READ",
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    ))
+                }
+                batch.commit().await()
+                Log.d(TAG, "Marked ${unreadDocs.size()} messages as READ in couple $coupleId")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to mark messages as read: ${e.message}")
+        }
+    }
+
+    suspend fun deleteMessage(coupleId: String, messageId: String): Boolean {
+        if (coupleId.isBlank() || messageId.isBlank()) return false
+        return try {
+            val docRef = db.collection("couples").document(coupleId).collection("messages").document(messageId)
+            docRef.update(mapOf(
+                "isDeleted" to true,
+                "text" to "This message was deleted",
+                "updatedAt" to FieldValue.serverTimestamp()
+            )).await()
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to delete message: ${e.message}")
             false
         }
     }
@@ -400,7 +496,8 @@ class FirebaseCoupleRepository(
                     recipientId = doc.getString("recipientId") ?: "",
                     callType = doc.getString("callType") ?: "VOICE",
                     status = doc.getString("status") ?: "RINGING",
-                    createdAtEpochMs = doc.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis()
+                    createdAtEpochMs = doc.getTimestamp("createdAt")?.toDate()?.time ?: System.currentTimeMillis(),
+                    lastHeartbeatEpochMs = doc.getTimestamp("lastHeartbeat")?.toDate()?.time ?: System.currentTimeMillis()
                 )
                 trySend(signal)
             } else {
@@ -429,7 +526,8 @@ class FirebaseCoupleRepository(
             "callType" to if (callType == CallType.VIDEO) "VIDEO" else "VOICE",
             "status" to "RINGING",
             "createdAt" to FieldValue.serverTimestamp(),
-            "updatedAt" to FieldValue.serverTimestamp()
+            "updatedAt" to FieldValue.serverTimestamp(),
+            "lastHeartbeat" to FieldValue.serverTimestamp()
         )
 
         return try {
@@ -442,10 +540,21 @@ class FirebaseCoupleRepository(
         }
     }
 
+    suspend fun updateCallHeartbeat(
+        coupleId: String,
+        signalId: String
+    ) {
+        if (coupleId.isBlank() || signalId.isBlank()) return
+        val docRef = db.collection("couples").document(coupleId).collection("call_signals").document(signalId)
+        try {
+            docRef.update("lastHeartbeat", FieldValue.serverTimestamp()).await()
+        } catch (_: Exception) {}
+    }
+
     suspend fun updateCallSignalStatus(
         coupleId: String,
         signalId: String,
-        status: String // ACCEPTED, REJECTED, ENDED
+        status: String // ACCEPTED, RECONNECTING, REJECTED, ENDED
     ) {
         if (coupleId.isBlank() || signalId.isBlank()) return
         val docRef = db.collection("couples").document(coupleId).collection("call_signals").document(signalId)

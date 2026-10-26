@@ -15,7 +15,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-class CoupleRepository(context: Context) {
+class CoupleRepository(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("amour_couple_prefs", Context.MODE_PRIVATE)
 
@@ -300,6 +300,22 @@ class CoupleRepository(context: Context) {
         _callHistory.value = emptyList()
     }
 
+    fun deleteCallRecord(id: String) {
+        val current = _callHistory.value.filter { it.id != id }
+        val array = JSONArray()
+        current.forEach { rec ->
+            val obj = JSONObject()
+            obj.put("id", rec.id)
+            obj.put("type", rec.type.name)
+            obj.put("timestamp", rec.timestamp)
+            obj.put("durationSeconds", rec.durationSeconds)
+            obj.put("isOutgoing", rec.isOutgoing)
+            array.put(obj)
+        }
+        prefs.edit().putString("call_history_json", array.toString()).apply()
+        _callHistory.value = current
+    }
+
     fun recordCall(type: CallType, durationSeconds: Int, isOutgoing: Boolean) {
         val current = _callHistory.value.toMutableList()
         val record = CallRecord(
@@ -467,7 +483,7 @@ class CoupleRepository(context: Context) {
     }
 
     private fun loadChatMessages(): List<ChatMessage> {
-        val jsonStr = prefs.getString("chat_messages_json", null) ?: return emptyList()
+        val jsonStr = prefs.getString("chat_messages_json", null) ?: return defaultChatMessages()
         return try {
             val arr = JSONArray(jsonStr)
             val list = mutableListOf<ChatMessage>()
@@ -483,24 +499,182 @@ class CoupleRepository(context: Context) {
                         messageType = obj.optString("messageType", "text"),
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         isOutgoing = obj.optBoolean("isOutgoing", true),
-                        isRead = obj.optBoolean("isRead", false)
+                        isRead = obj.optBoolean("isRead", false),
+                        deliveryStatus = obj.optString("deliveryStatus", if (obj.optBoolean("isOutgoing", true)) "READ" else "DELIVERED"),
+                        voiceDurationSeconds = obj.optInt("voiceDurationSeconds", 0),
+                        mediaUrl = if (obj.has("mediaUrl")) obj.getString("mediaUrl") else null,
+                        fileName = if (obj.has("fileName")) obj.getString("fileName") else null,
+                        fileSize = if (obj.has("fileSize")) obj.getString("fileSize") else null,
+                        replyToId = if (obj.has("replyToId")) obj.getString("replyToId") else null,
+                        replyToSender = if (obj.has("replyToSender")) obj.getString("replyToSender") else null,
+                        replyToText = if (obj.has("replyToText")) obj.getString("replyToText") else null,
+                        replyToType = if (obj.has("replyToType")) obj.getString("replyToType") else null,
+                        isStarred = obj.optBoolean("isStarred", false),
+                        isDeleted = obj.optBoolean("isDeleted", false)
                     )
                 )
             }
             list
         } catch (_: Exception) {
-            emptyList()
+            defaultChatMessages()
         }
+    }
+
+    private fun defaultChatMessages(): List<ChatMessage> {
+        val now = System.currentTimeMillis()
+        val partner = prefs.getString("partner_name", "My Love") ?: "My Love"
+        return listOf(
+            ChatMessage(
+                id = "default_1",
+                senderName = partner,
+                content = "Good Morning baby 💕",
+                timestamp = now - 20 * 60 * 1000L,
+                isOutgoing = false,
+                isRead = true,
+                deliveryStatus = "READ"
+            ),
+            ChatMessage(
+                id = "default_2",
+                senderName = "Me",
+                content = "Good Morning my love 💖",
+                timestamp = now - 19 * 60 * 1000L,
+                isOutgoing = true,
+                isRead = true,
+                deliveryStatus = "READ"
+            ),
+            ChatMessage(
+                id = "default_3",
+                senderName = partner,
+                content = "Kya kar rahe ho? 😊",
+                timestamp = now - 18 * 60 * 1000L,
+                isOutgoing = false,
+                isRead = true,
+                deliveryStatus = "READ"
+            ),
+            ChatMessage(
+                id = "default_4",
+                senderName = "Me",
+                content = "Voice message",
+                messageType = "voice",
+                voiceDurationSeconds = 12,
+                timestamp = now - 17 * 60 * 1000L,
+                isOutgoing = true,
+                isRead = true,
+                deliveryStatus = "READ"
+            ),
+            ChatMessage(
+                id = "default_5",
+                senderName = "Me",
+                content = "Bas tumhe yaad kar raha tha ❤️",
+                replyToId = "default_3",
+                replyToSender = partner,
+                replyToText = "Kya kar rahe ho? 😊",
+                timestamp = now - 16 * 60 * 1000L,
+                isOutgoing = true,
+                isRead = true,
+                deliveryStatus = "READ"
+            ),
+            ChatMessage(
+                id = "default_6",
+                senderName = partner,
+                content = "Miss you ❤️",
+                timestamp = now - 15 * 60 * 1000L,
+                isOutgoing = false,
+                isRead = true,
+                deliveryStatus = "READ"
+            ),
+            ChatMessage(
+                id = "default_7",
+                senderName = "Me",
+                content = "So beautiful 😍💖",
+                messageType = "image",
+                mediaUrl = "android.resource://" + context.packageName + "/" + com.example.R.drawable.img_home_hero_sunset_clean,
+                timestamp = now - 14 * 60 * 1000L,
+                isOutgoing = true,
+                isRead = true,
+                deliveryStatus = "READ"
+            ),
+            // 3 Unread messages matching the reference design badge '3'
+            ChatMessage(
+                id = "default_8",
+                senderName = partner,
+                content = "Baby, suno na? ❤️",
+                timestamp = now - 5 * 60 * 1000L,
+                isOutgoing = false,
+                isRead = false,
+                deliveryStatus = "DELIVERED"
+            ),
+            ChatMessage(
+                id = "default_9",
+                senderName = partner,
+                content = "Free hoke call karo na jaldi se 💕",
+                timestamp = now - 3 * 60 * 1000L,
+                isOutgoing = false,
+                isRead = false,
+                deliveryStatus = "DELIVERED"
+            ),
+            ChatMessage(
+                id = "default_10",
+                senderName = partner,
+                content = "Waiting for your sweet voice 🌹",
+                timestamp = now - 1 * 60 * 1000L,
+                isOutgoing = false,
+                isRead = false,
+                deliveryStatus = "DELIVERED"
+            )
+        )
     }
 
     fun saveChatMessage(msg: ChatMessage) {
         val current = _chatMessages.value.toMutableList()
-        if (current.none { it.id == msg.id }) {
+        val index = current.indexOfFirst { it.id == msg.id }
+        if (index >= 0) {
+            current[index] = msg
+        } else {
             current.add(msg)
-            val trimmed = if (current.size > 200) current.takeLast(200) else current
-            persistChatMessages(trimmed)
-            _chatMessages.value = trimmed
         }
+        val trimmed = if (current.size > 200) current.takeLast(200) else current
+        persistChatMessages(trimmed)
+        _chatMessages.value = trimmed
+    }
+
+    fun markMessagesAsRead() {
+        val current = _chatMessages.value
+        val hasUnread = current.any { !it.isOutgoing && !it.isRead }
+        if (!hasUnread) return
+        val updated = current.map {
+            if (!it.isOutgoing && !it.isRead) {
+                it.copy(isRead = true, deliveryStatus = "READ")
+            } else {
+                it
+            }
+        }
+        persistChatMessages(updated)
+        _chatMessages.value = updated
+    }
+
+    fun deleteMessage(id: String) {
+        val current = _chatMessages.value.map {
+            if (it.id == id) {
+                it.copy(isDeleted = true, content = "This message was deleted")
+            } else {
+                it
+            }
+        }
+        persistChatMessages(current)
+        _chatMessages.value = current
+    }
+
+    fun toggleStarMessage(id: String) {
+        val current = _chatMessages.value.map {
+            if (it.id == id) {
+                it.copy(isStarred = !it.isStarred)
+            } else {
+                it
+            }
+        }
+        persistChatMessages(current)
+        _chatMessages.value = current
     }
 
     fun setChatMessages(list: List<ChatMessage>) {
@@ -527,6 +701,17 @@ class CoupleRepository(context: Context) {
                 put("timestamp", msg.timestamp)
                 put("isOutgoing", msg.isOutgoing)
                 put("isRead", msg.isRead)
+                put("deliveryStatus", msg.deliveryStatus)
+                put("voiceDurationSeconds", msg.voiceDurationSeconds)
+                if (msg.mediaUrl != null) put("mediaUrl", msg.mediaUrl)
+                if (msg.fileName != null) put("fileName", msg.fileName)
+                if (msg.fileSize != null) put("fileSize", msg.fileSize)
+                if (msg.replyToId != null) put("replyToId", msg.replyToId)
+                if (msg.replyToSender != null) put("replyToSender", msg.replyToSender)
+                if (msg.replyToText != null) put("replyToText", msg.replyToText)
+                if (msg.replyToType != null) put("replyToType", msg.replyToType)
+                put("isStarred", msg.isStarred)
+                put("isDeleted", msg.isDeleted)
             }
             arr.put(obj)
         }

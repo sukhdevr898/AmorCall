@@ -48,23 +48,25 @@ private val SlateDarkColorScheme = darkColorScheme(
 )
 
 private val DuoraLightColorScheme = lightColorScheme(
-    primary = DuoraHotPink,
+    primary = DuoraPrimaryPink,
     onPrimary = Color.White,
-    primaryContainer = DuoraPaleSky,
-    onPrimaryContainer = DuoraHotPink,
-    secondary = DuoraRose,
+    primaryContainer = DuoraSoftBlush,
+    onPrimaryContainer = DuoraPrimaryPink,
+    secondary = DuoraSecondaryPink,
     onSecondary = Color.White,
-    secondaryContainer = DuoraPaleSky,
-    onSecondaryContainer = DuoraLightPrimaryText,
+    secondaryContainer = DuoraPaleLavender,
+    onSecondaryContainer = DuoraRaspberry,
     tertiary = LoveGold,
     onTertiary = Color.Black,
-    background = DuoraLightBg,
-    onBackground = DuoraLightPrimaryText,
-    surface = DuoraLightSurface,
-    onSurface = DuoraLightPrimaryText,
+    background = DuoraBg,
+    onBackground = DuoraPrimaryText,
+    surface = DuoraCardBg,
+    onSurface = DuoraPrimaryText,
     surfaceVariant = DuoraSoftBlush,
-    onSurfaceVariant = DuoraLightSecondaryText,
-    outline = DuoraLightOutline
+    onSurfaceVariant = DuoraSecondaryText,
+    outline = DuoraInputBorder,
+    error = DuoraError,
+    onError = Color.White
 )
 
 @Composable
@@ -73,7 +75,7 @@ fun DuoraTheme(
     content: @Composable () -> Unit
 ) {
     val colorScheme = when (theme) {
-        AppTheme.LOVE -> DuoraDarkColorScheme
+        AppTheme.LOVE -> DuoraLightColorScheme
         AppTheme.DARK -> SlateDarkColorScheme
         AppTheme.LIGHT -> DuoraLightColorScheme
     }

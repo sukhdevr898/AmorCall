@@ -59,7 +59,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("DuoraCrashHandler", "Uncaught exception on thread ${thread.name}: ${throwable.message}", throwable)
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         com.example.privacy.PrivacyIconManager.init(this)
+        try {
+            if (com.google.firebase.FirebaseApp.getApps(this).isEmpty()) {
+                com.google.firebase.FirebaseApp.initializeApp(this)
+            }
+        } catch (_: Exception) {}
 
         CallStateManager.onEnterPipRequested = { enterPipMode() }
         handleIntent(intent)
@@ -282,7 +293,12 @@ fun AppNavigation(
                     AppScreen.AUTH -> {
                         com.example.ui.screens.AuthScreen(
                             onAuthSuccess = { uid, email, name ->
-                                viewModel.onAuthSuccess(uid, email, name)
+                                try {
+                                    android.util.Log.i("DuoraAuth", "MainActivity onAuthSuccess received: uid=$uid, email=$email, name=$name")
+                                    viewModel.onAuthSuccess(uid, email, name)
+                                } catch (t: Throwable) {
+                                    android.util.Log.e("DuoraAuth", "MainActivity onAuthSuccess CRASH", t)
+                                }
                             }
                         )
                     }

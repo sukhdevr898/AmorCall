@@ -9,8 +9,13 @@ enum class CallStatus {
     IDLE,
     OUTGOING_RINGING,
     INCOMING_RINGING,
+    CONNECTING,
     CONNECTED,
-    ENDED
+    RECONNECTING,
+    ENDED,
+    DECLINED,
+    MISSED,
+    FAILED
 }
 
 enum class AppTheme {
@@ -42,6 +47,7 @@ data class CoupleProfile(
 )
 
 data class CallSession(
+    val callId: String = "",
     val status: CallStatus = CallStatus.IDLE,
     val type: CallType = CallType.VOICE,
     val durationSeconds: Int = 0,
@@ -50,7 +56,11 @@ data class CallSession(
     val isVideoEnabled: Boolean = true,
     val isFrontCamera: Boolean = true,
     val isPartnerRinging: Boolean = false,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val isSignalingConnected: Boolean = true,
+    val isMediaConnected: Boolean = true,
+    val isReconnecting: Boolean = false,
+    val reconnectGraceSecondsRemaining: Int = 15
 )
 
 data class FloatingHeart(
@@ -118,11 +128,26 @@ data class ChatMessage(
     val toCode: String = "",
     val senderName: String = "",
     val content: String = "",
-    val messageType: String = "text",
+    val messageType: String = "text", // "text", "image", "video", "voice", "audio", "file"
     val timestamp: Long = System.currentTimeMillis(),
     val isOutgoing: Boolean = true,
     val isRead: Boolean = false,
+    val deliveryStatus: String = if (isOutgoing) "READ" else "DELIVERED", // "PENDING", "SENT", "DELIVERED", "READ", "FAILED"
     val voiceDurationSeconds: Int = 0,
-    val mediaUrl: String? = null
-)
+    val mediaUrl: String? = null,
+    val fileName: String? = null,
+    val fileSize: String? = null,
+    val replyToId: String? = null,
+    val replyToSender: String? = null,
+    val replyToText: String? = null,
+    val replyToType: String? = null,
+    val isStarred: Boolean = false,
+    val isDeleted: Boolean = false
+) {
+    val timestampFormatted: String
+        get() {
+            val sdf = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
+            return sdf.format(java.util.Date(timestamp))
+        }
+}
 

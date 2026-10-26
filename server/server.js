@@ -17,6 +17,36 @@ const memoryClients = new Map(); // code -> { sockets: Set, partnerCode, connect
 const memoryNotes = new Map(); // id -> { id, authorCode, recipientCode, authorName, content, createdAt, isDeleted }
 const memoryChat = []; // array of { id, fromCode, toCode, senderName, content, messageType, timestamp, isRead }
 const memoryCallLogs = []; // array of { id, fromCode, toCode, callType, durationSeconds, createdAt }
+const activeCallSessions = new Map(); // callId -> session object
+
+function endCallSession(session, reason = "NORMAL", statusMessage = "Call ended") {
+  if (!session || session.isCleanedUp) return;
+  session.isCleanedUp = true;
+  session.status = "ENDED";
+  if (session.graceTimer) {
+    clearTimeout(session.graceTimer);
+    session.graceTimer = null;
+  }
+  const duration = session.connectedAt ? Math.max(0, Math.round((Date.now() - session.connectedAt) / 1000)) : 0;
+  
+  const endPayload = {
+    type: "call_ended",
+    callId: session.callId,
+    reason,
+    statusMessage,
+    durationSeconds: duration
+  };
+
+  forwardToTarget(session.callerCode, endPayload);
+  forwardToTarget(session.recipientCode, endPayload);
+
+  if (duration > 0 || reason === "MISSED") {
+    dbSaveCallLog(session.callId, session.callerCode, session.recipientCode, session.callType || "VOICE", duration, Date.now());
+  }
+
+  activeCallSessions.delete(session.callId);
+  console.log(`[CALL-SESSION] Ended call ${session.callId} (${reason}, duration=${duration}s)`);
+}
 
 if (DATABASE_URL || process.env.PGHOST) {
   try {
@@ -574,11 +604,29 @@ wss.on("connection", (ws, req) => {
         // --- CALLING SIGNALING ---
         case "call_initiate": {
           const target = (data.to || "").toUpperCase().trim();
-          console.log(`[CALL] ${data.from} calling ${target} (${data.callType})`);
+          const from = (data.from || "").toUpperCase().trim();
+          const callId = data.callId || `call_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+          console.log(`[CALL] ${from} calling ${target} (${data.callType || "VOICE"}) [id: ${callId}]`);
+
+          const session = {
+            callId,
+            callerCode: from,
+            recipientCode: target,
+            callType: data.callType || "VOICE",
+            status: "RINGING",
+            startedAt: Date.now(),
+            connectedAt: null,
+            lastCallerHeartbeat: Date.now(),
+            lastRecipientHeartbeat: Date.now(),
+            graceTimer: null,
+            isCleanedUp: false
+          };
+          activeCallSessions.set(callId, session);
 
           const delivered = forwardToTarget(target, {
             type: "call_incoming",
-            from: data.from,
+            callId,
+            from,
             callerName: data.callerName || "My Love",
             callType: data.callType || "VOICE"
           });
@@ -586,11 +634,14 @@ wss.on("connection", (ws, req) => {
           if (delivered) {
             ws.send(JSON.stringify({
               type: "call_ringing",
+              callId,
               from: target
             }));
           } else {
+            endCallSession(session, "UNAVAILABLE", "Partner is currently offline or unreachable.");
             ws.send(JSON.stringify({
               type: "call_unavailable",
+              callId,
               reason: "Partner is currently offline or unreachable."
             }));
           }
@@ -601,6 +652,7 @@ wss.on("connection", (ws, req) => {
           const target = (data.to || "").toUpperCase().trim();
           forwardToTarget(target, {
             type: "call_ringing",
+            callId: data.callId,
             from: data.from
           });
           break;
@@ -608,32 +660,118 @@ wss.on("connection", (ws, req) => {
 
         case "call_accept": {
           const target = (data.to || "").toUpperCase().trim();
+          const from = (data.from || "").toUpperCase().trim();
+          let session = activeCallSessions.get(data.callId);
+          if (!session) {
+            for (const s of activeCallSessions.values()) {
+              if ((s.callerCode === target && s.recipientCode === from) || (s.callerCode === from && s.recipientCode === target)) {
+                session = s;
+                break;
+              }
+            }
+          }
+
+          if (session) {
+            session.status = "CONNECTED";
+            session.connectedAt = Date.now();
+            session.lastCallerHeartbeat = Date.now();
+            session.lastRecipientHeartbeat = Date.now();
+          }
+
           forwardToTarget(target, {
             type: "call_accepted",
+            callId: session ? session.callId : data.callId,
             from: data.from
           });
+          break;
+        }
+
+        case "call_heartbeat": {
+          const callId = data.callId;
+          const from = (data.from || "").toUpperCase().trim();
+          let session = activeCallSessions.get(callId);
+          if (!session) {
+            for (const s of activeCallSessions.values()) {
+              if (s.callerCode === from || s.recipientCode === from) {
+                session = s;
+                break;
+              }
+            }
+          }
+
+          if (session && !session.isCleanedUp) {
+            const now = Date.now();
+            if (from === session.callerCode) {
+              session.lastCallerHeartbeat = now;
+            } else if (from === session.recipientCode) {
+              session.lastRecipientHeartbeat = now;
+            }
+
+            if (session.status === "RECONNECTING") {
+              if (session.graceTimer) {
+                clearTimeout(session.graceTimer);
+                session.graceTimer = null;
+              }
+              session.status = "CONNECTED";
+              const partner = (from === session.callerCode) ? session.recipientCode : session.callerCode;
+              forwardToTarget(partner, {
+                type: "call_reconnected",
+                callId: session.callId
+              });
+              ws.send(JSON.stringify({
+                type: "call_reconnected",
+                callId: session.callId
+              }));
+              console.log(`[CALL-SESSION] Call ${session.callId} reconnected successfully!`);
+            }
+          }
           break;
         }
 
         case "call_decline": {
           const target = (data.to || "").toUpperCase().trim();
-          forwardToTarget(target, {
-            type: "call_declined",
-            from: data.from
-          });
+          const from = (data.from || "").toUpperCase().trim();
+          let session = activeCallSessions.get(data.callId);
+          if (!session) {
+            for (const s of activeCallSessions.values()) {
+              if ((s.callerCode === target && s.recipientCode === from) || (s.callerCode === from && s.recipientCode === target)) {
+                session = s;
+                break;
+              }
+            }
+          }
+          if (session) {
+            endCallSession(session, "DECLINED", "Call declined by partner");
+          } else {
+            forwardToTarget(target, {
+              type: "call_declined",
+              callId: data.callId,
+              from: data.from
+            });
+          }
           break;
         }
 
         case "call_end": {
           const target = (data.to || "").toUpperCase().trim();
-          forwardToTarget(target, {
-            type: "call_ended",
-            from: data.from
-          });
-
-          // Log call to PostgreSQL
-          if (data.callId) {
-            dbSaveCallLog(data.callId, data.from, target, data.callType || "VOICE", data.duration || 0, Date.now());
+          const from = (data.from || "").toUpperCase().trim();
+          let session = activeCallSessions.get(data.callId);
+          if (!session) {
+            for (const s of activeCallSessions.values()) {
+              if ((s.callerCode === target && s.recipientCode === from) || (s.callerCode === from && s.recipientCode === target)) {
+                session = s;
+                break;
+              }
+            }
+          }
+          if (session) {
+            endCallSession(session, "HANG_UP", "Call ended");
+          } else {
+            forwardToTarget(target, {
+              type: "call_ended",
+              callId: data.callId,
+              from: data.from
+            });
           }
           break;
         }
@@ -691,6 +829,31 @@ wss.on("connection", (ws, req) => {
           const partnerCode = entry.partnerCode;
           memoryClients.delete(registeredCode);
 
+          // Check if this user was in an active call session
+          for (const session of activeCallSessions.values()) {
+            if ((session.callerCode === registeredCode || session.recipientCode === registeredCode) && !session.isCleanedUp) {
+              const otherParty = (session.callerCode === registeredCode) ? session.recipientCode : session.callerCode;
+              if (session.status === "CONNECTED") {
+                session.status = "RECONNECTING";
+                console.log(`[CALL-SESSION] User #${registeredCode} disconnected during call ${session.callId}. Starting 15s grace period.`);
+                forwardToTarget(otherParty, {
+                  type: "call_reconnecting",
+                  callId: session.callId,
+                  from: registeredCode,
+                  gracePeriodSeconds: 15
+                });
+
+                if (!session.graceTimer) {
+                  session.graceTimer = setTimeout(() => {
+                    endCallSession(session, "DISCONNECTED_TIMEOUT", "Connection lost with partner");
+                  }, 15000);
+                }
+              } else if (session.status === "RINGING") {
+                endCallSession(session, "MISSED", "Partner disconnected");
+              }
+            }
+          }
+
           forwardToTarget(partnerCode, {
             type: "partner_status",
             isOnline: false,
@@ -705,6 +868,43 @@ wss.on("connection", (ws, req) => {
     console.error(`WebSocket error for ${registeredCode}:`, err.message);
   });
 });
+
+// Periodic call session lease reaper (every 5 seconds)
+setInterval(() => {
+  const now = Date.now();
+  for (const session of activeCallSessions.values()) {
+    if (session.isCleanedUp) continue;
+
+    if (session.status === "CONNECTED") {
+      const callerGap = now - (session.lastCallerHeartbeat || session.connectedAt || now);
+      const recipientGap = now - (session.lastRecipientHeartbeat || session.connectedAt || now);
+
+      if (callerGap > 12000 || recipientGap > 12000) {
+        session.status = "RECONNECTING";
+        const deadParty = (callerGap > 12000) ? session.callerCode : session.recipientCode;
+        const liveParty = (deadParty === session.callerCode) ? session.recipientCode : session.callerCode;
+
+        console.log(`[CALL-REAPER] Missing heartbeats on call ${session.callId}. Entering RECONNECTING.`);
+        forwardToTarget(liveParty, {
+          type: "call_reconnecting",
+          callId: session.callId,
+          from: deadParty,
+          gracePeriodSeconds: 15
+        });
+
+        if (!session.graceTimer) {
+          session.graceTimer = setTimeout(() => {
+            endCallSession(session, "HEARTBEAT_TIMEOUT", "Connection lost with partner");
+          }, 15000);
+        }
+      }
+    } else if (session.status === "RINGING") {
+      if (now - session.startedAt > 45000) {
+        endCallSession(session, "MISSED", "Call not answered");
+      }
+    }
+  }
+}, 5000);
 
 setInterval(() => {
   const pingPayload = JSON.stringify({ type: "ping" });
