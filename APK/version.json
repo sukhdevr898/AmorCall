@@ -1,10 +1,10 @@
 {
-  "versionCode": 9,
+  "versionCode": 10,
   "versionName": "2.1.2.1",
   "minSupportedVersion": "1.0",
   "appName": "Duora",
   "downloadUrl": "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.1.2.1.apk",
   "browserUrl": "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.1.2.1.apk",
   "repoUrl": "https://github.com/sukhdevr898/AmorCall",
-  "releaseNotes": "• App version 2.1.2.1 release\n• Premium 7-layer animated Splash Screen with individual transparent assets, floating petals, and logo pulse\n• Pixel-perfect Login & Sign Up screens matching specification sheets with interactive states and password toggles\n• Real-time partner presence & video/voice call signaling\n• Permanent WebSocket signaling server integration"
+  "releaseNotes": "• App version 2.1.2.1 update\n• Premium 15-screen Settings & Romantic Profile Suite\n• Remote Boy & Girl Avatar Libraries served with WebP caching\n• Real-time Partner Pairing with QR Scanner & 6-character Code\n• Stealth App Icons (Calculator, Notes, Weather) via launcher aliases\n• Theme settings (Light, Dark, Auto) & Accent Color Picker\n• Server Health dashboard without leaking sensitive URLs\n• Call disconnection lifecycle handling and heartbeat recovery"
 }

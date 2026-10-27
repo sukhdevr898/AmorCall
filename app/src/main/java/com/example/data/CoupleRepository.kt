@@ -38,12 +38,9 @@ class CoupleRepository(private val context: Context) {
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
 
     private fun generateUniqueLoveCode(): String {
-        val prefixes = listOf("AMOUR", "LOVE", "ROSE", "SOUL", "HEART", "CHERI")
         val chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
         val random = java.security.SecureRandom()
-        val randomSuffix = (1..4).map { chars[random.nextInt(chars.length)] }.joinToString("")
-        val prefix = prefixes[random.nextInt(prefixes.size)]
-        return "$prefix-$randomSuffix"
+        return (1..6).map { chars[random.nextInt(chars.length)] }.joinToString("")
     }
 
     private fun loadProfile(): CoupleProfile {

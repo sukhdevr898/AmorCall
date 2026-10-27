@@ -93,7 +93,6 @@ import com.example.BuildConfig
 import com.example.model.CoupleNote
 import com.example.privacy.PrivacyIconManager
 import com.example.privacy.PrivacyIconType
-import com.example.ui.components.PrivacyIconDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -196,7 +195,6 @@ fun HomeScreen(
     var showNoteInputDialog by remember { mutableStateOf(false) }
     var showPermissionsModal by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
-    var showPrivacyIconDialog by remember { mutableStateOf(false) }
     var showProfileDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showNotificationPanel by remember { mutableStateOf(false) }
@@ -368,14 +366,6 @@ fun HomeScreen(
         )
     }
 
-    // Stealth Privacy App Icon Disguise Dialog
-    if (showPrivacyIconDialog) {
-        PrivacyIconDialog(
-            currentIcon = currentPrivacyIcon,
-            onDismiss = { showPrivacyIconDialog = false },
-            onIconChanged = { showPrivacyIconDialog = false }
-        )
-    }
 
     // Server settings are permanently set to ws://amorcall.onrender.com/ (no manual change allowed)
 
@@ -1041,73 +1031,6 @@ fun HomeScreen(
                     }
                 }
 
-                // 1.5. Privacy Disguise Status Card
-                item {
-                    Surface(
-                        onClick = { showPrivacyIconDialog = true },
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("home_privacy_disguise_card")
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(LoveRose.copy(alpha = 0.2f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Shield,
-                                        contentDescription = null,
-                                        tint = LoveRose,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Privacy App Icon Disguise",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Current: ${currentPrivacyIcon.launcherLabel} • Tap to disguise",
-                                        fontSize = 11.sp,
-                                        color = LoveGold
-                                    )
-                                }
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = LoveRose.copy(alpha = 0.2f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.5f))
-                            ) {
-                                Text(
-                                    text = "Change",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = LoveRose,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
 
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -1227,7 +1150,11 @@ if (shouldShowBottomBar) {
             onThemeClick = { showThemeDialog = true },
             onServerSettingsClick = { showServerHealthDialog = true },
             onProfileClick = { showProfileDialog = true },
-            onPrivacySecurityClick = { showPrivacyIconDialog = true },
+            onPrivacySecurityClick = {
+                showProfileMenu = false
+                currentBottomTab = HomeBottomTab.SETTINGS
+                viewModel.navigateSettingsTo(com.example.viewmodel.SettingsSubScreen.PRIVACY_APP_ICON)
+            },
             onHelpSupportClick = { showAboutDialog = true },
             onLogoutClick = { viewModel.signOut() }
         )

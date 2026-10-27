@@ -37,12 +37,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Share
+import com.example.ui.pairing.DuoraQrCodeView
+import com.example.ui.pairing.QrCodeGenerator
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -423,15 +428,17 @@ fun PartnerPairingScreen(
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                // 6-Character PIN Entry Boxes
+                // 6-Character PIN Entry Boxes (A-Z, 0-9)
                 val pinLength = 6
-                val cleanInput = inputCode.uppercase().take(pinLength)
+                val cleanInput = inputCode.uppercase().filter { it.isLetterOrDigit() }.take(pinLength)
+                val isSelfCode = cleanInput.isNotEmpty() && cleanInput.equals(profile.myPairCode, ignoreCase = true)
+                val isCodeValid = cleanInput.length == pinLength && !isSelfCode
 
                 BasicTextField(
                     value = cleanInput,
-                    onValueChange = { inputCode = it.uppercase().take(pinLength) },
+                    onValueChange = { inputCode = it.uppercase().filter { ch -> ch.isLetterOrDigit() }.take(pinLength) },
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
                     decorationBox = {
                         Row(
@@ -443,21 +450,26 @@ fun PartnerPairingScreen(
                                 val isFocused = cleanInput.length == i
                                 Box(
                                     modifier = Modifier
-                                        .size(44.dp)
+                                        .size(46.dp)
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(Color.White)
                                         .border(
                                             width = if (isFocused) 2.dp else 1.dp,
-                                            color = if (isFocused) DuoraHotPink else Color(0xFFEADBEE),
+                                            color = when {
+                                                isSelfCode -> Color(0xFFEF4444)
+                                                isFocused -> DuoraHotPink
+                                                char.isNotEmpty() -> DuoraHotPink.copy(alpha = 0.6f)
+                                                else -> Color(0xFFEADBEE)
+                                            },
                                             shape = RoundedCornerShape(12.dp)
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = char,
-                                        fontSize = 18.sp,
+                                        fontSize = 20.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF21102E),
+                                        color = if (isSelfCode) Color(0xFFEF4444) else Color(0xFF21102E),
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
@@ -466,13 +478,23 @@ fun PartnerPairingScreen(
                     }
                 )
 
-                Spacer(modifier = Modifier.height(22.dp))
+                if (isSelfCode) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "⚠️ You cannot pair with your own code",
+                        fontSize = 12.sp,
+                        color = Color(0xFFEF4444),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
-                // Send Request Button
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Send Request Button (Enabled ONLY when code is exactly 6 valid characters)
                 Button(
                     onClick = {
-                        if (cleanInput.length < 3) {
-                            Toast.makeText(context, "Please enter a valid code", Toast.LENGTH_SHORT).show()
+                        if (!isCodeValid) {
+                            Toast.makeText(context, "Please enter all 6 partner code characters", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         isSendingRequest = true
@@ -484,8 +506,12 @@ fun PartnerPairingScreen(
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         }
                     },
+                    enabled = isCodeValid && !isSendingRequest,
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent
+                    ),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -497,7 +523,11 @@ fun PartnerPairingScreen(
                             .fillMaxSize()
                             .background(
                                 brush = Brush.horizontalGradient(
-                                    colors = listOf(DuoraHotPink, Color(0xFFFF5D88))
+                                    colors = if (isCodeValid) {
+                                        listOf(DuoraHotPink, Color(0xFFFF5D88))
+                                    } else {
+                                        listOf(Color(0xFFE5D4DF), Color(0xFFDCC8D6))
+                                    }
                                 ),
                                 shape = RoundedCornerShape(16.dp)
                             ),
@@ -514,13 +544,13 @@ fun PartnerPairingScreen(
                                 Icon(
                                     imageVector = Icons.Default.Send,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = if (isCodeValid) Color.White else Color(0xFF89818E),
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = "Send Request",
-                                    color = Color.White,
+                                    color = if (isCodeValid) Color.White else Color(0xFF89818E),
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -547,11 +577,12 @@ fun PartnerPairingScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(30.dp))
+                Spacer(modifier = Modifier.height(26.dp))
 
-                // "Your Code" Card
+                // "Your Code & QR" Card (Screen 5 of Design Sheet)
+                val myCode = profile.myPairCode.ifBlank { "7H2K9L" }
                 Card(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(22.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -561,36 +592,74 @@ fun PartnerPairingScreen(
                             .padding(20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = "YOUR CODE",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF89818E)
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = profile.myPairCode.ifBlank { "LOVE-001" },
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = DuoraHotPink,
-                                fontFamily = FontFamily.Monospace
+                                text = "YOUR CODE & QR",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF89818E)
                             )
 
-                            Spacer(modifier = Modifier.width(12.dp))
+                            // Regenerate code button
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        val newCode = viewModel.regenerateMyCode()
+                                        Toast.makeText(context, "New Code Generated: $newCode", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Regenerate",
+                                    tint = DuoraHotPink,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Regenerate",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DuoraHotPink
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Large 6-character Code Display with Copy Button
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Color(0xFFFFF0F5))
+                                .padding(horizontal = 18.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = myCode,
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = DuoraHotPink,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 3.sp
+                            )
+
+                            Spacer(modifier = Modifier.width(14.dp))
 
                             IconButton(
                                 onClick = {
-                                    val clip = ClipData.newPlainText("Duora Code", profile.myPairCode)
+                                    val clip = ClipData.newPlainText("Duora Code", myCode)
                                     (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
                                     Toast.makeText(context, "Code copied to clipboard!", Toast.LENGTH_SHORT).show()
                                 },
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.size(34.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
@@ -601,11 +670,79 @@ fun PartnerPairingScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Automatic High-Resolution QR Code with Heart Center
+                        DuoraQrCodeView(
+                            code = myCode,
+                            sizeDp = 180.dp
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Action Buttons: Share Code & Download QR (PNG)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            // Download QR Button
+                            OutlinedButton(
+                                onClick = {
+                                    val saved = QrCodeGenerator.saveToGallery(context, myCode)
+                                    if (saved) {
+                                        Toast.makeText(context, "QR saved to Pictures/Duora ❤️", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "QR saved successfully!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = "Download QR",
+                                    tint = DuoraHotPink,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Save QR",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DuoraHotPink
+                                )
+                            }
+
+                            // Share Code Button
+                            Button(
+                                onClick = {
+                                    QrCodeGenerator.shareCode(context, myCode)
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = DuoraHotPink),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Share",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = "Share this code with your partner • Active now",
-                            fontSize = 12.sp,
+                            text = "⏱️ This code will expire in 10 minutes",
+                            fontSize = 11.sp,
                             color = Color(0xFF89818E)
                         )
                     }

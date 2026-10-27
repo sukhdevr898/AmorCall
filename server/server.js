@@ -8,31 +8,12 @@ const { Pool } = require("pg");
 const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
-// Curated Remote Avatar Catalog (Boys & Girls)
-const AVATAR_CATALOG = [
-  // Boys
-  { id: "boy_001", name: "Kai (Anime Classic)", category: "BOY", tags: ["Anime", "Stylish"], assetPath: "boys/boy_001.webp" },
-  { id: "boy_002", name: "Ren (Cool Jacket)", category: "BOY", tags: ["Stylish", "Minimal"], assetPath: "boys/boy_002.webp" },
-  { id: "boy_003", name: "Leo (Warm Smile)", category: "BOY", tags: ["Cute", "Anime"], assetPath: "boys/boy_003.webp" },
-  { id: "boy_004", name: "Haru (Playful)", category: "BOY", tags: ["Cute", "Stylish"], assetPath: "boys/boy_004.webp" },
-  { id: "boy_005", name: "Zane (Mystic)", category: "BOY", tags: ["Anime", "Minimal"], assetPath: "boys/boy_005.webp" },
-  { id: "boy_006", name: "Tora (Casual Boy)", category: "BOY", tags: ["Minimal", "Stylish"], assetPath: "boys/boy_006.webp" },
-  { id: "boy_007", name: "Kenji (Heart Eyes)", category: "BOY", tags: ["Cute", "Anime"], assetPath: "boys/boy_007.webp" },
-  { id: "boy_008", name: "Ryu (Night City)", category: "BOY", tags: ["Stylish", "Anime"], assetPath: "boys/boy_008.webp" },
-  { id: "boy_009", name: "Yuki (Anime Prince)", category: "BOY", tags: ["Anime", "Cute"], assetPath: "boys/boy_009.webp" },
-  { id: "boy_010", name: "Sora (Sweetheart)", category: "BOY", tags: ["Cute", "Minimal"], assetPath: "boys/boy_010.webp" },
-  // Girls
-  { id: "girl_001", name: "Aria (Sweet Bow)", category: "GIRL", tags: ["Cute", "Anime"], assetPath: "girls/girl_001.webp" },
-  { id: "girl_002", name: "Mei (Summer Hat)", category: "GIRL", tags: ["Stylish", "Minimal"], assetPath: "girls/girl_002.webp" },
-  { id: "girl_003", name: "Yuna (Soft Glow)", category: "GIRL", tags: ["Cute", "Stylish"], assetPath: "girls/girl_003.webp" },
-  { id: "girl_004", name: "Luna (Cat Ears)", category: "GIRL", tags: ["Cute", "Anime"], assetPath: "girls/girl_004.webp" },
-  { id: "girl_005", name: "Hana (Pastel Bloom)", category: "GIRL", tags: ["Anime", "Minimal"], assetPath: "girls/girl_005.webp" },
-  { id: "girl_006", name: "Chloe (Sunny Beret)", category: "GIRL", tags: ["Stylish", "Cute"], assetPath: "girls/girl_006.webp" },
-  { id: "girl_007", name: "Kira (Stylish Ribbon)", category: "GIRL", tags: ["Stylish", "Anime"], assetPath: "girls/girl_007.webp" },
-  { id: "girl_008", name: "Miku (Warm Knitted)", category: "GIRL", tags: ["Cute", "Minimal"], assetPath: "girls/girl_008.webp" },
-  { id: "girl_009", name: "Emi (Heart Smile)", category: "GIRL", tags: ["Cute", "Anime"], assetPath: "girls/girl_009.webp" },
-  { id: "girl_010", name: "Rin (Anime Idol)", category: "GIRL", tags: ["Anime", "Stylish"], assetPath: "girls/girl_010.webp" }
-];
+const { getCatalog, handleAdminRoutes } = require("./admin");
+
+// Dynamic Curated Remote Avatar Catalog (Boys & Girls)
+function getActiveCatalog() {
+  return getCatalog();
+}
 
 // Pending partner pairing requests: recipientCode -> { fromCode, fromName, fromAvatarId, createdAt }
 const pendingPairingRequests = new Map();
@@ -402,6 +383,10 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
 
+  // Admin Web App & Admin APIs
+  const handledAdmin = await handleAdminRoutes(req, res, parsedUrl, readJsonBody);
+  if (handledAdmin !== false) return;
+
   // Serve static curated avatar assets
   if (pathname.startsWith("/assets/avatars/")) {
     const relative = pathname.replace(/^\/assets\/avatars\//, "");
@@ -423,7 +408,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/avatars" && req.method === "GET") {
     const category = (parsedUrl.query.category || "").toUpperCase();
     const tag = (parsedUrl.query.tag || "").toLowerCase();
-    let filtered = AVATAR_CATALOG;
+    let filtered = getActiveCatalog();
     if (category === "BOY" || category === "GIRL") {
       filtered = filtered.filter(a => a.category === category);
     }
@@ -448,7 +433,7 @@ const server = http.createServer(async (req, res) => {
   // 2. Single Avatar Detail API
   if (pathname.startsWith("/api/avatars/") && req.method === "GET") {
     const avatarId = pathname.replace("/api/avatars/", "").trim();
-    const found = AVATAR_CATALOG.find(a => a.id === avatarId);
+    const found = getActiveCatalog().find(a => a.id === avatarId);
     if (!found) {
       res.writeHead(404, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ success: false, error: "Avatar not found" }));
@@ -491,7 +476,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(400, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ success: false, error: "Missing pairCode or avatarId" }));
     }
-    const exists = AVATAR_CATALOG.some(a => a.id === avatarId);
+    const exists = getActiveCatalog().some(a => a.id === avatarId);
     if (!exists) {
       res.writeHead(400, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ success: false, error: "Invalid avatarId" }));
@@ -511,6 +496,28 @@ const server = http.createServer(async (req, res) => {
       avatarId,
       displayName: prof.userName,
       message: "Avatar updated successfully"
+    }));
+  }
+
+  // 4.5. Resolve Partner Code Profile API
+  if (pathname === "/api/pairing/resolve-code" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const code = (body.code || body.partnerCode || "").toUpperCase().trim();
+    if (!code) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: "Missing code" }));
+    }
+    const prof = await dbGetProfile(code);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({
+      success: true,
+      partner: {
+        code: prof.pairCode,
+        name: prof.userName,
+        avatarId: prof.avatarId,
+        status: prof.partnerStatus,
+        isPaired: !!prof.partnerCode
+      }
     }));
   }
 
@@ -622,7 +629,7 @@ const server = http.createServer(async (req, res) => {
       activePeers: memoryClients.size,
       database: isDbConnected ? "PostgreSQL Connected" : "In-Memory Fallback Active",
       version: "3.0.0",
-      avatarsAvailable: AVATAR_CATALOG.length,
+      avatarsAvailable: getActiveCatalog().length,
       time: new Date().toISOString()
     }));
   }

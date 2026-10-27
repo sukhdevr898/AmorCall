@@ -1,0 +1,202 @@
+[
+  {
+    "id": "boy_001",
+    "name": "Kai (Anime Classic)",
+    "category": "BOY",
+    "tags": [
+      "Anime",
+      "Stylish"
+    ],
+    "assetPath": "boys/boy_001.webp"
+  },
+  {
+    "id": "boy_002",
+    "name": "Ren (Cool Jacket)",
+    "category": "BOY",
+    "tags": [
+      "Stylish",
+      "Minimal"
+    ],
+    "assetPath": "boys/boy_002.webp"
+  },
+  {
+    "id": "boy_003",
+    "name": "Leo (Warm Smile)",
+    "category": "BOY",
+    "tags": [
+      "Cute",
+      "Anime"
+    ],
+    "assetPath": "boys/boy_003.webp"
+  },
+  {
+    "id": "boy_004",
+    "name": "Haru (Playful)",
+    "category": "BOY",
+    "tags": [
+      "Cute",
+      "Stylish"
+    ],
+    "assetPath": "boys/boy_004.webp"
+  },
+  {
+    "id": "boy_005",
+    "name": "Zane (Mystic)",
+    "category": "BOY",
+    "tags": [
+      "Anime",
+      "Minimal"
+    ],
+    "assetPath": "boys/boy_005.webp"
+  },
+  {
+    "id": "boy_006",
+    "name": "Tora (Casual Boy)",
+    "category": "BOY",
+    "tags": [
+      "Minimal",
+      "Stylish"
+    ],
+    "assetPath": "boys/boy_006.webp"
+  },
+  {
+    "id": "boy_007",
+    "name": "Kenji (Heart Eyes)",
+    "category": "BOY",
+    "tags": [
+      "Cute",
+      "Anime"
+    ],
+    "assetPath": "boys/boy_007.webp"
+  },
+  {
+    "id": "boy_008",
+    "name": "Ryu (Night City)",
+    "category": "BOY",
+    "tags": [
+      "Stylish",
+      "Anime"
+    ],
+    "assetPath": "boys/boy_008.webp"
+  },
+  {
+    "id": "boy_009",
+    "name": "Yuki (Anime Prince)",
+    "category": "BOY",
+    "tags": [
+      "Anime",
+      "Cute"
+    ],
+    "assetPath": "boys/boy_009.webp"
+  },
+  {
+    "id": "boy_010",
+    "name": "Sora (Sweetheart)",
+    "category": "BOY",
+    "tags": [
+      "Cute",
+      "Minimal"
+    ],
+    "assetPath": "boys/boy_010.webp"
+  },
+  {
+    "id": "girl_001",
+    "name": "Aria (Sweet Bow)",
+    "category": "GIRL",
+    "tags": [
+      "Cute",
+      "Anime"
+    ],
+    "assetPath": "girls/girl_001.webp"
+  },
+  {
+    "id": "girl_002",
+    "name": "Mei (Summer Hat)",
+    "category": "GIRL",
+    "tags": [
+      "Stylish",
+      "Minimal"
+    ],
+    "assetPath": "girls/girl_002.webp"
+  },
+  {
+    "id": "girl_003",
+    "name": "Yuna (Soft Glow)",
+    "category": "GIRL",
+    "tags": [
+      "Cute",
+      "Stylish"
+    ],
+    "assetPath": "girls/girl_003.webp"
+  },
+  {
+    "id": "girl_004",
+    "name": "Luna (Cat Ears)",
+    "category": "GIRL",
+    "tags": [
+      "Cute",
+      "Anime"
+    ],
+    "assetPath": "girls/girl_004.webp"
+  },
+  {
+    "id": "girl_005",
+    "name": "Hana (Pastel Bloom)",
+    "category": "GIRL",
+    "tags": [
+      "Anime",
+      "Minimal"
+    ],
+    "assetPath": "girls/girl_005.webp"
+  },
+  {
+    "id": "girl_006",
+    "name": "Chloe (Sunny Beret)",
+    "category": "GIRL",
+    "tags": [
+      "Stylish",
+      "Cute"
+    ],
+    "assetPath": "girls/girl_006.webp"
+  },
+  {
+    "id": "girl_007",
+    "name": "Kira (Stylish Ribbon)",
+    "category": "GIRL",
+    "tags": [
+      "Stylish",
+      "Anime"
+    ],
+    "assetPath": "girls/girl_007.webp"
+  },
+  {
+    "id": "girl_008",
+    "name": "Miku (Warm Knitted)",
+    "category": "GIRL",
+    "tags": [
+      "Cute",
+      "Minimal"
+    ],
+    "assetPath": "girls/girl_008.webp"
+  },
+  {
+    "id": "girl_009",
+    "name": "Emi (Heart Smile)",
+    "category": "GIRL",
+    "tags": [
+      "Cute",
+      "Anime"
+    ],
+    "assetPath": "girls/girl_009.webp"
+  },
+  {
+    "id": "girl_010",
+    "name": "Rin (Anime Idol)",
+    "category": "GIRL",
+    "tags": [
+      "Anime",
+      "Stylish"
+    ],
+    "assetPath": "girls/girl_010.webp"
+  }
+]

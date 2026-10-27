@@ -52,7 +52,6 @@ import androidx.compose.runtime.setValue
 import com.example.BuildConfig
 import com.example.privacy.PrivacyIconManager
 import com.example.privacy.PrivacyIconType
-import com.example.ui.components.PrivacyIconDialog
 import com.example.ui.theme.LoveAccentGreen
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,17 +85,7 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
     val updateInfo by viewModel.appUpdateInfo.collectAsState()
     val isChecking by viewModel.isCheckingUpdate.collectAsState()
     val statusMessage by viewModel.updateStatusMessage.collectAsState()
-
-    var showPrivacyIconDialog by remember { mutableStateOf(false) }
     val currentPrivacyIcon by PrivacyIconManager.currentIcon.collectAsState()
-
-    if (showPrivacyIconDialog) {
-        PrivacyIconDialog(
-            currentIcon = currentPrivacyIcon,
-            onDismiss = { showPrivacyIconDialog = false },
-            onIconChanged = { showPrivacyIconDialog = false }
-        )
-    }
 
     Box(
         modifier = Modifier
@@ -450,7 +439,10 @@ fun DeveloperScreen(viewModel: LoveCallViewModel) {
                         }
 
                         Button(
-                            onClick = { showPrivacyIconDialog = true },
+                            onClick = {
+                                viewModel.navigateTo(AppScreen.DASHBOARD)
+                                viewModel.navigateSettingsTo(com.example.viewmodel.SettingsSubScreen.PRIVACY_APP_ICON)
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.testTag("dev_change_privacy_icon_button")
