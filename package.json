@@ -1,5 +1,11 @@
 {
+  "name": "duora-backend",
+  "version": "3.0.0",
+  "scripts": {
+    "start": "cd server && node server.js"
+  },
   "dependencies": {
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "ws": "^8.22.0"
   }
 }

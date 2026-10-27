@@ -73,8 +73,11 @@ class CoupleRepository(private val context: Context) {
         )
         val status = prefs.getString("partner_status", "Thinking of you always ❤️") ?: "Thinking of you always ❤️"
         val avatarUri = prefs.getString("avatar_uri", null)
+        val avatarId = prefs.getString("avatar_id", "boy_001") ?: "boy_001"
+        val partnerAvatarId = prefs.getString("partner_avatar_id", "girl_001") ?: "girl_001"
+        val accentColorHex = prefs.getLong("accent_color_hex", 0xFFFF2D8DL)
         val serverUrl = "ws://amorcall.onrender.com/"
-        val isOnboardingCompleted = prefs.getBoolean("is_onboarding_completed", false)
+        val isOnboardingCompleted = prefs.getBoolean("is_onboarding_completed", true)
         val isNotificationsMuted = prefs.getBoolean("is_notifications_muted", false)
         val themeStr = prefs.getString("app_theme", com.example.model.AppTheme.LOVE.name) ?: com.example.model.AppTheme.LOVE.name
         val appTheme = try {
@@ -82,6 +85,15 @@ class CoupleRepository(private val context: Context) {
         } catch (_: Exception) {
             com.example.model.AppTheme.LOVE
         }
+        val isHideRecent = prefs.getBoolean("hide_from_recent", false)
+        val isAppLock = prefs.getBoolean("app_lock_enabled", false)
+        val isBlurNotif = prefs.getBoolean("blur_notifications", false)
+        val isMsgNotif = prefs.getBoolean("msg_notif_enabled", true)
+        val isCallNotif = prefs.getBoolean("call_notif_enabled", true)
+        val isInAppNotif = prefs.getBoolean("in_app_notif_enabled", true)
+        val soundPref = prefs.getString("sound_pref", "Default") ?: "Default"
+        val vibPref = prefs.getString("vib_pref", "Default") ?: "Default"
+        val ringPref = prefs.getString("ring_pref", "Default") ?: "Default"
 
         return CoupleProfile(
             userName = userName,
@@ -93,10 +105,22 @@ class CoupleRepository(private val context: Context) {
             relationshipStartDateEpochMs = startDate,
             partnerStatus = status,
             avatarUri = avatarUri,
+            avatarId = avatarId,
+            partnerAvatarId = partnerAvatarId,
+            accentColorHex = accentColorHex,
             serverUrl = serverUrl,
             isOnboardingCompleted = isOnboardingCompleted,
             isNotificationsMuted = isNotificationsMuted,
-            appTheme = appTheme
+            appTheme = appTheme,
+            isHideFromRecentApps = isHideRecent,
+            isAppLockEnabled = isAppLock,
+            isBlurNotifications = isBlurNotif,
+            isMessageNotificationsEnabled = isMsgNotif,
+            isCallNotificationsEnabled = isCallNotif,
+            isInAppNotificationsEnabled = isInAppNotif,
+            notificationSound = soundPref,
+            notificationVibration = vibPref,
+            notificationRingtone = ringPref
         )
     }
 
@@ -125,6 +149,21 @@ class CoupleRepository(private val context: Context) {
         saveProfile(updated)
     }
 
+    fun updateAvatarId(newAvatarId: String) {
+        val updated = _profile.value.copy(avatarId = newAvatarId)
+        saveProfile(updated)
+    }
+
+    fun updatePartnerAvatarId(newAvatarId: String) {
+        val updated = _profile.value.copy(partnerAvatarId = newAvatarId)
+        saveProfile(updated)
+    }
+
+    fun updateAccentColor(colorHex: Long) {
+        val updated = _profile.value.copy(accentColorHex = colorHex)
+        saveProfile(updated)
+    }
+
     fun saveProfile(profile: CoupleProfile) {
         val cleanPartnerCode = if (profile.partnerPairCode.equals("ROSE99", ignoreCase = true) ||
             profile.partnerPairCode.equals(profile.myPairCode, ignoreCase = true)) {
@@ -144,10 +183,22 @@ class CoupleRepository(private val context: Context) {
             .putLong("start_date", profile.relationshipStartDateEpochMs)
             .putString("partner_status", profile.partnerStatus)
             .putString("avatar_uri", profile.avatarUri)
+            .putString("avatar_id", profile.avatarId)
+            .putString("partner_avatar_id", profile.partnerAvatarId)
+            .putLong("accent_color_hex", profile.accentColorHex)
             .putString("server_url", profile.serverUrl)
             .putBoolean("is_onboarding_completed", profile.isOnboardingCompleted)
             .putBoolean("is_notifications_muted", profile.isNotificationsMuted)
             .putString("app_theme", profile.appTheme.name)
+            .putBoolean("hide_from_recent", profile.isHideFromRecentApps)
+            .putBoolean("app_lock_enabled", profile.isAppLockEnabled)
+            .putBoolean("blur_notifications", profile.isBlurNotifications)
+            .putBoolean("msg_notif_enabled", profile.isMessageNotificationsEnabled)
+            .putBoolean("call_notif_enabled", profile.isCallNotificationsEnabled)
+            .putBoolean("in_app_notif_enabled", profile.isInAppNotificationsEnabled)
+            .putString("sound_pref", profile.notificationSound)
+            .putString("vib_pref", profile.notificationVibration)
+            .putString("ring_pref", profile.notificationRingtone)
             .apply()
         _profile.value = profile.copy(
             partnerPairCode = cleanPartnerCode,

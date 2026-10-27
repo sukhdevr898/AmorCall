@@ -302,14 +302,6 @@ fun AppNavigation(
                             }
                         )
                     }
-                    AppScreen.ONBOARDING -> {
-                        com.example.ui.screens.OnboardingScreen(
-                            currentProfile = profile,
-                            onComplete = { partnerName, partnerNickname, partnerCode ->
-                                viewModel.completeOnboarding(partnerName, partnerNickname, partnerCode)
-                            }
-                        )
-                    }
                     AppScreen.DASHBOARD -> {
                         HomeScreen(
                             viewModel = viewModel,

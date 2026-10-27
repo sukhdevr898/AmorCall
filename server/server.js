@@ -1,10 +1,41 @@
 const http = require("http");
 const url = require("url");
+const path = require("path");
+const fs = require("fs");
 const { WebSocketServer, WebSocket } = require("ws");
 const { Pool } = require("pg");
 
 const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+// Curated Remote Avatar Catalog (Boys & Girls)
+const AVATAR_CATALOG = [
+  // Boys
+  { id: "boy_001", name: "Kai (Anime Classic)", category: "BOY", tags: ["Anime", "Stylish"], assetPath: "boys/boy_001.webp" },
+  { id: "boy_002", name: "Ren (Cool Jacket)", category: "BOY", tags: ["Stylish", "Minimal"], assetPath: "boys/boy_002.webp" },
+  { id: "boy_003", name: "Leo (Warm Smile)", category: "BOY", tags: ["Cute", "Anime"], assetPath: "boys/boy_003.webp" },
+  { id: "boy_004", name: "Haru (Playful)", category: "BOY", tags: ["Cute", "Stylish"], assetPath: "boys/boy_004.webp" },
+  { id: "boy_005", name: "Zane (Mystic)", category: "BOY", tags: ["Anime", "Minimal"], assetPath: "boys/boy_005.webp" },
+  { id: "boy_006", name: "Tora (Casual Boy)", category: "BOY", tags: ["Minimal", "Stylish"], assetPath: "boys/boy_006.webp" },
+  { id: "boy_007", name: "Kenji (Heart Eyes)", category: "BOY", tags: ["Cute", "Anime"], assetPath: "boys/boy_007.webp" },
+  { id: "boy_008", name: "Ryu (Night City)", category: "BOY", tags: ["Stylish", "Anime"], assetPath: "boys/boy_008.webp" },
+  { id: "boy_009", name: "Yuki (Anime Prince)", category: "BOY", tags: ["Anime", "Cute"], assetPath: "boys/boy_009.webp" },
+  { id: "boy_010", name: "Sora (Sweetheart)", category: "BOY", tags: ["Cute", "Minimal"], assetPath: "boys/boy_010.webp" },
+  // Girls
+  { id: "girl_001", name: "Aria (Sweet Bow)", category: "GIRL", tags: ["Cute", "Anime"], assetPath: "girls/girl_001.webp" },
+  { id: "girl_002", name: "Mei (Summer Hat)", category: "GIRL", tags: ["Stylish", "Minimal"], assetPath: "girls/girl_002.webp" },
+  { id: "girl_003", name: "Yuna (Soft Glow)", category: "GIRL", tags: ["Cute", "Stylish"], assetPath: "girls/girl_003.webp" },
+  { id: "girl_004", name: "Luna (Cat Ears)", category: "GIRL", tags: ["Cute", "Anime"], assetPath: "girls/girl_004.webp" },
+  { id: "girl_005", name: "Hana (Pastel Bloom)", category: "GIRL", tags: ["Anime", "Minimal"], assetPath: "girls/girl_005.webp" },
+  { id: "girl_006", name: "Chloe (Sunny Beret)", category: "GIRL", tags: ["Stylish", "Cute"], assetPath: "girls/girl_006.webp" },
+  { id: "girl_007", name: "Kira (Stylish Ribbon)", category: "GIRL", tags: ["Stylish", "Anime"], assetPath: "girls/girl_007.webp" },
+  { id: "girl_008", name: "Miku (Warm Knitted)", category: "GIRL", tags: ["Cute", "Minimal"], assetPath: "girls/girl_008.webp" },
+  { id: "girl_009", name: "Emi (Heart Smile)", category: "GIRL", tags: ["Cute", "Anime"], assetPath: "girls/girl_009.webp" },
+  { id: "girl_010", name: "Rin (Anime Idol)", category: "GIRL", tags: ["Anime", "Stylish"], assetPath: "girls/girl_010.webp" }
+];
+
+// Pending partner pairing requests: recipientCode -> { fromCode, fromName, fromAvatarId, createdAt }
+const pendingPairingRequests = new Map();
 
 // ==========================================
 // 1. PostgreSQL Database & In-Memory Fallback
@@ -85,10 +116,14 @@ async function initDatabaseTables() {
         partner_code VARCHAR(32),
         user_name VARCHAR(128),
         partner_status TEXT DEFAULT 'Thinking of you always ❤️',
+        avatar_id VARCHAR(64) DEFAULT 'boy_001',
         last_seen BIGINT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await pool.query(`
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS avatar_id VARCHAR(64) DEFAULT 'boy_001';
+    `).catch(() => {});
 
     // 2. Call Logs table
     await pool.query(`
@@ -136,22 +171,63 @@ async function initDatabaseTables() {
 }
 
 // Data access operations
-async function dbSaveCouple(pairCode, partnerCode, userName) {
+async function dbSaveCouple(pairCode, partnerCode, userName, avatarId) {
   if (pool && isDbConnected) {
     try {
       await pool.query(`
-        INSERT INTO couples (pair_code, partner_code, user_name, last_seen, updated_at)
-        VALUES ($1, $2, $3, $4, NOW())
+        INSERT INTO couples (pair_code, partner_code, user_name, avatar_id, last_seen, updated_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
         ON CONFLICT (pair_code) DO UPDATE
-        SET partner_code = EXCLUDED.partner_code,
+        SET partner_code = COALESCE(EXCLUDED.partner_code, couples.partner_code),
             user_name = COALESCE(EXCLUDED.user_name, couples.user_name),
+            avatar_id = COALESCE(EXCLUDED.avatar_id, couples.avatar_id),
             last_seen = EXCLUDED.last_seen,
             updated_at = NOW();
-      `, [pairCode, partnerCode, userName || "You", Date.now()]);
+      `, [pairCode, partnerCode, userName || "You", avatarId || "boy_001", Date.now()]);
     } catch (e) {
       console.warn("DB save couple error:", e.message);
     }
   }
+}
+
+async function dbUpdateAvatar(pairCode, avatarId) {
+  if (pool && isDbConnected) {
+    try {
+      await pool.query(`
+        UPDATE couples SET avatar_id = $1, updated_at = NOW() WHERE pair_code = $2;
+      `, [avatarId, pairCode]);
+    } catch (e) {
+      console.warn("DB update avatar error:", e.message);
+    }
+  }
+  let entry = memoryClients.get(pairCode);
+  if (!entry) {
+    entry = { sockets: new Set(), partnerCode: "", connectedAt: Date.now(), userName: "You", avatarId };
+    memoryClients.set(pairCode, entry);
+  } else {
+    entry.avatarId = avatarId;
+  }
+}
+
+async function dbGetProfile(pairCode) {
+  if (pool && isDbConnected) {
+    try {
+      const res = await pool.query(`
+        SELECT pair_code AS "pairCode", partner_code AS "partnerCode", user_name AS "userName",
+               partner_status AS "partnerStatus", COALESCE(avatar_id, 'boy_001') AS "avatarId"
+        FROM couples WHERE pair_code = $1;
+      `, [pairCode]);
+      if (res.rows.length > 0) return res.rows[0];
+    } catch (e) {}
+  }
+  const entry = memoryClients.get(pairCode);
+  return {
+    pairCode,
+    partnerCode: entry?.partnerCode || "",
+    userName: entry?.userName || "You",
+    partnerStatus: "Thinking of you always ❤️",
+    avatarId: entry?.avatarId || "boy_001"
+  };
 }
 
 async function dbSaveCallLog(id, fromCode, toCode, callType, duration, createdAt) {
@@ -287,12 +363,257 @@ async function dbMarkChatRead(myCode, partnerCode) {
   }
 }
 
+// Helper to parse JSON body
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", chunk => {
+      body += chunk;
+      if (body.length > 1e6) {
+        req.destroy();
+        reject(new Error("Payload too large"));
+      }
+    });
+    req.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (err) {
+        resolve({});
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
 // ==========================================
 // 2. HTTP Server & REST Endpoints
 // ==========================================
 const server = http.createServer(async (req, res) => {
+  // Global CORS headers
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    return res.end();
+  }
+
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
+
+  // Serve static curated avatar assets
+  if (pathname.startsWith("/assets/avatars/")) {
+    const relative = pathname.replace(/^\/assets\/avatars\//, "");
+    const safePath = path.normalize(relative).replace(/^(\.\.[\/\\])+/, "");
+    const fullPath = path.join(__dirname, "assets", "avatars", safePath);
+    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+      res.writeHead(200, {
+        "Content-Type": "image/webp",
+        "Cache-Control": "public, max-age=604800, immutable"
+      });
+      return fs.createReadStream(fullPath).pipe(res);
+    } else {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: "Avatar asset not found" }));
+    }
+  }
+
+  // 1. Avatar Catalog API
+  if (pathname === "/api/avatars" && req.method === "GET") {
+    const category = (parsedUrl.query.category || "").toUpperCase();
+    const tag = (parsedUrl.query.tag || "").toLowerCase();
+    let filtered = AVATAR_CATALOG;
+    if (category === "BOY" || category === "GIRL") {
+      filtered = filtered.filter(a => a.category === category);
+    }
+    if (tag && tag !== "all") {
+      filtered = filtered.filter(a => a.tags.some(t => t.toLowerCase() === tag));
+    }
+    const host = req.headers.host || ("localhost:" + PORT);
+    const protocol = req.headers["x-forwarded-proto"] || "http";
+    const baseUrl = `${protocol}://${host}`;
+    const items = filtered.map(a => ({
+      id: a.id,
+      name: a.name,
+      category: a.category,
+      tags: a.tags,
+      imageUrl: `${baseUrl}/assets/avatars/${a.assetPath}`,
+      thumbnailUrl: `${baseUrl}/assets/avatars/${a.assetPath.replace(/^([^/]+)\/(.*)$/, '$1/thumbs/$2')}`
+    }));
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ success: true, count: items.length, items }));
+  }
+
+  // 2. Single Avatar Detail API
+  if (pathname.startsWith("/api/avatars/") && req.method === "GET") {
+    const avatarId = pathname.replace("/api/avatars/", "").trim();
+    const found = AVATAR_CATALOG.find(a => a.id === avatarId);
+    if (!found) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: "Avatar not found" }));
+    }
+    const host = req.headers.host || ("localhost:" + PORT);
+    const protocol = req.headers["x-forwarded-proto"] || "http";
+    const baseUrl = `${protocol}://${host}`;
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({
+      success: true,
+      avatar: {
+        id: found.id,
+        name: found.name,
+        category: found.category,
+        tags: found.tags,
+        imageUrl: `${baseUrl}/assets/avatars/${found.assetPath}`,
+        thumbnailUrl: `${baseUrl}/assets/avatars/${found.assetPath.replace(/^([^/]+)\/(.*)$/, '$1/thumbs/$2')}`
+      }
+    }));
+  }
+
+  // 3. User Profile API
+  if (pathname === "/api/profile/me" && req.method === "GET") {
+    const code = (parsedUrl.query.code || parsedUrl.query.pairCode || "").toUpperCase().trim();
+    if (!code) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: "Missing pairCode" }));
+    }
+    const prof = await dbGetProfile(code);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ success: true, profile: prof }));
+  }
+
+  // 4. Update Profile Avatar
+  if (pathname === "/api/profile/me/avatar" && (req.method === "PATCH" || req.method === "POST")) {
+    const body = await readJsonBody(req);
+    const code = (body.pairCode || body.code || parsedUrl.query.code || "").toUpperCase().trim();
+    const avatarId = (body.avatarId || "").trim();
+    if (!code || !avatarId) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: "Missing pairCode or avatarId" }));
+    }
+    const exists = AVATAR_CATALOG.some(a => a.id === avatarId);
+    if (!exists) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: "Invalid avatarId" }));
+    }
+    await dbUpdateAvatar(code, avatarId);
+    const prof = await dbGetProfile(code);
+    if (prof.partnerCode) {
+      forwardToTarget(prof.partnerCode, {
+        type: "partner_avatar_updated",
+        partnerCode: code,
+        partnerAvatarId: avatarId
+      });
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({
+      success: true,
+      avatarId,
+      displayName: prof.userName,
+      message: "Avatar updated successfully"
+    }));
+  }
+
+  // 5. Partner Pairing Request
+  if (pathname === "/api/pairing/request" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const myCode = (body.myCode || "").toUpperCase().trim();
+    const myName = (body.myName || "You").trim();
+    const myAvatarId = (body.myAvatarId || "boy_001").trim();
+    const partnerCode = (body.partnerCode || "").toUpperCase().trim();
+
+    if (!myCode || !partnerCode) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: "Both myCode and partnerCode are required" }));
+    }
+    if (myCode === partnerCode) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: "Cannot pair with yourself" }));
+    }
+
+    pendingPairingRequests.set(partnerCode, {
+      fromCode: myCode,
+      fromName: myName,
+      fromAvatarId: myAvatarId,
+      createdAt: Date.now()
+    });
+
+    forwardToTarget(partnerCode, {
+      type: "pairing_request_received",
+      fromCode: myCode,
+      fromName: myName,
+      fromAvatarId: myAvatarId
+    });
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({
+      success: true,
+      message: `Pairing request sent to #${partnerCode}`
+    }));
+  }
+
+  // 6. Partner Pairing Respond
+  if (pathname === "/api/pairing/respond" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const myCode = (body.myCode || "").toUpperCase().trim();
+    const partnerCode = (body.partnerCode || "").toUpperCase().trim();
+    const action = (body.action || "").toUpperCase().trim();
+
+    if (!myCode || !partnerCode || !action) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: "Missing parameters" }));
+    }
+
+    pendingPairingRequests.delete(myCode);
+
+    if (action === "DECLINE") {
+      forwardToTarget(partnerCode, {
+        type: "pairing_request_declined",
+        fromCode: myCode
+      });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: true, status: "DECLINED" }));
+    }
+
+    if (action === "ACCEPT") {
+      const myProfile = await dbGetProfile(myCode);
+      const partnerProfile = await dbGetProfile(partnerCode);
+
+      await dbSaveCouple(myCode, partnerCode, myProfile.userName, myProfile.avatarId);
+      await dbSaveCouple(partnerCode, myCode, partnerProfile.userName, partnerProfile.avatarId);
+
+      const mutualPayload = {
+        type: "pairing_success",
+        partnerCode: myCode,
+        partnerName: myProfile.userName,
+        partnerAvatarId: myProfile.avatarId
+      };
+      forwardToTarget(partnerCode, mutualPayload);
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({
+        success: true,
+        status: "ACCEPTED",
+        partnerCode,
+        partnerName: partnerProfile.userName,
+        partnerAvatarId: partnerProfile.avatarId
+      }));
+    }
+  }
+
+  // 7. Partner Pairing Status
+  if (pathname === "/api/pairing/status" && req.method === "GET") {
+    const code = (parsedUrl.query.code || "").toUpperCase().trim();
+    const pending = pendingPairingRequests.get(code);
+    const prof = await dbGetProfile(code);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({
+      success: true,
+      isPaired: !!(prof && prof.partnerCode),
+      partnerCode: prof?.partnerCode || "",
+      pendingRequest: pending || null
+    }));
+  }
 
   if (pathname === "/health" || pathname === "/api/v1/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -300,7 +621,8 @@ const server = http.createServer(async (req, res) => {
       status: "ok",
       activePeers: memoryClients.size,
       database: isDbConnected ? "PostgreSQL Connected" : "In-Memory Fallback Active",
-      version: "2.0.1",
+      version: "3.0.0",
+      avatarsAvailable: AVATAR_CATALOG.length,
       time: new Date().toISOString()
     }));
   }
@@ -435,6 +757,8 @@ wss.on("connection", (ws, req) => {
           const partnerCode = (data.partnerPairCode || "").toUpperCase().trim();
           const userName = data.userName || "You";
 
+          const avatarId = (data.avatarId || "boy_001").trim();
+
           if (!code) return;
 
           registeredCode = code;
@@ -444,33 +768,40 @@ wss.on("connection", (ws, req) => {
             memoryClients.set(code, entry);
           }
           entry.sockets.add(ws);
+          entry.avatarId = avatarId;
+          entry.userName = userName;
           if (partnerCode) {
             entry.partnerCode = partnerCode;
           }
 
-          console.log(`[+] Device connected: #${code}. Target: #${partnerCode}`);
+          console.log(`[+] Device connected: #${code}. Target: #${partnerCode}, Avatar: ${avatarId}`);
 
           // Persist to Postgres
-          dbSaveCouple(code, partnerCode, userName);
+          dbSaveCouple(code, partnerCode, userName, avatarId);
 
           // Confirmation
-          ws.send(JSON.stringify({ type: "registered", pairCode: code, dbConnected: isDbConnected }));
+          ws.send(JSON.stringify({ type: "registered", pairCode: code, avatarId, dbConnected: isDbConnected }));
 
-          // Partner Online Check
+          // Partner Online Check & Profile
           const partnerEntry = memoryClients.get(partnerCode);
           const isPartnerOnline = !!(partnerEntry && partnerEntry.sockets && partnerEntry.sockets.size > 0);
+          const partnerProfile = await dbGetProfile(partnerCode);
 
           ws.send(JSON.stringify({
             type: "partner_status",
             isOnline: isPartnerOnline,
-            partnerCode
+            partnerCode,
+            partnerName: partnerProfile.userName,
+            partnerAvatarId: partnerProfile.avatarId
           }));
 
           if (isPartnerOnline) {
             forwardToTarget(partnerCode, {
               type: "partner_status",
               isOnline: true,
-              partnerCode: code
+              partnerCode: code,
+              partnerName: userName,
+              partnerAvatarId: avatarId
             });
           }
 
@@ -495,11 +826,30 @@ wss.on("connection", (ws, req) => {
           const target = (data.partnerCode || "").toUpperCase().trim();
           const targetEntry = memoryClients.get(target);
           const isOnline = !!(targetEntry && targetEntry.sockets && targetEntry.sockets.size > 0);
+          const targetProfile = await dbGetProfile(target);
           ws.send(JSON.stringify({
             type: "partner_status",
             isOnline,
-            partnerCode: target
+            partnerCode: target,
+            partnerName: targetProfile.userName,
+            partnerAvatarId: targetProfile.avatarId
           }));
+          break;
+        }
+
+        case "update_avatar": {
+          const avatarId = (data.avatarId || "").trim();
+          if (registeredCode && avatarId) {
+            await dbUpdateAvatar(registeredCode, avatarId);
+            const prof = await dbGetProfile(registeredCode);
+            if (prof.partnerCode) {
+              forwardToTarget(prof.partnerCode, {
+                type: "partner_avatar_updated",
+                partnerCode: registeredCode,
+                partnerAvatarId: avatarId
+              });
+            }
+          }
           break;
         }
 

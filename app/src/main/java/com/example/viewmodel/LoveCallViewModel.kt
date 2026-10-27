@@ -45,12 +45,32 @@ import com.google.firebase.auth.auth
 enum class AppScreen {
     SPLASH,
     AUTH,
-    ONBOARDING,
     DASHBOARD,
     MEMORIES,
     PAIRING,
     DEVELOPER
 }
+
+enum class SettingsSubScreen {
+    MAIN,
+    PROFILE_AVATAR,
+    AVATAR_SELECTION_BOYS,
+    AVATAR_SELECTION_GIRLS,
+    PAIRING_ENTER_CODE,
+    PAIRING_SCAN_QR,
+    THEME,
+    PRIVACY_APP_ICON,
+    NOTIFICATIONS,
+    SERVER_HEALTH,
+    ABOUT,
+    DEVELOPER
+}
+
+data class IncomingPairingRequest(
+    val fromCode: String,
+    val fromName: String,
+    val fromAvatarId: String
+)
 
 class LoveCallViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = CoupleRepository(application)
@@ -58,6 +78,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     private val audioHaptics = CallAudioHaptics(application)
     private val signalingClient = SignalingClient.getInstance()
     private val audioStreamManager = AudioStreamManager(application)
+    private val avatarRepo = com.example.data.avatar.AvatarRepository.getInstance()
     private var activeCallSignalId: String? = null
     private var lastNotifiedMessageId: String? = null
 
@@ -71,6 +92,201 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         list.count { !it.isOutgoing && !it.isRead && !it.isDeleted }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     val serverConnectionState: StateFlow<ServerConnectionState> = signalingClient.connectionState
+
+    // Settings Navigation & Sub-screens
+    private val _settingsSubScreen = MutableStateFlow(SettingsSubScreen.MAIN)
+    val settingsSubScreen: StateFlow<SettingsSubScreen> = _settingsSubScreen.asStateFlow()
+
+    fun navigateSettingsTo(sub: SettingsSubScreen) {
+        _settingsSubScreen.value = sub
+    }
+
+    fun navigateSettingsBack(): Boolean {
+        return if (_settingsSubScreen.value != SettingsSubScreen.MAIN) {
+            _settingsSubScreen.value = SettingsSubScreen.MAIN
+            true
+        } else false
+    }
+
+    // Avatar Catalog & Selection
+    private val _avatarCatalog = MutableStateFlow<List<com.example.data.avatar.Avatar>>(emptyList())
+    val avatarCatalog: StateFlow<List<com.example.data.avatar.Avatar>> = _avatarCatalog.asStateFlow()
+
+    private val _isAvatarLoading = MutableStateFlow(false)
+    val isAvatarLoading: StateFlow<Boolean> = _isAvatarLoading.asStateFlow()
+
+    fun loadAvatars(category: String? = null, tag: String? = null) {
+        viewModelScope.launch {
+            _isAvatarLoading.value = true
+            val list = avatarRepo.fetchAvatars(profile.value.serverUrl, category, tag)
+            _avatarCatalog.value = list
+            _isAvatarLoading.value = false
+        }
+    }
+
+    fun updateSelectedAvatar(avatarId: String, onComplete: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            repository.updateAvatarId(avatarId)
+            signalingClient.sendAvatarUpdate(avatarId)
+            val success = avatarRepo.saveAvatarToServer(profile.value.serverUrl, profile.value.myPairCode, avatarId)
+            onComplete(success)
+        }
+    }
+
+    fun updateAvatarUri(uri: String) {
+        repository.saveProfile(profile.value.copy(avatarUri = uri))
+    }
+
+    fun resolveAvatarUrl(avatarId: String): String {
+        return avatarRepo.resolveAvatarUrl(avatarId, profile.value.serverUrl)
+    }
+
+    fun resolveAvatarThumbnailUrl(avatarId: String): String {
+        return avatarRepo.resolveAvatarThumbnailUrl(avatarId, profile.value.serverUrl)
+    }
+
+    fun updateAccentColor(colorHex: Long) {
+        repository.updateAccentColor(colorHex)
+    }
+
+    fun updatePrivacySettings(hideFromRecent: Boolean, appLock: Boolean, blurNotif: Boolean) {
+        repository.saveProfile(
+            profile.value.copy(
+                isHideFromRecentApps = hideFromRecent,
+                isAppLockEnabled = appLock,
+                isBlurNotifications = blurNotif
+            )
+        )
+    }
+
+    fun updateNotificationSettings(
+        msg: Boolean,
+        call: Boolean,
+        inApp: Boolean,
+        sound: String,
+        vib: String,
+        ring: String
+    ) {
+        repository.saveProfile(
+            profile.value.copy(
+                isMessageNotificationsEnabled = msg,
+                isCallNotificationsEnabled = call,
+                isInAppNotificationsEnabled = inApp,
+                notificationSound = sound,
+                notificationVibration = vib,
+                notificationRingtone = ring
+            )
+        )
+    }
+
+    // Partner Pairing Flow
+    private val _incomingPairingRequest = MutableStateFlow<IncomingPairingRequest?>(null)
+    val incomingPairingRequest: StateFlow<IncomingPairingRequest?> = _incomingPairingRequest.asStateFlow()
+
+    private val _isPairingSuccessful = MutableStateFlow(false)
+    val isPairingSuccessful: StateFlow<Boolean> = _isPairingSuccessful.asStateFlow()
+
+    private val _pairingStatusMessage = MutableStateFlow<String?>(null)
+    val pairingStatusMessage: StateFlow<String?> = _pairingStatusMessage.asStateFlow()
+
+    fun dismissPairingSuccess() {
+        _isPairingSuccessful.value = false
+    }
+
+    fun dismissIncomingPairingRequest() {
+        _incomingPairingRequest.value = null
+    }
+
+    fun sendPairingRequest(targetCode: String, onResult: (Boolean, String) -> Unit) {
+        val clean = targetCode.trim().uppercase()
+        val prof = profile.value
+        if (clean.isBlank()) {
+            onResult(false, "Please enter a valid partner code")
+            return
+        }
+        if (clean.equals(prof.myPairCode.trim(), ignoreCase = true)) {
+            onResult(false, "You cannot pair with yourself")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
+                val url = java.net.URL("$base/api/pairing/request")
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    setRequestProperty("Content-Type", "application/json")
+                }
+                val body = org.json.JSONObject().apply {
+                    put("myCode", prof.myPairCode)
+                    put("myName", prof.userName)
+                    put("myAvatarId", prof.avatarId)
+                    put("partnerCode", clean)
+                }
+                val writer = java.io.OutputStreamWriter(conn.outputStream)
+                writer.write(body.toString())
+                writer.flush()
+                writer.close()
+                if (conn.responseCode in 200..299) {
+                    onResult(true, "Pairing request sent to #$clean ❤️")
+                } else {
+                    onResult(false, "Could not send pairing request. Try again.")
+                }
+            } catch (e: Exception) {
+                onResult(false, "Connection error: ${e.message}")
+            }
+        }
+    }
+
+    fun respondPairingRequest(action: String, onComplete: () -> Unit = {}) {
+        val req = _incomingPairingRequest.value ?: return
+        val prof = profile.value
+        viewModelScope.launch {
+            try {
+                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
+                val url = java.net.URL("$base/api/pairing/respond")
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    setRequestProperty("Content-Type", "application/json")
+                }
+                val body = org.json.JSONObject().apply {
+                    put("myCode", prof.myPairCode)
+                    put("partnerCode", req.fromCode)
+                    put("action", action)
+                }
+                val writer = java.io.OutputStreamWriter(conn.outputStream)
+                writer.write(body.toString())
+                writer.flush()
+                writer.close()
+                if (action == "ACCEPT" && conn.responseCode in 200..299) {
+                    val updated = prof.copy(
+                        partnerPairCode = req.fromCode,
+                        partnerName = req.fromName,
+                        partnerAvatarId = req.fromAvatarId,
+                        isPaired = true
+                    )
+                    repository.saveProfile(updated)
+                    _isPairingSuccessful.value = true
+                }
+            } catch (_: Exception) {}
+            _incomingPairingRequest.value = null
+            onComplete()
+        }
+    }
+
+    fun logOut() {
+        viewModelScope.launch {
+            try {
+                com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+            } catch (_: Exception) {}
+            _currentScreen.value = AppScreen.AUTH
+        }
+    }
 
     private val _partnerPresence = MutableStateFlow<String>("Online")
     val partnerPresence: StateFlow<String> = _partnerPresence.asStateFlow()
@@ -293,7 +509,38 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     }
                     is SignalingEvent.PartnerStatus -> {
                         val status = if (event.isOnline) "Partner Online ❤️" else "Thinking of you always ❤️"
-                        repository.saveProfile(profile.value.copy(partnerStatus = status))
+                        var updated = profile.value.copy(partnerStatus = status)
+                        if (event.partnerName.isNotBlank()) {
+                            updated = updated.copy(partnerName = event.partnerName)
+                        }
+                        if (event.partnerAvatarId.isNotBlank()) {
+                            updated = updated.copy(partnerAvatarId = event.partnerAvatarId)
+                        }
+                        repository.saveProfile(updated)
+                    }
+                    is SignalingEvent.PartnerAvatarUpdated -> {
+                        repository.updatePartnerAvatarId(event.avatarId)
+                    }
+                    is SignalingEvent.PairingRequestReceived -> {
+                        _incomingPairingRequest.value = IncomingPairingRequest(
+                            fromCode = event.fromCode,
+                            fromName = event.fromName,
+                            fromAvatarId = event.fromAvatarId
+                        )
+                    }
+                    is SignalingEvent.PairingSuccess -> {
+                        val updated = profile.value.copy(
+                            partnerPairCode = event.partnerCode,
+                            partnerName = event.partnerName,
+                            partnerAvatarId = event.partnerAvatarId,
+                            isPaired = true
+                        )
+                        repository.saveProfile(updated)
+                        _incomingPairingRequest.value = null
+                        _isPairingSuccessful.value = true
+                    }
+                    is SignalingEvent.PairingDeclined -> {
+                        _pairingStatusMessage.value = "Pairing request was declined"
                     }
                     is SignalingEvent.AudioChunk -> {
                         audioStreamManager.playAudioChunk(event.audioData)
@@ -558,10 +805,6 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         signalingClient.connect(updated.serverUrl, updated.myPairCode, updated.partnerPairCode)
         CallForegroundService.start(getApplication())
         _currentScreen.value = AppScreen.DASHBOARD
-    }
-
-    fun replayOnboarding() {
-        _currentScreen.value = AppScreen.ONBOARDING
     }
 
     fun updateRelationshipProfile(userName: String, partnerName: String, partnerNickname: String) {

@@ -40,10 +40,22 @@ data class CoupleProfile(
     val relationshipStartDateEpochMs: Long = System.currentTimeMillis() - (520L * 24 * 60 * 60 * 1000L),
     val partnerStatus: String = "Thinking of you always ❤️",
     val avatarUri: String? = null,
+    val avatarId: String = "boy_001",
+    val partnerAvatarId: String = "girl_001",
+    val accentColorHex: Long = 0xFFFF2D8D,
     val serverUrl: String = "ws://amorcall.onrender.com/",
-    val isOnboardingCompleted: Boolean = false,
+    val isOnboardingCompleted: Boolean = true,
     val isNotificationsMuted: Boolean = false,
-    val appTheme: AppTheme = AppTheme.LOVE
+    val appTheme: AppTheme = AppTheme.LOVE,
+    val isHideFromRecentApps: Boolean = false,
+    val isAppLockEnabled: Boolean = false,
+    val isBlurNotifications: Boolean = false,
+    val isMessageNotificationsEnabled: Boolean = true,
+    val isCallNotificationsEnabled: Boolean = true,
+    val isInAppNotificationsEnabled: Boolean = true,
+    val notificationSound: String = "Default",
+    val notificationVibration: String = "Default",
+    val notificationRingtone: String = "Default"
 )
 
 data class CallSession(

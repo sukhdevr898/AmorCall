@@ -1136,12 +1136,9 @@ fun HomeScreen(
                             )
                         }
                         HomeBottomTab.SETTINGS -> {
-                            SettingsTab(
+                            com.example.ui.settings.SettingsScreen(
                                 viewModel = viewModel,
-                                onOpenThemeDialog = { showThemeDialog = true },
-                                onOpenServerDialog = { showServerSettingsDialog = true },
-                                onOpenPrivacyIconDialog = { showPrivacyIconDialog = true },
-                                onBack = { currentBottomTab = HomeBottomTab.HOME }
+                                onBackToHome = { currentBottomTab = HomeBottomTab.HOME }
                             )
                         }
                     }
@@ -1149,6 +1146,7 @@ fun HomeScreen(
             }
 
 // Bottom Navigation Bar matching design reference
+val settingsSubScreen by viewModel.settingsSubScreen.collectAsState()
 val currentNavDestination = when (currentBottomTab) {
     HomeBottomTab.HOME -> DuoraNavDestination.HOME
     HomeBottomTab.CHAT -> DuoraNavDestination.CHAT
@@ -1157,7 +1155,8 @@ val currentNavDestination = when (currentBottomTab) {
     HomeBottomTab.SETTINGS -> DuoraNavDestination.SETTINGS
 }
 
-val shouldShowBottomBar = !(currentBottomTab == HomeBottomTab.CHAT && isIndividualChatOpen)
+val shouldShowBottomBar = !(currentBottomTab == HomeBottomTab.CHAT && isIndividualChatOpen) &&
+    !(currentBottomTab == HomeBottomTab.SETTINGS && settingsSubScreen != com.example.viewmodel.SettingsSubScreen.MAIN)
 if (shouldShowBottomBar) {
     DuoraBottomNavigationBar(
         currentDestination = currentNavDestination,

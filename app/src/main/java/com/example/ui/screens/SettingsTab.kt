@@ -413,17 +413,6 @@ fun SettingsTab(
             )
         }
 
-        // Replay Onboarding Row
-        item {
-            SettingsActionRow(
-                icon = Icons.Default.Restore,
-                iconTint = LoveAccentGreen,
-                title = "Replay Onboarding",
-                subtitle = "Review Duora introduction features",
-                onClick = { viewModel.replayOnboarding() },
-                testTag = "settings_row_replay_onboarding"
-            )
-        }
 
         // Developer Info Row
         item {

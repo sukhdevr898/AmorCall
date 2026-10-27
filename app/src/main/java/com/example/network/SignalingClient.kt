@@ -33,10 +33,14 @@ sealed class SignalingEvent {
     data class CallAccepted(val from: String, val callId: String = "") : SignalingEvent()
     data class CallDeclined(val from: String, val callId: String = "") : SignalingEvent()
     data class CallEnded(val from: String, val callId: String = "", val reason: String = "NORMAL", val statusMessage: String = "Call ended") : SignalingEvent()
+    data class CallUnavailable(val reason: String) : SignalingEvent()
     data class CallReconnecting(val callId: String, val from: String, val gracePeriodSeconds: Int = 15) : SignalingEvent()
     data class CallReconnected(val callId: String) : SignalingEvent()
-    data class CallUnavailable(val reason: String) : SignalingEvent()
-    data class PartnerStatus(val isOnline: Boolean) : SignalingEvent()
+    data class PartnerStatus(val isOnline: Boolean, val partnerName: String = "", val partnerAvatarId: String = "") : SignalingEvent()
+    data class PartnerAvatarUpdated(val partnerCode: String, val avatarId: String) : SignalingEvent()
+    data class PairingRequestReceived(val fromCode: String, val fromName: String, val fromAvatarId: String) : SignalingEvent()
+    data class PairingSuccess(val partnerCode: String, val partnerName: String, val partnerAvatarId: String) : SignalingEvent()
+    data class PairingDeclined(val fromCode: String) : SignalingEvent()
     data class AudioChunk(val from: String, val audioData: String) : SignalingEvent()
     data class VideoFrame(val from: String, val frameData: String) : SignalingEvent()
     object HeartReaction : SignalingEvent()
@@ -246,8 +250,39 @@ class SignalingClient private constructor() {
                 }
                 "partner_status" -> {
                     val isOnline = json.optBoolean("isOnline", false)
+                    val partnerName = json.optString("partnerName", "")
+                    val partnerAvatarId = json.optString("partnerAvatarId", "")
                     scope.launch {
-                        _events.emit(SignalingEvent.PartnerStatus(isOnline))
+                        _events.emit(SignalingEvent.PartnerStatus(isOnline, partnerName, partnerAvatarId))
+                    }
+                }
+                "partner_avatar_updated" -> {
+                    val partnerCode = json.optString("partnerCode", "")
+                    val avatarId = json.optString("partnerAvatarId", "")
+                    scope.launch {
+                        _events.emit(SignalingEvent.PartnerAvatarUpdated(partnerCode, avatarId))
+                    }
+                }
+                "pairing_request_received" -> {
+                    val fromCode = json.optString("fromCode", "")
+                    val fromName = json.optString("fromName", "Partner")
+                    val fromAvatarId = json.optString("fromAvatarId", "boy_001")
+                    scope.launch {
+                        _events.emit(SignalingEvent.PairingRequestReceived(fromCode, fromName, fromAvatarId))
+                    }
+                }
+                "pairing_success" -> {
+                    val partnerCode = json.optString("partnerCode", "")
+                    val partnerName = json.optString("partnerName", "Partner")
+                    val partnerAvatarId = json.optString("partnerAvatarId", "girl_001")
+                    scope.launch {
+                        _events.emit(SignalingEvent.PairingSuccess(partnerCode, partnerName, partnerAvatarId))
+                    }
+                }
+                "pairing_request_declined" -> {
+                    val fromCode = json.optString("fromCode", "")
+                    scope.launch {
+                        _events.emit(SignalingEvent.PairingDeclined(fromCode))
                     }
                 }
                 "audio_chunk" -> {
@@ -524,6 +559,14 @@ class SignalingClient private constructor() {
             put("type", "chat_read")
             put("from", currentMyCode)
             put("to", to.uppercase().trim())
+        }
+        send(payload)
+    }
+
+    fun sendAvatarUpdate(avatarId: String) {
+        val payload = JSONObject().apply {
+            put("type", "update_avatar")
+            put("avatarId", avatarId)
         }
         send(payload)
     }
