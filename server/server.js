@@ -104,6 +104,10 @@ async function initDatabaseTables() {
     `);
     await pool.query(`
       ALTER TABLE couples ADD COLUMN IF NOT EXISTS avatar_id VARCHAR(64) DEFAULT 'boy_001';
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT '';
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS blue_tick BOOLEAN DEFAULT FALSE;
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS green_tick BOOLEAN DEFAULT FALSE;
     `).catch(() => {});
 
     // 2. Call Logs table
@@ -195,7 +199,9 @@ async function dbGetProfile(pairCode) {
     try {
       const res = await pool.query(`
         SELECT pair_code AS "pairCode", partner_code AS "partnerCode", user_name AS "userName",
-               partner_status AS "partnerStatus", COALESCE(avatar_id, 'boy_001') AS "avatarId"
+               partner_status AS "partnerStatus", COALESCE(avatar_id, 'boy_001') AS "avatarId",
+               COALESCE(avatar_url, '') AS "avatarUrl", COALESCE(is_blocked, FALSE) AS "isBlocked",
+               COALESCE(blue_tick, FALSE) AS "blueTick", COALESCE(green_tick, FALSE) AS "greenTick"
         FROM couples WHERE pair_code = $1;
       `, [pairCode]);
       if (res.rows.length > 0) return res.rows[0];
@@ -207,7 +213,11 @@ async function dbGetProfile(pairCode) {
     partnerCode: entry?.partnerCode || "",
     userName: entry?.userName || "You",
     partnerStatus: "Thinking of you always ❤️",
-    avatarId: entry?.avatarId || "boy_001"
+    avatarId: entry?.avatarId || "boy_001",
+    avatarUrl: entry?.avatarUrl || "",
+    isBlocked: !!entry?.isBlocked,
+    blueTick: !!entry?.blueTick,
+    greenTick: !!entry?.greenTick
   };
 }
 
@@ -384,7 +394,14 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
 
   // Admin Web App & Admin APIs
-  const handledAdmin = await handleAdminRoutes(req, res, parsedUrl, readJsonBody);
+  const handledAdmin = await handleAdminRoutes(req, res, parsedUrl, readJsonBody, {
+    pool,
+    isDbConnected,
+    memoryClients,
+    wss,
+    forwardToTarget,
+    dbGetProfile
+  });
   if (handledAdmin !== false) return;
 
   // Serve static curated avatar assets
@@ -393,8 +410,10 @@ const server = http.createServer(async (req, res) => {
     const safePath = path.normalize(relative).replace(/^(\.\.[\/\\])+/, "");
     const fullPath = path.join(__dirname, "assets", "avatars", safePath);
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+      const ext = path.extname(fullPath).toLowerCase();
+      const contentType = ext === ".png" ? "image/png" : (ext === ".jpg" || ext === ".jpeg") ? "image/jpeg" : "image/webp";
       res.writeHead(200, {
-        "Content-Type": "image/webp",
+        "Content-Type": contentType,
         "Cache-Control": "public, max-age=604800, immutable"
       });
       return fs.createReadStream(fullPath).pipe(res);
@@ -409,23 +428,27 @@ const server = http.createServer(async (req, res) => {
     const category = (parsedUrl.query.category || "").toUpperCase();
     const tag = (parsedUrl.query.tag || "").toLowerCase();
     let filtered = getActiveCatalog();
-    if (category === "BOY" || category === "GIRL") {
+    if (category) {
       filtered = filtered.filter(a => a.category === category);
     }
     if (tag && tag !== "all") {
-      filtered = filtered.filter(a => a.tags.some(t => t.toLowerCase() === tag));
+      filtered = filtered.filter(a => a.tags && a.tags.some(t => t.toLowerCase() === tag));
     }
     const host = req.headers.host || ("localhost:" + PORT);
     const protocol = req.headers["x-forwarded-proto"] || "http";
     const baseUrl = `${protocol}://${host}`;
-    const items = filtered.map(a => ({
-      id: a.id,
-      name: a.name,
-      category: a.category,
-      tags: a.tags,
-      imageUrl: `${baseUrl}/assets/avatars/${a.assetPath}`,
-      thumbnailUrl: `${baseUrl}/assets/avatars/${a.assetPath.replace(/^([^/]+)\/(.*)$/, '$1/thumbs/$2')}`
-    }));
+    const items = filtered.map(a => {
+      const img = a.uploadThingUrl || a.imageUrl || (a.assetPath ? `${baseUrl}/assets/avatars/${a.assetPath}` : `${baseUrl}${a.localUrl}`);
+      const thumb = a.uploadThingUrl || a.imageUrl || (a.assetPath ? `${baseUrl}/assets/avatars/${a.assetPath.replace(/^([^/]+)\/(.*)$/, '$1/thumbs/$2')}` : `${baseUrl}${a.localUrl}`);
+      return {
+        id: a.id,
+        name: a.name,
+        category: a.category,
+        tags: a.tags || [],
+        imageUrl: img,
+        thumbnailUrl: thumb
+      };
+    });
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({ success: true, count: items.length, items }));
   }
@@ -441,6 +464,7 @@ const server = http.createServer(async (req, res) => {
     const host = req.headers.host || ("localhost:" + PORT);
     const protocol = req.headers["x-forwarded-proto"] || "http";
     const baseUrl = `${protocol}://${host}`;
+    const img = found.uploadThingUrl || found.imageUrl || (found.assetPath ? `${baseUrl}/assets/avatars/${found.assetPath}` : `${baseUrl}${found.localUrl}`);
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({
       success: true,
@@ -448,9 +472,9 @@ const server = http.createServer(async (req, res) => {
         id: found.id,
         name: found.name,
         category: found.category,
-        tags: found.tags,
-        imageUrl: `${baseUrl}/assets/avatars/${found.assetPath}`,
-        thumbnailUrl: `${baseUrl}/assets/avatars/${found.assetPath.replace(/^([^/]+)\/(.*)$/, '$1/thumbs/$2')}`
+        tags: found.tags || [],
+        imageUrl: img,
+        thumbnailUrl: img
       }
     }));
   }
@@ -768,6 +792,18 @@ wss.on("connection", (ws, req) => {
 
           if (!code) return;
 
+          // Check if user is blocked
+          const clientProf = await dbGetProfile(code);
+          if (clientProf && clientProf.isBlocked) {
+            ws.send(JSON.stringify({
+              type: "error",
+              code: "ACCOUNT_BLOCKED",
+              message: "Your Duora account has been suspended by an administrator."
+            }));
+            try { ws.close(4003, "Account suspended"); } catch (_) {}
+            return;
+          }
+
           registeredCode = code;
           let entry = memoryClients.get(code);
           if (!entry) {
@@ -787,7 +823,15 @@ wss.on("connection", (ws, req) => {
           dbSaveCouple(code, partnerCode, userName, avatarId);
 
           // Confirmation
-          ws.send(JSON.stringify({ type: "registered", pairCode: code, avatarId, dbConnected: isDbConnected }));
+          ws.send(JSON.stringify({
+            type: "registered",
+            pairCode: code,
+            avatarId,
+            avatarUrl: clientProf ? clientProf.avatarUrl : null,
+            blueTick: clientProf ? !!clientProf.blueTick : false,
+            greenTick: clientProf ? !!clientProf.greenTick : false,
+            dbConnected: isDbConnected
+          }));
 
           // Partner Online Check & Profile
           const partnerEntry = memoryClients.get(partnerCode);
@@ -799,7 +843,10 @@ wss.on("connection", (ws, req) => {
             isOnline: isPartnerOnline,
             partnerCode,
             partnerName: partnerProfile.userName,
-            partnerAvatarId: partnerProfile.avatarId
+            partnerAvatarId: partnerProfile.avatarId,
+            partnerAvatarUrl: partnerProfile.avatarUrl,
+            blueTick: !!partnerProfile.blueTick,
+            greenTick: !!partnerProfile.greenTick
           }));
 
           if (isPartnerOnline) {
@@ -808,7 +855,10 @@ wss.on("connection", (ws, req) => {
               isOnline: true,
               partnerCode: code,
               partnerName: userName,
-              partnerAvatarId: avatarId
+              partnerAvatarId: avatarId,
+              partnerAvatarUrl: clientProf ? clientProf.avatarUrl : null,
+              blueTick: clientProf ? !!clientProf.blueTick : false,
+              greenTick: clientProf ? !!clientProf.greenTick : false
             });
           }
 

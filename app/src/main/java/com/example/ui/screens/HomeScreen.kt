@@ -41,7 +41,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material3.CircularProgressIndicator
+import coil.compose.rememberAsyncImagePainter
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
@@ -189,6 +192,9 @@ fun HomeScreen(
         }
     }
     val updateInfo by viewModel.appUpdateInfo.collectAsState()
+    val isDownloadingUpdate by viewModel.isDownloadingUpdate.collectAsState()
+    val updateDownloadProgress by viewModel.updateDownloadProgress.collectAsState()
+    val updateInstallError by viewModel.updateInstallError.collectAsState()
     var showThemeDialog by remember { mutableStateOf(false) }
     var showServerSettingsDialog by remember { mutableStateOf(false) }
     var showServerHealthDialog by remember { mutableStateOf(false) }
@@ -223,6 +229,7 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         viewModel.checkNoteExpiry()
+        viewModel.fetchServerDp()
     }
 
     fun checkMissingPermissions(): Boolean {
@@ -500,55 +507,76 @@ fun HomeScreen(
         )
     }
 
-    // App Update Available Dialog
+    // App Update Available Dialog (Step 3: Direct In-App Download & Auto Install)
     val currentUpdate = updateInfo
     if (showUpdateDialog && currentUpdate != null && currentUpdate.isAvailable) {
         val info = currentUpdate
         AlertDialog(
-            onDismissRequest = { showUpdateDialog = false },
+            onDismissRequest = {
+                if (!isDownloadingUpdate) {
+                    showUpdateDialog = false
+                    viewModel.dismissUpdateDialog()
+                }
+            },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.SystemUpdate,
-                        contentDescription = "Update Available",
-                        tint = LoveRose,
-                        modifier = Modifier.size(26.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "New Update Available! 🚀",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(LoveRose.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = "Update Available",
+                            tint = LoveRose,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "New Update Available! 🚀",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Duora v${info.versionName}",
+                            fontSize = 12.sp,
+                            color = LoveRose,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "A new version of Duora is available on GitHub.",
-                        fontSize = 14.sp,
+                        text = "A new upgrade is ready. Download and install directly inside the app without opening a browser.",
+                        fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = LoveRose.copy(alpha = 0.15f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, LoveRose.copy(alpha = 0.4f)),
+                        shape = RoundedCornerShape(14.dp),
+                        color = LoveRose.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.2.dp, LoveRose.copy(alpha = 0.35f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Current: v${BuildConfig.VERSION_NAME}",
+                                text = "Installed: v${BuildConfig.VERSION_NAME}",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "➔  New: v${info.versionName}",
+                                text = "➔  Latest: v${info.versionName}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = LoveRose
@@ -557,23 +585,75 @@ fun HomeScreen(
                     }
 
                     if (info.releaseNotes.isNotBlank()) {
-                        Text(
-                            text = "What's New:",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Release Highlights:",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = info.releaseNotes,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(12.dp),
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        }
+                    }
+
+                    if (isDownloadingUpdate) {
+                        val progress = updateDownloadProgress ?: 0.1f
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Downloading APK from GitHub...",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${(progress * 100).toInt()}%",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LoveRose
+                                )
+                            }
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = { progress },
+                                color = LoveRose,
+                                trackColor = LoveRose.copy(alpha = 0.2f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                            )
+                        }
+                    }
+
+                    if (updateInstallError != null) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            color = Color(0xFFFEE2E2),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = info.releaseNotes,
+                                text = "⚠️ ${updateInstallError}",
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(10.dp),
-                                lineHeight = 18.sp
+                                color = Color(0xFFDC2626),
+                                modifier = Modifier.padding(10.dp)
                             )
                         }
                     }
@@ -582,33 +662,49 @@ fun HomeScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val targetUrl = info.browserUrl.ifBlank { info.downloadUrl }
-                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUrl)).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        }
-                        try {
-                            context.startActivity(browserIntent)
-                        } catch (_: Exception) {}
+                        val cleanVer = info.versionName.trim().removePrefix("v").removePrefix("V")
+                        val targetUrl = info.downloadUrl
+                            .replace("{version}", cleanVer)
+                            .replace("{VERSION}", cleanVer)
+                            .ifBlank { "https://raw.githubusercontent.com/sukhdevr898/AmorCall/refs/heads/main/APK/Duora_${cleanVer}.apk" }
+                        viewModel.downloadAndInstallUpdate(context, info.versionName, targetUrl)
                     },
+                    enabled = !isDownloadingUpdate,
                     colors = ButtonDefaults.buttonColors(containerColor = LoveRose),
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.testTag("download_update_button")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Download Update", fontWeight = FontWeight.Bold)
+                    if (isDownloadingUpdate) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Downloading...", fontWeight = FontWeight.Bold)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Download & Install", fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showUpdateDialog = false }) {
-                    Text("Later", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!isDownloadingUpdate) {
+                    TextButton(onClick = {
+                        showUpdateDialog = false
+                        viewModel.dismissUpdateDialog()
+                    }) {
+                        Text("Later", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             },
             containerColor = MaterialTheme.colorScheme.surface,
-            shape = RoundedCornerShape(20.dp)
+            shape = RoundedCornerShape(24.dp)
         )
     }
 
@@ -793,6 +889,12 @@ fun HomeScreen(
                         partnerStatus = profile.partnerStatus,
                         isPaired = profile.isPaired && profile.partnerPairCode.isNotBlank(),
                         isServerConnected = serverState == ServerConnectionState.CONNECTED,
+                        userBlueTick = profile.blueTick,
+                        userGreenTick = profile.greenTick,
+                        userAvatarUrl = profile.avatarUrl ?: viewModel.resolveAvatarThumbnailUrl(profile.avatarId),
+                        partnerBlueTick = profile.partnerBlueTick,
+                        partnerGreenTick = profile.partnerGreenTick,
+                        partnerAvatarUrl = profile.partnerAvatarUrl ?: viewModel.resolveAvatarThumbnailUrl(profile.partnerAvatarId),
                         onLinkClick = { viewModel.navigateTo(AppScreen.PAIRING) }
                     )
                 }
@@ -1171,6 +1273,12 @@ private fun CoupleHeroCard(
     partnerStatus: String,
     isPaired: Boolean,
     isServerConnected: Boolean,
+    userBlueTick: Boolean = false,
+    userGreenTick: Boolean = false,
+    userAvatarUrl: String? = null,
+    partnerBlueTick: Boolean = false,
+    partnerGreenTick: Boolean = false,
+    partnerAvatarUrl: String? = null,
     onLinkClick: () -> Unit
 ) {
     Card(
@@ -1202,21 +1310,53 @@ private fun CoupleHeroCard(
                             .border(2.dp, LoveRose, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = userName.take(1).uppercase(),
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = LoveRose
-                        )
+                        if (!userAvatarUrl.isNullOrBlank()) {
+                            Image(
+                                painter = rememberAsyncImagePainter(userAvatarUrl),
+                                contentDescription = userName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Text(
+                                text = userName.take(1).uppercase(),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = LoveRose
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = userName,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = userName,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                        if (userBlueTick) {
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Verified User",
+                                tint = Color(0xFF3B82F6),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        if (userGreenTick) {
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Partner Verified",
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
                     Text(
                         text = "#$userCode",
                         fontSize = 11.sp,
@@ -1266,21 +1406,53 @@ private fun CoupleHeroCard(
                             .border(2.dp, if (isPaired) LoveGold else Color.Gray, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = partnerName.take(1).uppercase(),
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isPaired) LoveGold else Color.Gray
-                        )
+                        if (!partnerAvatarUrl.isNullOrBlank()) {
+                            Image(
+                                painter = rememberAsyncImagePainter(partnerAvatarUrl),
+                                contentDescription = partnerName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Text(
+                                text = partnerName.take(1).uppercase(),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isPaired) LoveGold else Color.Gray
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = partnerName,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = partnerName,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                        if (partnerBlueTick) {
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Verified User",
+                                tint = Color(0xFF3B82F6),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        if (partnerGreenTick) {
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Partner Verified",
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
                     Text(
                         text = if (isPaired) "#$partnerCode" else "No code",
                         fontSize = 11.sp,

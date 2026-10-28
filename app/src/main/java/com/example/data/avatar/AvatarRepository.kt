@@ -154,6 +154,75 @@ class AvatarRepository private constructor() {
         }
     }
 
+    suspend fun fetchDirectDpUrl(
+        serverUrl: String,
+        pairCode: String
+    ): String? = withContext(Dispatchers.IO) {
+        if (pairCode.isBlank()) return@withContext null
+        val base = sanitizeHttpUrl(serverUrl)
+        val endpoint = "$base/api/profile/dp/${pairCode.trim().uppercase()}"
+        try {
+            val url = URL(endpoint)
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 5000
+                readTimeout = 5000
+                setRequestProperty("Accept", "application/json")
+            }
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                val text = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                val json = JSONObject(text)
+                if (json.optBoolean("success", false)) {
+                    val urlStr = json.optString("avatarUrl", "")
+                    if (urlStr.isNotBlank()) return@withContext urlStr
+                }
+            }
+        } catch (_: Exception) {}
+        null
+    }
+
+    suspend fun uploadCustomDp(
+        serverUrl: String,
+        pairCode: String,
+        base64Data: String,
+        mimeType: String = "image/jpeg"
+    ): String? = withContext(Dispatchers.IO) {
+        if (pairCode.isBlank() || base64Data.isBlank()) return@withContext null
+        val base = sanitizeHttpUrl(serverUrl)
+        val endpoint = "$base/api/profile/dp/upload"
+        try {
+            val url = URL(endpoint)
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 15000
+                readTimeout = 15000
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
+            }
+
+            val body = JSONObject().apply {
+                put("pairCode", pairCode.trim().uppercase())
+                put("imageBase64", base64Data)
+                put("mimeType", mimeType)
+            }
+
+            OutputStreamWriter(conn.outputStream).use {
+                it.write(body.toString())
+                it.flush()
+            }
+
+            if (conn.responseCode in 200..299) {
+                val text = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+                val json = JSONObject(text)
+                if (json.optBoolean("success", false)) {
+                    return@withContext json.optString("avatarUrl", null)
+                }
+            }
+        } catch (_: Exception) {}
+        null
+    }
+
     private fun sanitizeHttpUrl(serverUrl: String): String {
         var clean = serverUrl.trim()
         if (clean.startsWith("ws://")) {

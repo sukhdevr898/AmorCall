@@ -91,6 +91,13 @@ class CoupleRepository(private val context: Context) {
         val soundPref = prefs.getString("sound_pref", "Default") ?: "Default"
         val vibPref = prefs.getString("vib_pref", "Default") ?: "Default"
         val ringPref = prefs.getString("ring_pref", "Default") ?: "Default"
+        val blueTick = prefs.getBoolean("blue_tick", false)
+        val greenTick = prefs.getBoolean("green_tick", false)
+        val partnerBlueTick = prefs.getBoolean("partner_blue_tick", false)
+        val partnerGreenTick = prefs.getBoolean("partner_green_tick", false)
+        val avatarUrl = prefs.getString("avatar_url", null)
+        val partnerAvatarUrl = prefs.getString("partner_avatar_url", null)
+        val isBlocked = prefs.getBoolean("is_blocked", false)
 
         return CoupleProfile(
             userName = userName,
@@ -117,7 +124,14 @@ class CoupleRepository(private val context: Context) {
             isInAppNotificationsEnabled = isInAppNotif,
             notificationSound = soundPref,
             notificationVibration = vibPref,
-            notificationRingtone = ringPref
+            notificationRingtone = ringPref,
+            blueTick = blueTick,
+            greenTick = greenTick,
+            partnerBlueTick = partnerBlueTick,
+            partnerGreenTick = partnerGreenTick,
+            avatarUrl = avatarUrl,
+            partnerAvatarUrl = partnerAvatarUrl,
+            isBlocked = isBlocked
         )
     }
 
@@ -196,6 +210,13 @@ class CoupleRepository(private val context: Context) {
             .putString("sound_pref", profile.notificationSound)
             .putString("vib_pref", profile.notificationVibration)
             .putString("ring_pref", profile.notificationRingtone)
+            .putBoolean("blue_tick", profile.blueTick)
+            .putBoolean("green_tick", profile.greenTick)
+            .putBoolean("partner_blue_tick", profile.partnerBlueTick)
+            .putBoolean("partner_green_tick", profile.partnerGreenTick)
+            .putString("avatar_url", profile.avatarUrl)
+            .putString("partner_avatar_url", profile.partnerAvatarUrl)
+            .putBoolean("is_blocked", profile.isBlocked)
             .apply()
         _profile.value = profile.copy(
             partnerPairCode = cleanPartnerCode,

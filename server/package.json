@@ -7,10 +7,18 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@uploadthing/mime-types": "^0.3.6",
     "pg": "^8.13.1",
+    "uploadthing": "^7.7.4",
     "ws": "^8.18.0"
   },
-  "keywords": ["webrtc", "calling", "signaling", "websocket", "amourcall"],
+  "keywords": [
+    "webrtc",
+    "calling",
+    "signaling",
+    "websocket",
+    "amourcall"
+  ],
   "author": "Sukhdev Singh (sukhdevr898)",
   "license": "MIT"
 }

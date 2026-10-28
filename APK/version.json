@@ -1,10 +1,11 @@
 {
-  "versionCode": 10,
-  "versionName": "2.1.2.1",
+  "versionCode": 11,
+  "versionName": "2.1.2.2",
   "minSupportedVersion": "1.0",
   "appName": "Duora",
-  "downloadUrl": "https://github.com/sukhdevr898/AmorCall/raw/main/APK/Duora-2.1.2.1.apk",
-  "browserUrl": "https://github.com/sukhdevr898/AmorCall/blob/main/APK/Duora-2.1.2.1.apk",
+  "downloadUrl": "https://github.com/sukhdevr898/AmorCall/releases/download/APK/Duora_{version}.apk",
+  "cloudflaredUrl": "https://eve-compatible-hospitals-karaoke.trycloudflare.com/uploads/f47388b796c569b0_Duora_2.1.2.2.apk",
+  "browserUrl": "https://github.com/sukhdevr898/AmorCall/releases/download/APK/Duora_{version}.apk",
   "repoUrl": "https://github.com/sukhdevr898/AmorCall",
-  "releaseNotes": "• App version 2.1.2.1 update\n• Premium 15-screen Settings & Romantic Profile Suite\n• Remote Boy & Girl Avatar Libraries served with WebP caching\n• Real-time Partner Pairing with QR Scanner & 6-character Code\n• Stealth App Icons (Calculator, Notes, Weather) via launcher aliases\n• Theme settings (Light, Dark, Auto) & Accent Color Picker\n• Server Health dashboard without leaking sensitive URLs\n• Call disconnection lifecycle handling and heartbeat recovery"
+  "releaseNotes": "• App version 2.1.2.2 release\n• In-App Direct APK Download & Auto Installation (no external browser needed)\n• Direct Server & UploadThing Profile DP storage and fetching\n• Mobile-friendly responsive Admin Web Panel with User Management\n• Block / Unblock accounts & Blue Tick / Green Tick verification badges\n• Real-time QR Code pairing with server verification and partner profile preview"
 }

@@ -99,6 +99,8 @@ fun PartnerPairingScreen(
     var inputCode by remember { mutableStateOf("") }
     var isSendingRequest by remember { mutableStateOf(false) }
     var sentRequestToCode by remember { mutableStateOf<String?>(null) }
+    var isVerifyingQr by remember { mutableStateOf(false) }
+    var recognizedPartner by remember { mutableStateOf<PairingRecognizedPartner?>(null) }
 
     // Dialog 1: Partner Request Received Dialog (Screen 7)
     if (incomingRequest != null) {
@@ -749,7 +751,7 @@ fun PartnerPairingScreen(
                 }
             }
         } else {
-            // TAB 1: SCAN QR (Screen 6)
+            // TAB 1: SCAN QR (Screen 6 - Step 4 Implementation)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -770,7 +772,7 @@ fun PartnerPairingScreen(
 
                 Box(
                     modifier = Modifier
-                        .size(250.dp)
+                        .size(240.dp)
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color(0xFF1E1022))
                         .border(
@@ -782,52 +784,66 @@ fun PartnerPairingScreen(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Center scanner laser/badge
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Scan",
-                            tint = DuoraHotPink,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Camera Active",
-                            color = Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                        if (isVerifyingQr) {
+                            CircularProgressIndicator(
+                                color = DuoraHotPink,
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(42.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Verifying QR Code...",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "Scan",
+                                tint = DuoraHotPink,
+                                modifier = Modifier.size(52.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Camera Scanner Active",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Align QR code within the frame",
-                    fontSize = 14.sp,
+                    text = "Align partner's Duora QR code within the frame",
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF21102E)
                 )
 
                 Text(
-                    text = "Duora will automatically recognize partner codes",
-                    fontSize = 12.sp,
+                    text = "Codes are securely verified with Duora Server",
+                    fontSize = 11.sp,
                     color = Color(0xFF89818E)
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Gallery & Flash Actions
+                // Gallery & Flash & Manual QR Input
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
                         onClick = {
-                            Toast.makeText(context, "Select QR image from gallery", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Scanning photo from album...", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier
-                            .size(50.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
                             .background(Color.White)
                     ) {
@@ -840,10 +856,10 @@ fun PartnerPairingScreen(
 
                     IconButton(
                         onClick = {
-                            Toast.makeText(context, "Flash toggled", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Camera flashlight toggled", Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier
-                            .size(50.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
                             .background(Color.White)
                     ) {
@@ -854,9 +870,216 @@ fun PartnerPairingScreen(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Quick QR verification action (enter code or simulated scan)
+                var scanInputText by remember { mutableStateOf("") }
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "QUICK QR VERIFICATION",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF89818E)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFF9F5F8))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            BasicTextField(
+                                value = scanInputText,
+                                onValueChange = { scanInputText = it },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("qr_payload_input"),
+                                decorationBox = { innerTextField ->
+                                    if (scanInputText.isEmpty()) {
+                                        Text(
+                                            text = "Paste QR URL or 6-char code",
+                                            fontSize = 13.sp,
+                                            color = Color(0xFFA19BA6)
+                                        )
+                                    }
+                                    innerTextField()
+                                }
+                            )
+
+                            Button(
+                                onClick = {
+                                    val text = scanInputText.trim()
+                                    if (text.isBlank()) {
+                                        Toast.makeText(context, "Please enter a code or QR string", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    isVerifyingQr = true
+                                    viewModel.scanQrPayload(text) { success, msg, partnerCode, partnerName, partnerAvatarId, partnerAvatarUrl, blueTick, greenTick ->
+                                        isVerifyingQr = false
+                                        if (success && partnerCode != null) {
+                                            recognizedPartner = PairingRecognizedPartner(
+                                                code = partnerCode,
+                                                name = partnerName ?: "Partner",
+                                                avatarId = partnerAvatarId ?: "girl_001",
+                                                avatarUrl = partnerAvatarUrl,
+                                                blueTick = blueTick,
+                                                greenTick = greenTick
+                                            )
+                                            Toast.makeText(context, "Partner Recognized! 💕", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = DuoraHotPink),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("verify_qr_button")
+                            ) {
+                                Text("Verify", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                // If partner recognized via QR, show Verified Partner Card
+                if (recognizedPartner != null) {
+                    val partner = recognizedPartner!!
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Card(
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = androidx.compose.foundation.BorderStroke(1.5.dp, DuoraHotPink.copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("recognized_partner_card")
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(18.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "MATCH FOUND! 💕",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DuoraHotPink
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .border(2.dp, DuoraHotPink, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val dpUrl = partner.avatarUrl ?: viewModel.resolveAvatarThumbnailUrl(partner.avatarId)
+                                Image(
+                                    painter = rememberAsyncImagePainter(dpUrl),
+                                    contentDescription = partner.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = partner.name,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF21102E)
+                                )
+                                if (partner.blueTick) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Verified User",
+                                        tint = Color(0xFF3B82F6),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                if (partner.greenTick) {
+                                    Spacer(modifier = Modifier.width(2.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Partner Verified",
+                                        tint = Color(0xFF10B981),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "#${partner.code}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFD97706)
+                            )
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Button(
+                                onClick = {
+                                    isSendingRequest = true
+                                    viewModel.sendPairingRequest(partner.code) { success, msg ->
+                                        isSendingRequest = false
+                                        if (success) {
+                                            sentRequestToCode = partner.code
+                                            recognizedPartner = null
+                                        }
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = DuoraHotPink),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp)
+                                    .testTag("connect_scanned_partner_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Favorite,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Send Pairing Request 💕", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(36.dp))
     }
 }
+
+data class PairingRecognizedPartner(
+    val code: String,
+    val name: String,
+    val avatarId: String,
+    val avatarUrl: String?,
+    val blueTick: Boolean,
+    val greenTick: Boolean
+)

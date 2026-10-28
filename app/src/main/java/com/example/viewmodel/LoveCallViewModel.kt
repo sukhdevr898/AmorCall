@@ -427,9 +427,19 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     val isCheckingUpdate: StateFlow<Boolean> = updateManager.isChecking
     val updateStatusMessage: StateFlow<String?> = updateManager.statusMessage
 
+    val isDownloadingUpdate: StateFlow<Boolean> = updateManager.isDownloading
+    val updateDownloadProgress: StateFlow<Float?> = updateManager.downloadProgress
+    val updateInstallError: StateFlow<String?> = updateManager.installError
+
     fun checkForUpdates(isManual: Boolean = false) {
         viewModelScope.launch {
             updateManager.checkForUpdates(isManual)
+        }
+    }
+
+    fun downloadAndInstallUpdate(context: android.content.Context, versionName: String, customUrl: String? = null) {
+        viewModelScope.launch {
+            updateManager.downloadAndInstallApk(context, versionName, customUrl)
         }
     }
 
@@ -439,6 +449,109 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
 
     fun clearUpdateStatusMessage() {
         updateManager.clearStatusMessage()
+    }
+
+    fun scanQrPayload(
+        qrPayload: String,
+        onResult: (success: Boolean, message: String, partnerCode: String?, partnerName: String?, partnerAvatarId: String?, partnerAvatarUrl: String?, blueTick: Boolean, greenTick: Boolean) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val base = profile.value.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
+            val endpoint = "$base/api/pairing/qr/scan"
+            try {
+                val url = java.net.URL(endpoint)
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    setRequestProperty("Content-Type", "application/json")
+                    setRequestProperty("Accept", "application/json")
+                }
+                val body = org.json.JSONObject().apply {
+                    put("qrPayload", qrPayload.trim())
+                    put("scannedByCode", profile.value.myPairCode)
+                }
+                java.io.OutputStreamWriter(conn.outputStream).use {
+                    it.write(body.toString())
+                    it.flush()
+                }
+                if (conn.responseCode in 200..299) {
+                    val text = java.io.BufferedReader(java.io.InputStreamReader(conn.inputStream)).use { it.readText() }
+                    val json = org.json.JSONObject(text)
+                    if (json.optBoolean("success", false)) {
+                        withContext(Dispatchers.Main) {
+                            onResult(
+                                true,
+                                "Partner recognized 💕",
+                                json.optString("partnerCode"),
+                                json.optString("partnerName", "Partner"),
+                                json.optString("partnerAvatarId", "girl_001"),
+                                json.optString("partnerAvatarUrl", "").takeIf { it.isNotBlank() },
+                                json.optBoolean("blueTick", false),
+                                json.optBoolean("greenTick", false)
+                            )
+                        }
+                        return@launch
+                    } else {
+                        val errMsg = json.optString("message", "Invalid QR code")
+                        withContext(Dispatchers.Main) {
+                            onResult(false, errMsg, null, null, null, null, false, false)
+                        }
+                        return@launch
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onResult(false, "Server error (${conn.responseCode})", null, null, null, null, false, false)
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    val uri = android.net.Uri.parse(qrPayload)
+                    val code = uri.getQueryParameter("code") ?: qrPayload.trim().uppercase()
+                    if (code.length in 4..8) {
+                        onResult(true, "Offline Code Detected", code, "Partner", "girl_001", null, false, false)
+                    } else {
+                        onResult(false, "Could not verify QR code: ${e.message}", null, null, null, null, false, false)
+                    }
+                }
+            }
+        }
+    }
+
+    fun uploadDirectDp(base64Data: String, mimeType: String = "image/jpeg", onComplete: (Boolean, String?) -> Unit) {
+        viewModelScope.launch {
+            val serverUrl = profile.value.serverUrl
+            val myCode = profile.value.myPairCode
+            val uploadedUrl = avatarRepo.uploadCustomDp(serverUrl, myCode, base64Data, mimeType)
+            if (uploadedUrl != null) {
+                val updated = profile.value.copy(avatarUrl = uploadedUrl)
+                repository.saveProfile(updated)
+                onComplete(true, uploadedUrl)
+            } else {
+                onComplete(false, null)
+            }
+        }
+    }
+
+    fun fetchServerDp() {
+        viewModelScope.launch {
+            val serverUrl = profile.value.serverUrl
+            val myCode = profile.value.myPairCode
+            val partnerCode = profile.value.partnerPairCode
+
+            val myDp = avatarRepo.fetchDirectDpUrl(serverUrl, myCode)
+            if (myDp != null && myDp != profile.value.avatarUrl) {
+                repository.saveProfile(profile.value.copy(avatarUrl = myDp))
+            }
+
+            if (partnerCode.isNotBlank()) {
+                val partnerDp = avatarRepo.fetchDirectDpUrl(serverUrl, partnerCode)
+                if (partnerDp != null && partnerDp != profile.value.partnerAvatarUrl) {
+                    repository.saveProfile(profile.value.copy(partnerAvatarUrl = partnerDp))
+                }
+            }
+        }
     }
 
     private var callTimerJob: Job? = null
@@ -509,13 +622,32 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     }
                     is SignalingEvent.PartnerStatus -> {
                         val status = if (event.isOnline) "Partner Online ❤️" else "Thinking of you always ❤️"
-                        var updated = profile.value.copy(partnerStatus = status)
+                        var updated = profile.value.copy(
+                            partnerStatus = status,
+                            partnerBlueTick = event.blueTick,
+                            partnerGreenTick = event.greenTick
+                        )
                         if (event.partnerName.isNotBlank()) {
                             updated = updated.copy(partnerName = event.partnerName)
                         }
                         if (event.partnerAvatarId.isNotBlank()) {
                             updated = updated.copy(partnerAvatarId = event.partnerAvatarId)
                         }
+                        if (event.partnerAvatarUrl != null) {
+                            updated = updated.copy(partnerAvatarUrl = event.partnerAvatarUrl)
+                        }
+                        repository.saveProfile(updated)
+                    }
+                    is SignalingEvent.Registered -> {
+                        val updated = profile.value.copy(
+                            blueTick = event.blueTick,
+                            greenTick = event.greenTick,
+                            avatarUrl = event.avatarUrl ?: profile.value.avatarUrl
+                        )
+                        repository.saveProfile(updated)
+                    }
+                    is SignalingEvent.AccountBlocked -> {
+                        val updated = profile.value.copy(isBlocked = true)
                         repository.saveProfile(updated)
                     }
                     is SignalingEvent.PartnerAvatarUpdated -> {

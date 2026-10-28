@@ -36,7 +36,22 @@ sealed class SignalingEvent {
     data class CallUnavailable(val reason: String) : SignalingEvent()
     data class CallReconnecting(val callId: String, val from: String, val gracePeriodSeconds: Int = 15) : SignalingEvent()
     data class CallReconnected(val callId: String) : SignalingEvent()
-    data class PartnerStatus(val isOnline: Boolean, val partnerName: String = "", val partnerAvatarId: String = "") : SignalingEvent()
+    data class PartnerStatus(
+        val isOnline: Boolean,
+        val partnerName: String = "",
+        val partnerAvatarId: String = "",
+        val partnerAvatarUrl: String? = null,
+        val blueTick: Boolean = false,
+        val greenTick: Boolean = false
+    ) : SignalingEvent()
+    data class Registered(
+        val pairCode: String,
+        val avatarId: String,
+        val avatarUrl: String? = null,
+        val blueTick: Boolean = false,
+        val greenTick: Boolean = false
+    ) : SignalingEvent()
+    data class AccountBlocked(val message: String) : SignalingEvent()
     data class PartnerAvatarUpdated(val partnerCode: String, val avatarId: String) : SignalingEvent()
     data class PairingRequestReceived(val fromCode: String, val fromName: String, val fromAvatarId: String) : SignalingEvent()
     data class PairingSuccess(val partnerCode: String, val partnerName: String, val partnerAvatarId: String) : SignalingEvent()
@@ -252,8 +267,47 @@ class SignalingClient private constructor() {
                     val isOnline = json.optBoolean("isOnline", false)
                     val partnerName = json.optString("partnerName", "")
                     val partnerAvatarId = json.optString("partnerAvatarId", "")
+                    val partnerAvatarUrl = json.optString("partnerAvatarUrl", "").takeIf { it.isNotBlank() }
+                    val blueTick = json.optBoolean("blueTick", false)
+                    val greenTick = json.optBoolean("greenTick", false)
                     scope.launch {
-                        _events.emit(SignalingEvent.PartnerStatus(isOnline, partnerName, partnerAvatarId))
+                        _events.emit(
+                            SignalingEvent.PartnerStatus(
+                                isOnline = isOnline,
+                                partnerName = partnerName,
+                                partnerAvatarId = partnerAvatarId,
+                                partnerAvatarUrl = partnerAvatarUrl,
+                                blueTick = blueTick,
+                                greenTick = greenTick
+                            )
+                        )
+                    }
+                }
+                "registered" -> {
+                    val pairCode = json.optString("pairCode", "")
+                    val avatarId = json.optString("avatarId", "")
+                    val avatarUrl = json.optString("avatarUrl", "").takeIf { it.isNotBlank() }
+                    val blueTick = json.optBoolean("blueTick", false)
+                    val greenTick = json.optBoolean("greenTick", false)
+                    scope.launch {
+                        _events.emit(
+                            SignalingEvent.Registered(
+                                pairCode = pairCode,
+                                avatarId = avatarId,
+                                avatarUrl = avatarUrl,
+                                blueTick = blueTick,
+                                greenTick = greenTick
+                            )
+                        )
+                    }
+                }
+                "error" -> {
+                    val errCode = json.optString("code")
+                    val msg = json.optString("message", "An error occurred")
+                    if (errCode == "ACCOUNT_BLOCKED") {
+                        scope.launch {
+                            _events.emit(SignalingEvent.AccountBlocked(msg))
+                        }
                     }
                 }
                 "partner_avatar_updated" -> {

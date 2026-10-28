@@ -55,7 +55,14 @@ data class CoupleProfile(
     val isInAppNotificationsEnabled: Boolean = true,
     val notificationSound: String = "Default",
     val notificationVibration: String = "Default",
-    val notificationRingtone: String = "Default"
+    val notificationRingtone: String = "Default",
+    val blueTick: Boolean = false,
+    val greenTick: Boolean = false,
+    val partnerBlueTick: Boolean = false,
+    val partnerGreenTick: Boolean = false,
+    val avatarUrl: String? = null,
+    val partnerAvatarUrl: String? = null,
+    val isBlocked: Boolean = false
 )
 
 data class CallSession(
