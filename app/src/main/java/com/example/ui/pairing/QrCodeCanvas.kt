@@ -31,156 +31,158 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.DuoraHotPink
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.BinaryBitmap
+import com.google.zxing.DecodeHintType
+import com.google.zxing.EncodeHintType
+import com.google.zxing.MultiFormatReader
+import com.google.zxing.RGBLuminanceSource
+import com.google.zxing.common.BitMatrix
+import com.google.zxing.common.HybridBinarizer
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import java.io.OutputStream
-import kotlin.math.abs
 
 object QrCodeGenerator {
 
     /**
-     * Generates a 25x25 QR-like module matrix for a given 6-character pairing code.
-     * Includes 7x7 corner finder patterns, timing patterns, and encoded data bits.
+     * Generates a real standard ISO/IEC 18004 QR code matrix using ZXing.
+     * Uses ErrorCorrectionLevel.H so the center emblem doesn't affect readability.
      */
     fun generateMatrix(code: String): Array<BooleanArray> {
-        val size = 25
-        val matrix = Array(size) { BooleanArray(size) }
-        val reserved = Array(size) { BooleanArray(size) }
-
-        // Helper to place 7x7 finder pattern
-        fun placeFinder(top: Int, left: Int) {
-            for (r in 0 until 7) {
-                for (c in 0 until 7) {
-                    val isBorder = r == 0 || r == 6 || c == 0 || c == 6
-                    val isCenter = r in 2..4 && c in 2..4
-                    matrix[top + r][left + c] = isBorder || isCenter
-                    reserved[top + r][left + c] = true
+        val cleanCode = code.trim().uppercase()
+        val payload = "DUORA:PAIR:$cleanCode"
+        return try {
+            val hints = mapOf(
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.H,
+                EncodeHintType.MARGIN to 1,
+                EncodeHintType.CHARACTER_SET to "UTF-8"
+            )
+            val bitMatrix: BitMatrix = QRCodeWriter().encode(
+                payload,
+                BarcodeFormat.QR_CODE,
+                29,
+                29,
+                hints
+            )
+            val width = bitMatrix.width
+            val height = bitMatrix.height
+            val result = Array(height) { r ->
+                BooleanArray(width) { c ->
+                    bitMatrix.get(c, r)
                 }
             }
-            // Separator around finder
-            for (r in -1..7) {
-                for (c in -1..7) {
-                    val pr = top + r
-                    val pc = left + c
-                    if (pr in 0 until size && pc in 0 until size && !reserved[pr][pc]) {
-                        matrix[pr][pc] = false
-                        reserved[pr][pc] = true
-                    }
-                }
-            }
+            result
+        } catch (_: Exception) {
+            // Minimal fallback matrix
+            Array(25) { BooleanArray(25) }
         }
-
-        // 3 Corner Finders
-        placeFinder(0, 0)
-        placeFinder(0, size - 7)
-        placeFinder(size - 7, 0)
-
-        // Timing patterns (row 6 and col 6)
-        for (i in 8 until size - 8) {
-            matrix[6][i] = i % 2 == 0
-            matrix[i][6] = i % 2 == 0
-            reserved[6][i] = true
-            reserved[i][6] = true
-        }
-
-        // Center 5x5 reserved area for Heart Badge
-        val centerStart = (size - 5) / 2
-        for (r in centerStart until centerStart + 5) {
-            for (c in centerStart until centerStart + 5) {
-                reserved[r][c] = true
-                matrix[r][c] = false
-            }
-        }
-
-        // Data encoding from 6-char code
-        val normalized = code.uppercase().trim().take(6).padEnd(6, 'X')
-        var bitIndex = 0
-        val bits = BooleanArray(256)
-        var bitPointer = 0
-
-        for (ch in normalized) {
-            val v = ch.code
-            for (b in 7 downTo 0) {
-                if (bitPointer < bits.size) {
-                    bits[bitPointer++] = ((v shr b) and 1) == 1
-                }
-            }
-        }
-
-        // Additional hash bits for density
-        var hash = abs(normalized.hashCode())
-        while (bitPointer < bits.size) {
-            bits[bitPointer++] = (hash and 1) == 1
-            hash = (hash shr 1) xor 0x55AA55
-            if (hash == 0) hash = 0x937182
-        }
-
-        // Fill remaining unreserved cells with data
-        for (r in 0 until size) {
-            for (c in 0 until size) {
-                if (!reserved[r][c]) {
-                    matrix[r][c] = bits[bitIndex % bits.size]
-                    bitIndex++
-                }
-            }
-        }
-
-        return matrix
     }
 
     /**
-     * Renders the QR code into an Android Bitmap (for downloading or sharing).
+     * Renders real standard QR into an Android Bitmap (for gallery export or sharing).
      */
-    fun createBitmap(code: String, pixelSize: Int = 600): Bitmap {
-        val matrix = generateMatrix(code)
-        val size = matrix.size
-        val bitmap = Bitmap.createBitmap(pixelSize, pixelSize, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
+    fun createBitmap(code: String, pixelSize: Int = 512): Bitmap {
+        val cleanCode = code.trim().uppercase()
+        val payload = "DUORA:PAIR:$cleanCode"
+        return try {
+            val hints = mapOf(
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.H,
+                EncodeHintType.MARGIN to 2,
+                EncodeHintType.CHARACTER_SET to "UTF-8"
+            )
+            val bitMatrix = QRCodeWriter().encode(
+                payload,
+                BarcodeFormat.QR_CODE,
+                pixelSize,
+                pixelSize,
+                hints
+            )
+            val w = bitMatrix.width
+            val h = bitMatrix.height
+            val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val darkColor = android.graphics.Color.parseColor("#21102E")
+            val lightColor = android.graphics.Color.WHITE
 
-        // Background
-        val bgPaint = Paint().apply { color = android.graphics.Color.WHITE }
-        canvas.drawRect(0f, 0f, pixelSize.toFloat(), pixelSize.toFloat(), bgPaint)
-
-        val padding = pixelSize * 0.08f
-        val innerSize = pixelSize - (padding * 2)
-        val cellSize = innerSize / size
-
-        val darkPaint = Paint().apply {
-            color = android.graphics.Color.parseColor("#21102E")
-            isAntiAlias = true
-        }
-
-        for (r in 0 until size) {
-            for (c in 0 until size) {
-                if (matrix[r][c]) {
-                    val left = padding + (c * cellSize)
-                    val top = padding + (r * cellSize)
-                    canvas.drawRoundRect(
-                        left,
-                        top,
-                        left + cellSize - 0.5f,
-                        top + cellSize - 0.5f,
-                        2f,
-                        2f,
-                        darkPaint
-                    )
+            for (x in 0 until w) {
+                for (y in 0 until h) {
+                    bitmap.setPixel(x, y, if (bitMatrix.get(x, y)) darkColor else lightColor)
                 }
             }
-        }
 
-        // Center circular heart badge
-        val center = pixelSize / 2f
-        val badgeRadius = cellSize * 2.8f
-        val badgeBg = Paint().apply {
-            color = android.graphics.Color.WHITE
-            isAntiAlias = true
-        }
-        val heartPaint = Paint().apply {
-            color = android.graphics.Color.parseColor("#FF2D8D")
-            isAntiAlias = true
-        }
-        canvas.drawCircle(center, center, badgeRadius, badgeBg)
-        canvas.drawCircle(center, center, badgeRadius * 0.72f, heartPaint)
+            // Draw center heart icon
+            val canvas = Canvas(bitmap)
+            val center = w / 2f
+            val badgeRadius = w * 0.12f
+            val whitePaint = Paint().apply {
+                color = android.graphics.Color.WHITE
+                isAntiAlias = true
+            }
+            val pinkPaint = Paint().apply {
+                color = android.graphics.Color.parseColor("#FF2D8D")
+                isAntiAlias = true
+            }
+            canvas.drawCircle(center, center, badgeRadius, whitePaint)
+            canvas.drawCircle(center, center, badgeRadius * 0.8f, pinkPaint)
 
-        return bitmap
+            bitmap
+        } catch (_: Exception) {
+            Bitmap.createBitmap(pixelSize, pixelSize, Bitmap.Config.ARGB_8888)
+        }
+    }
+
+    /**
+     * Decodes a QR code from a Bitmap (e.g. from gallery photo).
+     */
+    fun decodeBitmap(bitmap: Bitmap): String? {
+        return try {
+            val width = bitmap.width
+            val height = bitmap.height
+            val pixels = IntArray(width * height)
+            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+            val source = RGBLuminanceSource(width, height, pixels)
+            val binaryBitmap = BinaryBitmap(HybridBinarizer(source))
+            val hints = mapOf(
+                DecodeHintType.TRY_HARDER to true,
+                DecodeHintType.POSSIBLE_FORMATS to listOf(BarcodeFormat.QR_CODE)
+            )
+            val result = MultiFormatReader().decode(binaryBitmap, hints)
+            result?.text
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Extracts the clean partner code from any scanned payload string.
+     * Supports formats:
+     * - "DUORA:PAIR:8K9P2X"
+     * - "duora://pair/8K9P2X"
+     * - "DUORA-8K9P2X-1712345678"
+     * - "{\"code\":\"8K9P2X\"}"
+     * - "#8K9P2X" or raw "8K9P2X"
+     */
+    fun parseScannedCode(raw: String): String {
+        var clean = raw.trim()
+        if (clean.startsWith("{") && clean.endsWith("}")) {
+            try {
+                val json = org.json.JSONObject(clean)
+                clean = json.optString("code", json.optString("pairCode", json.optString("partnerCode", clean)))
+            } catch (_: Exception) {}
+        }
+        clean = clean.replace("^DUORA:PAIR:".toRegex(RegexOption.IGNORE_CASE), "")
+            .replace("^duora://pair/".toRegex(RegexOption.IGNORE_CASE), "")
+            .replace("^DUORA-".toRegex(RegexOption.IGNORE_CASE), "")
+            .replace("^#".toRegex(), "")
+
+        if (clean.contains("-")) {
+            val parts = clean.split("-")
+            if (parts.size > 1 && parts.last().length >= 9 && parts.last().all { it.isDigit() }) {
+                clean = parts.dropLast(1).joinToString("")
+            }
+        }
+        return clean.uppercase().filter { it.isLetterOrDigit() }.take(16)
     }
 
     /**
@@ -201,48 +203,63 @@ object QrCodeGenerator {
                 }
             }
 
-            val uri: Uri? = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            if (uri != null) {
-                resolver.openOutputStream(uri)?.use { stream: OutputStream ->
+            val imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            if (imageUri != null) {
+                val stream: OutputStream? = resolver.openOutputStream(imageUri)
+                if (stream != null) {
                     bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                    stream.flush()
+                    stream.close()
                 }
+
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     contentValues.clear()
                     contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
-                    resolver.update(uri, contentValues, null, null)
+                    resolver.update(imageUri, contentValues, null, null)
                 }
                 true
             } else {
                 false
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
             false
         }
     }
 
     /**
-     * Opens Android Sharesheet with the code.
+     * Shares the QR code via Android system share sheet.
      */
-    fun shareCode(context: Context, code: String) {
+    fun shareQrCode(context: Context, code: String) {
         try {
-            val sendIntent = Intent().apply {
-                action = Intent.ACTION_SEND
+            val bitmap = createBitmap(code)
+            val path = MediaStore.Images.Media.insertImage(
+                context.contentResolver,
+                bitmap,
+                "Duora_QR_$code",
+                "Connect with me on Duora using code #$code"
+            )
+            val uri = Uri.parse(path)
+
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    "Connect with me on Duora 💕\nHere is my 6-character partner pairing code: $code\nDownload Duora and pair with me!"
+                    "Scan my Duora QR Code or enter my code #$code to link our private space 💕"
                 )
-                type = "text/plain"
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(sendIntent, "Share Duora Pairing Code"))
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+            context.startActivity(Intent.createChooser(intent, "Share Duora QR Code"))
+        } catch (_: Exception) {}
+    }
+
+    fun shareCode(context: Context, code: String) {
+        shareQrCode(context, code)
     }
 }
 
 /**
- * Jetpack Compose QR Code Visualizer Component.
+ * Jetpack Compose real QR Code Visualizer Component.
  */
 @Composable
 fun DuoraQrCodeView(
@@ -261,18 +278,20 @@ fun DuoraQrCodeView(
             .border(2.dp, Color(0xFFFFD5E5), RoundedCornerShape(18.dp)),
         contentAlignment = Alignment.Center
     ) {
-        Canvas(modifier = Modifier.size(sizeDp - 28.dp)) {
+        Canvas(modifier = Modifier.size(sizeDp - 24.dp)) {
             val matrixSize = matrix.size
-            val cellSize = size.width / matrixSize
+            if (matrixSize > 0) {
+                val cellSize = size.width / matrixSize
 
-            for (r in 0 until matrixSize) {
-                for (c in 0 until matrixSize) {
-                    if (matrix[r][c]) {
-                        drawRect(
-                            color = darkColor,
-                            topLeft = Offset(c * cellSize, r * cellSize),
-                            size = Size(cellSize - 0.4f, cellSize - 0.4f)
-                        )
+                for (r in 0 until matrixSize) {
+                    for (c in 0 until matrixSize) {
+                        if (matrix[r][c]) {
+                            drawRect(
+                                color = darkColor,
+                                topLeft = Offset(c * cellSize, r * cellSize),
+                                size = Size(cellSize, cellSize)
+                            )
+                        }
                     }
                 }
             }

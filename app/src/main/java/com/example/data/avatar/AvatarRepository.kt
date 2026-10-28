@@ -39,18 +39,48 @@ class AvatarRepository private constructor() {
         Avatar("girl_010", "Rin (Anime Idol)", "GIRL", "", null, listOf("Anime", "Stylish"))
     )
 
+    fun initFromAssets(context: android.content.Context) {
+        if (cachedCatalog != null && cachedCatalog!!.isNotEmpty()) return
+        try {
+            val jsonStr = context.assets.open("avatar_catalog.json").bufferedReader().use { it.readText() }
+            val array = org.json.JSONArray(jsonStr)
+            val list = mutableListOf<Avatar>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val id = obj.getString("id")
+                val name = obj.optString("name", id)
+                val cat = obj.optString("category", "BOY")
+                val imgUrl = obj.optString("uploadThingUrl", obj.optString("imageUrl", ""))
+                val tagsArr = obj.optJSONArray("tags")
+                val tags = mutableListOf<String>()
+                if (tagsArr != null) {
+                    for (t in 0 until tagsArr.length()) tags.add(tagsArr.getString(t))
+                }
+                list.add(Avatar(id, name, cat, imgUrl, imgUrl, tags))
+            }
+            if (list.isNotEmpty()) {
+                cachedCatalog = list
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("AvatarRepository", "Failed to load bundled avatar_catalog: ${e.message}")
+        }
+    }
+
     fun resolveAvatarUrl(avatarId: String, serverUrl: String): String {
+        if (avatarId.isBlank()) return ""
+        if (avatarId.startsWith("http://") || avatarId.startsWith("https://")) {
+            return avatarId
+        }
+        val found = cachedCatalog?.find { it.id.equals(avatarId, ignoreCase = true) }
+        if (found != null && found.imageUrl.isNotBlank()) {
+            return found.imageUrl
+        }
         val base = sanitizeHttpUrl(serverUrl)
-        val isGirl = avatarId.startsWith("girl", ignoreCase = true)
-        val subfolder = if (isGirl) "girls" else "boys"
-        return "$base/assets/avatars/$subfolder/$avatarId.webp"
+        return "$base/api/profile/dp/$avatarId"
     }
 
     fun resolveAvatarThumbnailUrl(avatarId: String, serverUrl: String): String {
-        val base = sanitizeHttpUrl(serverUrl)
-        val isGirl = avatarId.startsWith("girl", ignoreCase = true)
-        val subfolder = if (isGirl) "girls" else "boys"
-        return "$base/assets/avatars/$subfolder/thumbs/$avatarId.webp"
+        return resolveAvatarUrl(avatarId, serverUrl)
     }
 
     suspend fun fetchAvatars(
@@ -60,7 +90,9 @@ class AvatarRepository private constructor() {
     ): List<Avatar> = withContext(Dispatchers.IO) {
         val base = sanitizeHttpUrl(serverUrl)
         val queryParams = mutableListOf<String>()
-        if (!category.isNullOrBlank()) queryParams.add("category=$category")
+        if (!category.isNullOrBlank() && !category.equals("ALL", ignoreCase = true)) {
+            queryParams.add("category=$category")
+        }
         if (!tag.isNullOrBlank() && !tag.equals("All", ignoreCase = true)) {
             queryParams.add("tag=$tag")
         }
@@ -90,7 +122,7 @@ class AvatarRepository private constructor() {
                         val name = item.optString("name", id)
                         val cat = item.optString("category", if (id.startsWith("girl")) "GIRL" else "BOY")
                         val imgUrl = item.optString("imageUrl", resolveAvatarUrl(id, serverUrl))
-                        val thumbUrl = item.optString("thumbnailUrl", resolveAvatarThumbnailUrl(id, serverUrl))
+                        val thumbUrl = item.optString("thumbnailUrl", imgUrl)
                         val tagsArray = item.optJSONArray("tags")
                         val tags = mutableListOf<String>()
                         if (tagsArray != null) {
@@ -100,23 +132,19 @@ class AvatarRepository private constructor() {
                         }
                         parsed.add(Avatar(id, name, cat, imgUrl, thumbUrl, tags))
                     }
-                    if (category.isNullOrBlank() && (tag.isNullOrBlank() || tag.equals("All", ignoreCase = true))) {
+                    if (parsed.isNotEmpty()) {
                         cachedCatalog = parsed
+                        return@withContext parsed
                     }
-                    return@withContext parsed
                 }
             }
         } catch (_: Exception) {}
 
-        // Fallback with resolved URLs
-        fallbackAvatars.filter { a ->
-            (category.isNullOrBlank() || a.category.equals(category, ignoreCase = true)) &&
+        // Fallback to loaded catalog or curated fallback
+        val source = cachedCatalog?.takeIf { it.isNotEmpty() } ?: fallbackAvatars
+        source.filter { a ->
+            (category.isNullOrBlank() || category.equals("ALL", ignoreCase = true) || a.category.equals(category, ignoreCase = true)) &&
             (tag.isNullOrBlank() || tag.equals("All", ignoreCase = true) || a.tags.any { it.equals(tag, ignoreCase = true) })
-        }.map { a ->
-            a.copy(
-                imageUrl = resolveAvatarUrl(a.id, serverUrl),
-                thumbnailUrl = resolveAvatarThumbnailUrl(a.id, serverUrl)
-            )
         }
     }
 
@@ -216,7 +244,8 @@ class AvatarRepository private constructor() {
                 val text = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
                 val json = JSONObject(text)
                 if (json.optBoolean("success", false)) {
-                    return@withContext json.optString("avatarUrl", null)
+                    val resUrl = json.optString("url", json.optString("avatarUrl", ""))
+                    if (resUrl.isNotBlank()) return@withContext resUrl
                 }
             }
         } catch (_: Exception) {}

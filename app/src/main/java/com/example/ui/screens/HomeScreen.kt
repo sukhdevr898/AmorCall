@@ -764,7 +764,10 @@ fun HomeScreen(
                                 .statusBarsPadding()
                         ) {
                             // Top Bar: Official Duora Logo, Notification Bell & Circular Profile Avatar
+                            val partnerAvatar = profile.partnerAvatarUrl
+                                ?: viewModel.resolveAvatarThumbnailUrl(profile.partnerAvatarId)
                             HomeHeader(
+                                avatarUrl = partnerAvatar,
                                 unreadNotificationCount = 1,
                                 isPartnerOnline = profile.partnerStatus.equals("online", ignoreCase = true),
                                 onNotificationClick = { showNotificationPanel = true },

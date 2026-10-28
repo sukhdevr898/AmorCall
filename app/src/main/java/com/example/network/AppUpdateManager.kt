@@ -264,3 +264,4 @@ class AppUpdateManager private constructor() {
         _installError.value = null
     }
 }
+

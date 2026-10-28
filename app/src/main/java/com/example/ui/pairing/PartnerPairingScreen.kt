@@ -126,9 +126,10 @@ fun PartnerPairingScreen(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         // Requester Avatar
+                        val reqAvatar = req.fromAvatarUrl ?: viewModel.resolveAvatarThumbnailUrl(req.fromAvatarId)
                         val reqPainter = rememberAsyncImagePainter(
                             model = ImageRequest.Builder(context)
-                                .data(viewModel.resolveAvatarThumbnailUrl(req.fromAvatarId))
+                                .data(reqAvatar)
                                 .crossfade(true)
                                 .build()
                         )
@@ -432,53 +433,136 @@ fun PartnerPairingScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // 6-Character PIN Entry Boxes (A-Z, 0-9)
-                val pinLength = 6
-                val cleanInput = inputCode.uppercase().filter { it.isLetterOrDigit() }.take(pinLength)
-                val isSelfCode = cleanInput.isNotEmpty() && cleanInput.equals(profile.myPairCode, ignoreCase = true)
-                val isCodeValid = cleanInput.length == pinLength && !isSelfCode
+                // Flexible 6 to 9-Character Partner Code Entry (A-Z, 0-9)
+                val cleanInput = inputCode.uppercase().filter { it.isLetterOrDigit() }.take(9)
+                val isSelfCode = cleanInput.isNotEmpty() && cleanInput.equals(profile.myPairCode.trim(), ignoreCase = true)
+                val isCodeValid = cleanInput.length in 6..9 && !isSelfCode
 
-                BasicTextField(
-                    value = cleanInput,
-                    onValueChange = { inputCode = it.uppercase().filter { ch -> ch.isLetterOrDigit() }.take(pinLength) },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                    decorationBox = {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.5.dp,
+                        when {
+                            isSelfCode -> Color(0xFFEF4444)
+                            cleanInput.length in 6..9 -> DuoraHotPink
+                            cleanInput.isNotEmpty() -> DuoraHotPink.copy(alpha = 0.5f)
+                            else -> Color(0xFFEADBEE)
+                        }
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            for (i in 0 until pinLength) {
-                                val char = cleanInput.getOrNull(i)?.toString() ?: ""
-                                val isFocused = cleanInput.length == i
-                                Box(
-                                    modifier = Modifier
-                                        .size(46.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(Color.White)
-                                        .border(
-                                            width = if (isFocused) 2.dp else 1.dp,
-                                            color = when {
-                                                isSelfCode -> Color(0xFFEF4444)
-                                                isFocused -> DuoraHotPink
-                                                char.isNotEmpty() -> DuoraHotPink.copy(alpha = 0.6f)
-                                                else -> Color(0xFFEADBEE)
-                                            },
-                                            shape = RoundedCornerShape(12.dp)
-                                        ),
-                                    contentAlignment = Alignment.Center
+                            Text(
+                                text = "#",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = DuoraHotPink,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            BasicTextField(
+                                value = cleanInput,
+                                onValueChange = { inputCode = it.uppercase().filter { ch -> ch.isLetterOrDigit() }.take(9) },
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("partner_code_input"),
+                                decorationBox = { innerTextField ->
+                                    if (cleanInput.isEmpty()) {
+                                        Text(
+                                            text = "Enter 6-9 digit code",
+                                            fontSize = 18.sp,
+                                            color = Color(0xFFA19BA6),
+                                            fontFamily = FontFamily.Monospace,
+                                            letterSpacing = 2.sp
+                                        )
+                                    }
+                                    innerTextField()
+                                },
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 3.sp,
+                                    color = if (isSelfCode) Color(0xFFEF4444) else Color(0xFF21102E)
+                                )
+                            )
+
+                            // Quick Paste / Clear action
+                            if (cleanInput.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { inputCode = "" },
+                                    modifier = Modifier.size(32.dp)
                                 ) {
-                                    Text(
-                                        text = char,
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSelfCode) Color(0xFFEF4444) else Color(0xFF21102E),
-                                        fontFamily = FontFamily.Monospace
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Clear",
+                                        tint = Color(0xFF89818E),
+                                        modifier = Modifier.size(18.dp)
                                     )
+                                }
+                            } else {
+                                OutlinedButton(
+                                    onClick = {
+                                        val clipManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clipText = clipManager.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                                        val extracted = QrCodeGenerator.parseScannedCode(clipText).take(9)
+                                        if (extracted.isNotBlank()) {
+                                            inputCode = extracted
+                                            Toast.makeText(context, "Pasted #$extracted", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("Paste", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DuoraHotPink)
                                 }
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = when {
+                                    isSelfCode -> "⚠️ Cannot pair with your own code"
+                                    cleanInput.length in 6..9 -> "✓ Valid partner code format"
+                                    cleanInput.isNotEmpty() -> "Need ${6 - cleanInput.length} more characters"
+                                    else -> "Supports 6 to 9 alphanumeric characters"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = when {
+                                    isSelfCode -> Color(0xFFEF4444)
+                                    cleanInput.length in 6..9 -> Color(0xFF10B981)
+                                    else -> Color(0xFF89818E)
+                                }
+                            )
+
+                            Text(
+                                text = "${cleanInput.length}/9",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (cleanInput.length in 6..9) DuoraHotPink else Color(0xFF89818E)
+                            )
+                        }
                     }
-                )
+                }
 
                 if (isSelfCode) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -492,11 +576,11 @@ fun PartnerPairingScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Send Request Button (Enabled ONLY when code is exactly 6 valid characters)
+                // Send Request Button (Enabled when code is 6 to 9 valid characters)
                 Button(
                     onClick = {
                         if (!isCodeValid) {
-                            Toast.makeText(context, "Please enter all 6 partner code characters", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Please enter 6 to 9 partner code characters", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         isSendingRequest = true
@@ -758,118 +842,31 @@ fun PartnerPairingScreen(
                     .padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Animated neon viewfinder frame
-                val animProgress = remember { Animatable(0f) }
-                LaunchedEffect(Unit) {
-                    animProgress.animateTo(
-                        targetValue = 1f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(2000, easing = LinearEasing),
-                            repeatMode = RepeatMode.Reverse
-                        )
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(240.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xFF1E1022))
-                        .border(
-                            width = 3.dp,
-                            brush = Brush.sweepGradient(
-                                colors = listOf(DuoraHotPink, Color(0xFF8B5CF6), DuoraHotPink)
-                            ),
-                            shape = RoundedCornerShape(24.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        if (isVerifyingQr) {
-                            CircularProgressIndicator(
-                                color = DuoraHotPink,
-                                strokeWidth = 3.dp,
-                                modifier = Modifier.size(42.dp)
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                text = "Verifying QR Code...",
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.QrCodeScanner,
-                                contentDescription = "Scan",
-                                tint = DuoraHotPink,
-                                modifier = Modifier.size(52.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Camera Scanner Active",
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                // Real CameraX QR Scanner with live ZXing barcode decoding & gallery photo picker
+                CameraQrScanner(
+                    isProcessing = isVerifyingQr,
+                    onQrDetected = { payload ->
+                        if (!isVerifyingQr) {
+                            isVerifyingQr = true
+                            viewModel.scanQrPayload(payload) { success, msg, partnerCode, partnerName, partnerAvatarId, partnerAvatarUrl, blueTick, greenTick ->
+                                isVerifyingQr = false
+                                if (success && partnerCode != null) {
+                                    recognizedPartner = PairingRecognizedPartner(
+                                        code = partnerCode,
+                                        name = partnerName ?: "Partner",
+                                        avatarId = partnerAvatarId ?: "girl_001",
+                                        avatarUrl = partnerAvatarUrl,
+                                        blueTick = blueTick,
+                                        greenTick = greenTick
+                                    )
+                                    Toast.makeText(context, "Partner Recognized! 💕", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Align partner's Duora QR code within the frame",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF21102E)
                 )
-
-                Text(
-                    text = "Codes are securely verified with Duora Server",
-                    fontSize = 11.sp,
-                    color = Color(0xFF89818E)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Gallery & Flash & Manual QR Input
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            Toast.makeText(context, "Scanning photo from album...", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(Color.White)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Image,
-                            contentDescription = "Gallery",
-                            tint = DuoraHotPink
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-                            Toast.makeText(context, "Camera flashlight toggled", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(Color.White)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FlashOn,
-                            contentDescription = "Flash",
-                            tint = Color(0xFFEAB308)
-                        )
-                    }
-                }
 
                 Spacer(modifier = Modifier.height(20.dp))
 

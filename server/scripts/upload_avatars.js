@@ -62,7 +62,7 @@ const zipSpecs = [
 
 async function main() {
   console.log('🚀 Starting Avatar Extraction and UploadThing Sync...');
-
+  
   if (!fs.existsSync(ASSETS_DIR)) {
     fs.mkdirSync(ASSETS_DIR, { recursive: true });
   }

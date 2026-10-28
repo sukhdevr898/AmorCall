@@ -52,9 +52,9 @@ sealed class SignalingEvent {
         val greenTick: Boolean = false
     ) : SignalingEvent()
     data class AccountBlocked(val message: String) : SignalingEvent()
-    data class PartnerAvatarUpdated(val partnerCode: String, val avatarId: String) : SignalingEvent()
-    data class PairingRequestReceived(val fromCode: String, val fromName: String, val fromAvatarId: String) : SignalingEvent()
-    data class PairingSuccess(val partnerCode: String, val partnerName: String, val partnerAvatarId: String) : SignalingEvent()
+    data class PartnerAvatarUpdated(val partnerCode: String, val avatarId: String, val avatarUrl: String? = null) : SignalingEvent()
+    data class PairingRequestReceived(val fromCode: String, val fromName: String, val fromAvatarId: String, val fromAvatarUrl: String? = null) : SignalingEvent()
+    data class PairingSuccess(val partnerCode: String, val partnerName: String, val partnerAvatarId: String, val partnerAvatarUrl: String? = null) : SignalingEvent()
     data class PairingDeclined(val fromCode: String) : SignalingEvent()
     data class AudioChunk(val from: String, val audioData: String) : SignalingEvent()
     data class VideoFrame(val from: String, val frameData: String) : SignalingEvent()
@@ -313,24 +313,27 @@ class SignalingClient private constructor() {
                 "partner_avatar_updated" -> {
                     val partnerCode = json.optString("partnerCode", "")
                     val avatarId = json.optString("partnerAvatarId", "")
+                    val avatarUrl = json.optString("partnerAvatarUrl", "").takeIf { it.isNotBlank() }
                     scope.launch {
-                        _events.emit(SignalingEvent.PartnerAvatarUpdated(partnerCode, avatarId))
+                        _events.emit(SignalingEvent.PartnerAvatarUpdated(partnerCode, avatarId, avatarUrl))
                     }
                 }
                 "pairing_request_received" -> {
                     val fromCode = json.optString("fromCode", "")
                     val fromName = json.optString("fromName", "Partner")
                     val fromAvatarId = json.optString("fromAvatarId", "boy_001")
+                    val fromAvatarUrl = json.optString("fromAvatarUrl", "").takeIf { it.isNotBlank() }
                     scope.launch {
-                        _events.emit(SignalingEvent.PairingRequestReceived(fromCode, fromName, fromAvatarId))
+                        _events.emit(SignalingEvent.PairingRequestReceived(fromCode, fromName, fromAvatarId, fromAvatarUrl))
                     }
                 }
                 "pairing_success" -> {
                     val partnerCode = json.optString("partnerCode", "")
                     val partnerName = json.optString("partnerName", "Partner")
                     val partnerAvatarId = json.optString("partnerAvatarId", "girl_001")
+                    val partnerAvatarUrl = json.optString("partnerAvatarUrl", "").takeIf { it.isNotBlank() }
                     scope.launch {
-                        _events.emit(SignalingEvent.PairingSuccess(partnerCode, partnerName, partnerAvatarId))
+                        _events.emit(SignalingEvent.PairingSuccess(partnerCode, partnerName, partnerAvatarId, partnerAvatarUrl))
                     }
                 }
                 "pairing_request_declined" -> {

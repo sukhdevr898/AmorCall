@@ -41,6 +41,7 @@ import com.example.ui.theme.DuoraSuccess
  */
 @Composable
 fun HomeHeader(
+    avatarUrl: String? = null,
     unreadNotificationCount: Int = 1,
     isPartnerOnline: Boolean = true,
     onNotificationClick: () -> Unit,
@@ -122,8 +123,11 @@ fun HomeHeader(
                     .testTag("header_profile_avatar"),
                 contentAlignment = Alignment.Center
             ) {
+                val painter = coil.compose.rememberAsyncImagePainter(
+                    model = avatarUrl ?: R.drawable.avatar_partner_demo
+                )
                 Image(
-                    painter = painterResource(id = R.drawable.avatar_partner_demo),
+                    painter = painter,
                     contentDescription = "Partner Profile",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier

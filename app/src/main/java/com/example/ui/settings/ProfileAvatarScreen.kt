@@ -144,7 +144,7 @@ fun ProfileAvatarScreen(
                 .align(Alignment.CenterHorizontally)
                 .size(110.dp)
         ) {
-            val previewUrl = customPhotoUri ?: viewModel.resolveAvatarUrl(selectedAvatarId)
+            val previewUrl = customPhotoUri ?: profile.avatarUrl ?: viewModel.resolveAvatarUrl(selectedAvatarId)
             val painter = rememberAsyncImagePainter(
                 model = ImageRequest.Builder(context)
                     .data(previewUrl)
@@ -454,6 +454,15 @@ fun ProfileAvatarScreen(
                 viewModel.updateSelectedAvatar(selectedAvatarId) { success ->
                     if (customPhotoUri != null) {
                         viewModel.updateAvatarUri(customPhotoUri.toString())
+                        try {
+                            val stream = context.contentResolver.openInputStream(customPhotoUri!!)
+                            val bytes = stream?.readBytes()
+                            stream?.close()
+                            if (bytes != null) {
+                                val b64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                                viewModel.uploadDirectDp(b64, "image/jpeg") { _, _ -> }
+                            }
+                        } catch (_: Exception) {}
                     }
                     Toast.makeText(context, "Profile updated ❤️", Toast.LENGTH_SHORT).show()
                     onBack()

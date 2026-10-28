@@ -83,7 +83,8 @@ fun AvatarSelectionScreen(
     val tags = listOf("All", "Cute", "Stylish", "Anime", "Minimal")
 
     LaunchedEffect(selectedCategory, selectedTag) {
-        viewModel.loadAvatars(selectedCategory, selectedTag)
+        val cat = if (selectedCategory == "ALL") null else selectedCategory
+        viewModel.loadAvatars(cat, selectedTag)
     }
 
     Column(
@@ -111,7 +112,13 @@ fun AvatarSelectionScreen(
             }
             Column {
                 Text(
-                    text = if (selectedCategory == "BOY") "Avatar Selection (Boys)" else "Avatar Selection (Girls)",
+                    text = when (selectedCategory) {
+                        "BOY" -> "Boy Avatars (22)"
+                        "GIRL" -> "Girl Avatars (20)"
+                        "CIRCULAR" -> "Circular Avatars (24)"
+                        "ADMIN" -> "Admin Avatars (4)"
+                        else -> "All Avatars (70)"
+                    },
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF21102E)
@@ -124,48 +131,38 @@ fun AvatarSelectionScreen(
             }
         }
 
-        // Category Switch Pills (Boys / Girls)
+        // Category Switch Pills (All / Boys / Girls / Circular / Admin)
+        val categories = listOf(
+            "ALL" to "All",
+            "BOY" to "Boys",
+            "GIRL" to "Girls",
+            "CIRCULAR" to "Circular",
+            "ADMIN" to "Admin"
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 6.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFF2E6ED))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (selectedCategory == "BOY") Color.White else Color.Transparent)
-                    .clickable { selectedCategory = "BOY" }
-                    .padding(vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Boy Avatars",
-                    fontSize = 14.sp,
-                    fontWeight = if (selectedCategory == "BOY") FontWeight.Bold else FontWeight.Medium,
-                    color = if (selectedCategory == "BOY") DuoraHotPink else Color(0xFF89818E)
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (selectedCategory == "GIRL") Color.White else Color.Transparent)
-                    .clickable { selectedCategory = "GIRL" }
-                    .padding(vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Girl Avatars",
-                    fontSize = 14.sp,
-                    fontWeight = if (selectedCategory == "GIRL") FontWeight.Bold else FontWeight.Medium,
-                    color = if (selectedCategory == "GIRL") DuoraHotPink else Color(0xFF89818E)
-                )
+            categories.forEach { (catId, catLabel) ->
+                val isSelected = selectedCategory == catId
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (isSelected) DuoraHotPink else Color(0xFFF2E6ED))
+                        .clickable { selectedCategory = catId }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = catLabel,
+                        fontSize = 13.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) Color.White else Color(0xFF89818E)
+                    )
+                }
             }
         }
 

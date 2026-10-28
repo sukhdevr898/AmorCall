@@ -312,7 +312,10 @@ fun AppNavigation(
                         MemoriesScreen(viewModel = viewModel)
                     }
                     AppScreen.PAIRING -> {
-                        PairingScreen(viewModel = viewModel)
+                        com.example.ui.pairing.PartnerPairingScreen(
+                            viewModel = viewModel,
+                            onBack = { viewModel.navigateTo(AppScreen.DASHBOARD) }
+                        )
                     }
                     AppScreen.DEVELOPER -> {
                         DeveloperScreen(viewModel = viewModel)

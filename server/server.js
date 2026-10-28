@@ -110,6 +110,21 @@ async function initDatabaseTables() {
       ALTER TABLE couples ADD COLUMN IF NOT EXISTS green_tick BOOLEAN DEFAULT FALSE;
     `).catch(() => {});
 
+    // 1.5. Pairing Requests table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS pairing_requests (
+        id VARCHAR(64) PRIMARY KEY,
+        from_code VARCHAR(32) NOT NULL,
+        to_code VARCHAR(32) NOT NULL,
+        from_name VARCHAR(128),
+        from_avatar_id VARCHAR(64),
+        from_avatar_url TEXT DEFAULT '',
+        status VARCHAR(20) DEFAULT 'PENDING',
+        created_at BIGINT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // 2. Call Logs table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS call_logs (
@@ -149,52 +164,69 @@ async function initDatabaseTables() {
       );
     `);
 
-    console.log("✅ PostgreSQL tables initialized: couples, call_logs, shared_notes, chat_messages");
+    console.log("✅ PostgreSQL tables initialized: couples, pairing_requests, call_logs, shared_notes, chat_messages");
   } catch (err) {
     console.error("Failed to create tables in PostgreSQL:", err.message);
   }
 }
 
 // Data access operations
-async function dbSaveCouple(pairCode, partnerCode, userName, avatarId) {
+async function dbSaveCouple(pairCode, partnerCode, userName, avatarId, avatarUrl) {
+  let entry = memoryClients.get(pairCode) || { sockets: new Set() };
+  entry.partnerCode = partnerCode;
+  if (userName) entry.userName = userName;
+  if (avatarId) entry.avatarId = avatarId;
+  if (avatarUrl) entry.avatarUrl = avatarUrl;
+  memoryClients.set(pairCode, entry);
+
   if (pool && isDbConnected) {
     try {
       await pool.query(`
-        INSERT INTO couples (pair_code, partner_code, user_name, avatar_id, last_seen, updated_at)
-        VALUES ($1, $2, $3, $4, $5, NOW())
+        INSERT INTO couples (pair_code, partner_code, user_name, avatar_id, avatar_url, last_seen, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW())
         ON CONFLICT (pair_code) DO UPDATE
         SET partner_code = COALESCE(EXCLUDED.partner_code, couples.partner_code),
-            user_name = COALESCE(EXCLUDED.user_name, couples.user_name),
-            avatar_id = COALESCE(EXCLUDED.avatar_id, couples.avatar_id),
+            user_name = COALESCE(NULLIF(EXCLUDED.user_name, ''), couples.user_name),
+            avatar_id = COALESCE(NULLIF(EXCLUDED.avatar_id, ''), couples.avatar_id),
+            avatar_url = COALESCE(NULLIF(EXCLUDED.avatar_url, ''), couples.avatar_url),
             last_seen = EXCLUDED.last_seen,
             updated_at = NOW();
-      `, [pairCode, partnerCode, userName || "You", avatarId || "boy_001", Date.now()]);
+      `, [pairCode, partnerCode, userName || "You", avatarId || "boy_001", avatarUrl || "", Date.now()]);
     } catch (e) {
       console.warn("DB save couple error:", e.message);
     }
   }
 }
 
-async function dbUpdateAvatar(pairCode, avatarId) {
+async function dbUpdateAvatar(pairCode, avatarId, avatarUrl) {
+  let entry = memoryClients.get(pairCode);
+  if (!entry) {
+    entry = { sockets: new Set(), partnerCode: "", connectedAt: Date.now(), userName: "You", avatarId, avatarUrl: avatarUrl || "" };
+    memoryClients.set(pairCode, entry);
+  } else {
+    entry.avatarId = avatarId;
+    if (avatarUrl) entry.avatarUrl = avatarUrl;
+  }
+
   if (pool && isDbConnected) {
     try {
-      await pool.query(`
-        UPDATE couples SET avatar_id = $1, updated_at = NOW() WHERE pair_code = $2;
-      `, [avatarId, pairCode]);
+      if (avatarUrl) {
+        await pool.query(`
+          UPDATE couples SET avatar_id = $1, avatar_url = $2, updated_at = NOW() WHERE pair_code = $3;
+        `, [avatarId, avatarUrl, pairCode]);
+      } else {
+        await pool.query(`
+          UPDATE couples SET avatar_id = $1, updated_at = NOW() WHERE pair_code = $2;
+        `, [avatarId, pairCode]);
+      }
     } catch (e) {
       console.warn("DB update avatar error:", e.message);
     }
   }
-  let entry = memoryClients.get(pairCode);
-  if (!entry) {
-    entry = { sockets: new Set(), partnerCode: "", connectedAt: Date.now(), userName: "You", avatarId };
-    memoryClients.set(pairCode, entry);
-  } else {
-    entry.avatarId = avatarId;
-  }
 }
 
 async function dbGetProfile(pairCode) {
+  let prof = null;
   if (pool && isDbConnected) {
     try {
       const res = await pool.query(`
@@ -204,21 +236,33 @@ async function dbGetProfile(pairCode) {
                COALESCE(blue_tick, FALSE) AS "blueTick", COALESCE(green_tick, FALSE) AS "greenTick"
         FROM couples WHERE pair_code = $1;
       `, [pairCode]);
-      if (res.rows.length > 0) return res.rows[0];
+      if (res.rows.length > 0) prof = res.rows[0];
     } catch (e) {}
   }
-  const entry = memoryClients.get(pairCode);
-  return {
-    pairCode,
-    partnerCode: entry?.partnerCode || "",
-    userName: entry?.userName || "You",
-    partnerStatus: "Thinking of you always ❤️",
-    avatarId: entry?.avatarId || "boy_001",
-    avatarUrl: entry?.avatarUrl || "",
-    isBlocked: !!entry?.isBlocked,
-    blueTick: !!entry?.blueTick,
-    greenTick: !!entry?.greenTick
-  };
+  if (!prof) {
+    const entry = memoryClients.get(pairCode);
+    prof = {
+      pairCode,
+      partnerCode: entry?.partnerCode || "",
+      userName: entry?.userName || "You",
+      partnerStatus: "Thinking of you always ❤️",
+      avatarId: entry?.avatarId || "boy_001",
+      avatarUrl: entry?.avatarUrl || "",
+      isBlocked: !!entry?.isBlocked,
+      blueTick: !!entry?.blueTick,
+      greenTick: !!entry?.greenTick
+    };
+  }
+
+  // Auto-resolve avatarUrl from catalog if missing or empty
+  if (!prof.avatarUrl) {
+    const match = getActiveCatalog().find(a => a.id === prof.avatarId);
+    if (match && (match.uploadThingUrl || match.imageUrl)) {
+      prof.avatarUrl = match.uploadThingUrl || match.imageUrl;
+    }
+  }
+
+  return prof;
 }
 
 async function dbSaveCallLog(id, fromCode, toCode, callType, duration, createdAt) {
@@ -539,6 +583,9 @@ const server = http.createServer(async (req, res) => {
         code: prof.pairCode,
         name: prof.userName,
         avatarId: prof.avatarId,
+        avatarUrl: prof.avatarUrl || "",
+        blueTick: !!prof.blueTick,
+        greenTick: !!prof.greenTick,
         status: prof.partnerStatus,
         isPaired: !!prof.partnerCode
       }
@@ -551,6 +598,7 @@ const server = http.createServer(async (req, res) => {
     const myCode = (body.myCode || "").toUpperCase().trim();
     const myName = (body.myName || "You").trim();
     const myAvatarId = (body.myAvatarId || "boy_001").trim();
+    const myAvatarUrl = (body.myAvatarUrl || "").trim();
     const partnerCode = (body.partnerCode || "").toUpperCase().trim();
 
     if (!myCode || !partnerCode) {
@@ -562,18 +610,40 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ success: false, error: "Cannot pair with yourself" }));
     }
 
-    pendingPairingRequests.set(partnerCode, {
+    const reqData = {
       fromCode: myCode,
       fromName: myName,
       fromAvatarId: myAvatarId,
+      fromAvatarUrl: myAvatarUrl,
       createdAt: Date.now()
-    });
+    };
+
+    pendingPairingRequests.set(partnerCode, reqData);
+
+    if (pool && isDbConnected) {
+      try {
+        const reqId = `req_${myCode}_${partnerCode}`;
+        await pool.query(`
+          INSERT INTO pairing_requests (id, from_code, to_code, from_name, from_avatar_id, from_avatar_url, status, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7)
+          ON CONFLICT (id) DO UPDATE
+          SET from_name = EXCLUDED.from_name,
+              from_avatar_id = EXCLUDED.from_avatar_id,
+              from_avatar_url = EXCLUDED.from_avatar_url,
+              status = 'PENDING',
+              created_at = EXCLUDED.created_at;
+        `, [reqId, myCode, partnerCode, myName, myAvatarId, myAvatarUrl, Date.now()]);
+      } catch (e) {
+        console.warn("DB pairing request insert warning:", e.message);
+      }
+    }
 
     forwardToTarget(partnerCode, {
       type: "pairing_request_received",
       fromCode: myCode,
       fromName: myName,
-      fromAvatarId: myAvatarId
+      fromAvatarId: myAvatarId,
+      fromAvatarUrl: myAvatarUrl
     });
 
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -597,6 +667,15 @@ const server = http.createServer(async (req, res) => {
 
     pendingPairingRequests.delete(myCode);
 
+    if (pool && isDbConnected) {
+      try {
+        const reqId = `req_${partnerCode}_${myCode}`;
+        await pool.query(`
+          UPDATE pairing_requests SET status = $1, updated_at = NOW() WHERE id = $2;
+        `, [action === "ACCEPT" ? "ACCEPTED" : "DECLINED", reqId]);
+      } catch (e) {}
+    }
+
     if (action === "DECLINE") {
       forwardToTarget(partnerCode, {
         type: "pairing_request_declined",
@@ -610,14 +689,15 @@ const server = http.createServer(async (req, res) => {
       const myProfile = await dbGetProfile(myCode);
       const partnerProfile = await dbGetProfile(partnerCode);
 
-      await dbSaveCouple(myCode, partnerCode, myProfile.userName, myProfile.avatarId);
-      await dbSaveCouple(partnerCode, myCode, partnerProfile.userName, partnerProfile.avatarId);
+      await dbSaveCouple(myCode, partnerCode, myProfile.userName, myProfile.avatarId, myProfile.avatarUrl);
+      await dbSaveCouple(partnerCode, myCode, partnerProfile.userName, partnerProfile.avatarId, partnerProfile.avatarUrl);
 
       const mutualPayload = {
         type: "pairing_success",
         partnerCode: myCode,
         partnerName: myProfile.userName,
-        partnerAvatarId: myProfile.avatarId
+        partnerAvatarId: myProfile.avatarId,
+        partnerAvatarUrl: myProfile.avatarUrl || ""
       };
       forwardToTarget(partnerCode, mutualPayload);
 
@@ -627,23 +707,68 @@ const server = http.createServer(async (req, res) => {
         status: "ACCEPTED",
         partnerCode,
         partnerName: partnerProfile.userName,
-        partnerAvatarId: partnerProfile.avatarId
+        partnerAvatarId: partnerProfile.avatarId,
+        partnerAvatarUrl: partnerProfile.avatarUrl || ""
       }));
     }
   }
 
-  // 7. Partner Pairing Status
+  // 7. Partner Pairing Status & Unlink
   if (pathname === "/api/pairing/status" && req.method === "GET") {
     const code = (parsedUrl.query.code || "").toUpperCase().trim();
-    const pending = pendingPairingRequests.get(code);
+    let pending = pendingPairingRequests.get(code) || null;
+
+    if (!pending && pool && isDbConnected) {
+      try {
+        const pr = await pool.query(`
+          SELECT from_code AS "fromCode", from_name AS "fromName", from_avatar_id AS "fromAvatarId",
+                 from_avatar_url AS "fromAvatarUrl", created_at AS "createdAt"
+          FROM pairing_requests WHERE to_code = $1 AND status = 'PENDING'
+          ORDER BY created_at DESC LIMIT 1;
+        `, [code]);
+        if (pr.rows.length > 0) pending = pr.rows[0];
+      } catch (e) {}
+    }
+
     const prof = await dbGetProfile(code);
+    let partnerInfo = null;
+    if (prof.partnerCode) {
+      const pProf = await dbGetProfile(prof.partnerCode);
+      partnerInfo = {
+        code: pProf.pairCode,
+        name: pProf.userName,
+        avatarId: pProf.avatarId,
+        avatarUrl: pProf.avatarUrl || "",
+        blueTick: !!pProf.blueTick,
+        greenTick: !!pProf.greenTick
+      };
+    }
+
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({
       success: true,
       isPaired: !!(prof && prof.partnerCode),
       partnerCode: prof?.partnerCode || "",
+      partner: partnerInfo,
       pendingRequest: pending || null
     }));
+  }
+
+  if (pathname === "/api/pairing/unlink" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const myCode = (body.myCode || "").toUpperCase().trim();
+    const prof = await dbGetProfile(myCode);
+    const partnerCode = prof.partnerCode;
+
+    await dbSaveCouple(myCode, "", prof.userName, prof.avatarId, prof.avatarUrl);
+    if (partnerCode) {
+      const pProf = await dbGetProfile(partnerCode);
+      await dbSaveCouple(partnerCode, "", pProf.userName, pProf.avatarId, pProf.avatarUrl);
+      forwardToTarget(partnerCode, { type: "partner_unlinked", fromCode: myCode });
+    }
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify({ success: true, message: "Unlinked successfully" }));
   }
 
   if (pathname === "/health" || pathname === "/api/v1/health") {

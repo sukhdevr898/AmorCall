@@ -128,7 +128,7 @@ function getCatalog() {
 // -------------------------------------------------------------
 async function uploadToUploadThing(fileBuffer, fileName, mimeType = "image/png") {
   const safeName = `dp_${Date.now()}_${path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, "")}`;
-
+  
   if (utapiClient) {
     try {
       const fileObj = new File([fileBuffer], safeName, { type: mimeType });
@@ -159,31 +159,44 @@ async function uploadToUploadThing(fileBuffer, fileName, mimeType = "image/png")
   };
 }
 
-// Generate stylish SVG QR Code
-function generateQrSvg(code) {
-  const safeCode = (code || "DUORA").toUpperCase().trim().slice(0, 8);
+let qrcodeLib = null;
+try {
+  qrcodeLib = require("qrcode");
+} catch (_) {}
+
+// Generate real, standard ISO-18004 SVG QR Code
+async function generateQrSvg(code) {
+  const cleanCode = (code || "DUORA").toUpperCase().trim();
+  const payload = `DUORA:PAIR:${cleanCode}`;
+  if (qrcodeLib) {
+    try {
+      const svg = await qrcodeLib.toString(payload, {
+        type: "svg",
+        errorCorrectionLevel: "M",
+        margin: 2,
+        color: {
+          dark: "#21102E",
+          light: "#FFFFFF"
+        }
+      });
+      return svg;
+    } catch (e) {
+      console.warn("[QR] SVG generation fallback:", e.message);
+    }
+  }
+  // Standard fallback SVG with embedded code text
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 250" width="250" height="250">
     <rect width="250" height="250" fill="#ffffff" rx="16"/>
-    <rect x="20" y="20" width="60" height="60" fill="#21102E" rx="8"/>
-    <rect x="30" y="30" width="40" height="40" fill="#ffffff" rx="4"/>
-    <rect x="40" y="40" width="20" height="20" fill="#21102E" rx="2"/>
-    <rect x="170" y="20" width="60" height="60" fill="#21102E" rx="8"/>
-    <rect x="180" y="30" width="40" height="40" fill="#ffffff" rx="4"/>
-    <rect x="190" y="40" width="20" height="20" fill="#21102E" rx="2"/>
-    <rect x="20" y="170" width="60" height="60" fill="#21102E" rx="8"/>
-    <rect x="30" y="180" width="40" height="40" fill="#ffffff" rx="4"/>
-    <rect x="40" y="190" width="20" height="20" fill="#21102E" rx="2"/>
-    <circle cx="95" cy="50" r="4" fill="#21102E"/>
-    <circle cx="115" cy="50" r="4" fill="#21102E"/>
-    <circle cx="135" cy="50" r="4" fill="#21102E"/>
-    <circle cx="155" cy="50" r="4" fill="#21102E"/>
-    <circle cx="50" cy="95" r="4" fill="#21102E"/>
-    <circle cx="50" cy="115" r="4" fill="#21102E"/>
-    <circle cx="50" cy="135" r="4" fill="#21102E"/>
-    <circle cx="50" cy="155" r="4" fill="#21102E"/>
-    <rect x="90" y="90" width="70" height="70" fill="#FFF0F5" rx="35" stroke="#FF2D8D" stroke-width="2"/>
-    <path d="M125 135 C115 125 105 115 105 105 C105 97 113 90 120 95 C123 97 125 100 125 100 C125 100 127 97 130 95 C137 90 145 97 145 105 C145 115 135 125 125 135 Z" fill="#FF2D8D"/>
-    <text x="125" y="240" font-family="monospace" font-size="13" font-weight="bold" fill="#21102E" text-anchor="middle">#${safeCode}</text>
+    <rect x="25" y="25" width="50" height="50" fill="#21102E" rx="8"/>
+    <rect x="35" y="35" width="30" height="30" fill="#ffffff" rx="4"/>
+    <rect x="42" y="42" width="16" height="16" fill="#21102E" rx="2"/>
+    <rect x="175" y="25" width="50" height="50" fill="#21102E" rx="8"/>
+    <rect x="185" y="35" width="30" height="30" fill="#ffffff" rx="4"/>
+    <rect x="192" y="42" width="16" height="16" fill="#21102E" rx="2"/>
+    <rect x="25" y="175" width="50" height="50" fill="#21102E" rx="8"/>
+    <rect x="35" y="185" width="30" height="30" fill="#ffffff" rx="4"/>
+    <rect x="42" y="192" width="16" height="16" fill="#21102E" rx="2"/>
+    <text x="125" y="130" font-family="monospace" font-size="20" font-weight="bold" fill="#FF2D8D" text-anchor="middle">#${cleanCode}</text>
   </svg>`;
 }
 
@@ -325,7 +338,7 @@ function getAdminHtml(baseUrl) {
     .btn-green { background: rgba(34, 197, 94, 0.15); color: var(--green-tick); border: 1px solid rgba(34,197,94,0.4); }
     .btn-danger { background: rgba(239, 68, 68, 0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.4); }
     .btn-outline { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--card-border); }
-
+    
     /* Users Grid / Card View (Mobile Friendly) */
     .user-list {
       display: grid;
@@ -758,7 +771,7 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
   // 1. Pairing QR Generator (SVG)
   if (pathname.startsWith("/api/pairing/qr/")) {
     const code = pathname.replace(/^\/api\/pairing\/qr\//, "").replace(/\.svg$/, "").trim();
-    const svg = generateQrSvg(code);
+    const svg = await generateQrSvg(code);
     res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=86400" });
     return res.end(svg);
   }
@@ -772,26 +785,49 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
       return res.end(JSON.stringify({ success: false, error: "Missing myCode" }));
     }
     const token = `DUORA-${code}-${Date.now()}`;
+    const svg = await generateQrSvg(code);
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({
       success: true,
       code,
       token,
+      payload: `DUORA:PAIR:${code}`,
       expiresAt: Date.now() + 600000,
-      qrSvg: generateQrSvg(code)
+      qrSvg: svg
     }));
   }
 
   // 1.2. QR Scan & Verification API
   if (pathname === "/api/pairing/qr/scan" && req.method === "POST") {
     const body = await readJsonBody(req);
-    let target = (body.token || body.code || "").toUpperCase().trim();
-    if (target.startsWith("DUORA-")) {
-      target = target.split("-")[1] || target;
-    }
-    target = target.replace(/[^A-Z0-9]/g, "").slice(0, 6);
+    let raw = (body.qrPayload || body.token || body.code || body.partnerCode || "").trim();
 
-    if (!target) {
+    // Check if payload is a JSON string
+    if (raw.startsWith("{") && raw.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(raw);
+        raw = parsed.code || parsed.pairCode || parsed.partnerCode || raw;
+      } catch (_) {}
+    }
+
+    // Strip scheme prefixes
+    raw = raw.replace(/^DUORA:PAIR:/i, "")
+             .replace(/^duora:\/\/pair\//i, "")
+             .replace(/^DUORA-/i, "")
+             .replace(/^#/, "");
+
+    // If timestamp suffix exists (e.g. CODE-1712345678), remove timestamp
+    if (raw.includes("-")) {
+      const parts = raw.split("-");
+      if (parts.length > 1 && /^\d{9,}$/.test(parts[parts.length - 1])) {
+        parts.pop();
+        raw = parts.join("");
+      }
+    }
+
+    const target = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+
+    if (!target || target.length < 4) {
       res.writeHead(400, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ success: false, error: "Invalid QR pairing payload" }));
     }
@@ -802,14 +838,29 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
       return res.end(JSON.stringify({ success: false, error: "This partner account has been suspended" }));
     }
 
+    // Resolve DP url from catalog if empty
+    let partnerDpUrl = prof.avatarUrl || "";
+    if (!partnerDpUrl) {
+      const match = liveCatalog.find(a => a.id === prof.avatarId);
+      if (match && (match.uploadThingUrl || match.imageUrl)) {
+        partnerDpUrl = match.uploadThingUrl || match.imageUrl;
+      }
+    }
+
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({
       success: true,
+      partnerCode: prof.pairCode,
+      partnerName: prof.userName,
+      partnerAvatarId: prof.avatarId,
+      partnerAvatarUrl: partnerDpUrl,
+      blueTick: !!prof.blueTick,
+      greenTick: !!prof.greenTick,
       partner: {
         code: prof.pairCode,
         name: prof.userName,
         avatarId: prof.avatarId,
-        avatarUrl: prof.avatarUrl || "",
+        avatarUrl: partnerDpUrl,
         blueTick: !!prof.blueTick,
         greenTick: !!prof.greenTick,
         status: prof.partnerStatus,
@@ -824,6 +875,11 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
     const prof = await dbGetProfile(code);
     if (prof.avatarUrl && prof.avatarUrl.startsWith("http")) {
       res.writeHead(302, { Location: prof.avatarUrl });
+      return res.end();
+    }
+    const catMatch = liveCatalog.find(a => a.id === prof.avatarId);
+    if (catMatch && (catMatch.uploadThingUrl || catMatch.imageUrl)) {
+      res.writeHead(302, { Location: catMatch.uploadThingUrl || catMatch.imageUrl });
       return res.end();
     }
     const sub = prof.avatarId.startsWith("girl") ? "girls" : "boys";

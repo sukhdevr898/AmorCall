@@ -69,7 +69,8 @@ enum class SettingsSubScreen {
 data class IncomingPairingRequest(
     val fromCode: String,
     val fromName: String,
-    val fromAvatarId: String
+    val fromAvatarId: String,
+    val fromAvatarUrl: String? = null
 )
 
 class LoveCallViewModel(application: Application) : AndroidViewModel(application) {
@@ -223,6 +224,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     put("myCode", prof.myPairCode)
                     put("myName", prof.userName)
                     put("myAvatarId", prof.avatarId)
+                    put("myAvatarUrl", prof.avatarUrl ?: resolveAvatarUrl(prof.avatarId))
                     put("partnerCode", clean)
                 }
                 val writer = java.io.OutputStreamWriter(conn.outputStream)
@@ -264,10 +266,12 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                 writer.flush()
                 writer.close()
                 if (action == "ACCEPT" && conn.responseCode in 200..299) {
+                    val partnerUrl = req.fromAvatarUrl ?: resolveAvatarUrl(req.fromAvatarId)
                     val updated = prof.copy(
                         partnerPairCode = req.fromCode,
                         partnerName = req.fromName,
                         partnerAvatarId = req.fromAvatarId,
+                        partnerAvatarUrl = partnerUrl,
                         isPaired = true
                     )
                     repository.saveProfile(updated)
@@ -276,6 +280,81 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             } catch (_: Exception) {}
             _incomingPairingRequest.value = null
             onComplete()
+        }
+    }
+
+    fun pollPairingStatus() {
+        val prof = profile.value
+        if (prof.myPairCode.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
+                val url = java.net.URL("$base/api/pairing/status?code=${prof.myPairCode}")
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 4000
+                    readTimeout = 4000
+                }
+                if (conn.responseCode in 200..299) {
+                    val txt = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = org.json.JSONObject(txt)
+                    if (json.optBoolean("hasPendingRequest", false)) {
+                        val req = json.getJSONObject("request")
+                        withContext(Dispatchers.Main) {
+                            _incomingPairingRequest.value = IncomingPairingRequest(
+                                fromCode = req.optString("fromCode"),
+                                fromName = req.optString("fromName", "Partner"),
+                                fromAvatarId = req.optString("fromAvatarId", "boy_001"),
+                                fromAvatarUrl = req.optString("fromAvatarUrl").takeIf { it.isNotBlank() }
+                            )
+                        }
+                    }
+                    if (json.optBoolean("isPaired", false)) {
+                        val pCode = json.optString("partnerCode")
+                        if (pCode.isNotBlank() && (!prof.isPaired || prof.partnerPairCode != pCode)) {
+                            withContext(Dispatchers.Main) {
+                                val updated = prof.copy(
+                                    partnerPairCode = pCode,
+                                    partnerName = json.optString("partnerName", prof.partnerName),
+                                    partnerAvatarId = json.optString("partnerAvatarId", prof.partnerAvatarId),
+                                    partnerAvatarUrl = json.optString("partnerAvatarUrl").takeIf { it.isNotBlank() } ?: prof.partnerAvatarUrl,
+                                    isPaired = true
+                                )
+                                repository.saveProfile(updated)
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun unlinkPartner(onComplete: (Boolean) -> Unit = {}) {
+        val prof = profile.value
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
+                val url = java.net.URL("$base/api/pairing/unlink")
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                }
+                val body = org.json.JSONObject().put("code", prof.myPairCode)
+                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
+                if (conn.responseCode in 200..299) {
+                    withContext(Dispatchers.Main) {
+                        val reset = prof.copy(
+                            partnerPairCode = "",
+                            partnerName = "Partner",
+                            isPaired = false
+                        )
+                        repository.saveProfile(reset)
+                        onComplete(true)
+                    }
+                    return@launch
+                }
+            } catch (_: Exception) {}
+            withContext(Dispatchers.Main) { onComplete(false) }
         }
     }
 
@@ -480,21 +559,28 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     val text = java.io.BufferedReader(java.io.InputStreamReader(conn.inputStream)).use { it.readText() }
                     val json = org.json.JSONObject(text)
                     if (json.optBoolean("success", false)) {
+                        val pObj = json.optJSONObject("partner")
+                        val code = pObj?.optString("code") ?: json.optString("partnerCode")
+                        val name = pObj?.optString("name") ?: json.optString("partnerName", "Partner")
+                        val avatarId = pObj?.optString("avatarId") ?: json.optString("partnerAvatarId", "girl_001")
+                        val avatarUrl = (pObj?.optString("avatarUrl") ?: json.optString("partnerAvatarUrl")).takeIf { it.isNotBlank() }
+                        val blueTick = pObj?.optBoolean("blueTick") ?: json.optBoolean("blueTick", false)
+                        val greenTick = pObj?.optBoolean("greenTick") ?: json.optBoolean("greenTick", false)
                         withContext(Dispatchers.Main) {
                             onResult(
                                 true,
                                 "Partner recognized 💕",
-                                json.optString("partnerCode"),
-                                json.optString("partnerName", "Partner"),
-                                json.optString("partnerAvatarId", "girl_001"),
-                                json.optString("partnerAvatarUrl", "").takeIf { it.isNotBlank() },
-                                json.optBoolean("blueTick", false),
-                                json.optBoolean("greenTick", false)
+                                code,
+                                name,
+                                avatarId,
+                                avatarUrl,
+                                blueTick,
+                                greenTick
                             )
                         }
                         return@launch
                     } else {
-                        val errMsg = json.optString("message", "Invalid QR code")
+                        val errMsg = json.optString("error", json.optString("message", "Invalid QR code"))
                         withContext(Dispatchers.Main) {
                             onResult(false, errMsg, null, null, null, null, false, false)
                         }
@@ -507,10 +593,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    val uri = android.net.Uri.parse(qrPayload)
-                    val code = uri.getQueryParameter("code") ?: qrPayload.trim().uppercase()
-                    if (code.length in 4..8) {
-                        onResult(true, "Offline Code Detected", code, "Partner", "girl_001", null, false, false)
+                    val parsedCode = com.example.ui.pairing.QrCodeGenerator.parseScannedCode(qrPayload)
+                    if (parsedCode.length in 6..9) {
+                        onResult(true, "Offline Code Detected", parsedCode, "Partner", "girl_001", null, false, false)
                     } else {
                         onResult(false, "Could not verify QR code: ${e.message}", null, null, null, null, false, false)
                     }
@@ -561,6 +646,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     private var isCallRecordedForCurrentSession = false
 
     init {
+        avatarRepo.initFromAssets(application)
         CallNotificationHelper.initChannels(application)
 
         // Connect global CallStateManager callbacks for notifications & PiP remote actions
@@ -573,6 +659,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         // Connect to signaling server
         val prof = profile.value
         signalingClient.connect(prof.serverUrl, prof.myPairCode, prof.partnerPairCode)
+
+        // Poll pairing status to check for pending requests
+        pollPairingStatus()
 
         // Start Foreground Service if onboarding is already completed
         if (prof.isOnboardingCompleted) {
@@ -652,12 +741,16 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     }
                     is SignalingEvent.PartnerAvatarUpdated -> {
                         repository.updatePartnerAvatarId(event.avatarId)
+                        if (event.avatarUrl != null) {
+                            repository.saveProfile(profile.value.copy(partnerAvatarUrl = event.avatarUrl))
+                        }
                     }
                     is SignalingEvent.PairingRequestReceived -> {
                         _incomingPairingRequest.value = IncomingPairingRequest(
                             fromCode = event.fromCode,
                             fromName = event.fromName,
-                            fromAvatarId = event.fromAvatarId
+                            fromAvatarId = event.fromAvatarId,
+                            fromAvatarUrl = event.fromAvatarUrl
                         )
                     }
                     is SignalingEvent.PairingSuccess -> {
@@ -665,6 +758,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                             partnerPairCode = event.partnerCode,
                             partnerName = event.partnerName,
                             partnerAvatarId = event.partnerAvatarId,
+                            partnerAvatarUrl = event.partnerAvatarUrl ?: profile.value.partnerAvatarUrl,
                             isPaired = true
                         )
                         repository.saveProfile(updated)
