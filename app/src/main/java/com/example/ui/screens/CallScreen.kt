@@ -124,11 +124,12 @@ fun CallScreen(
 
             // 3. Audio Calling (Sheets 1, 2, 3)
             callSession.type == CallType.VOICE -> {
+                val partnerAvatarToDisplay = profile.partnerAvatarUrl ?: viewModel.resolveAvatarUrl(profile.partnerAvatarId)
                 AudioCallScreen(
                     callSession = callSession,
                     partnerName = profile.partnerName.ifBlank { "My Love 💕" },
                     partnerNickname = profile.partnerNickname,
-                    avatarUri = profile.avatarUri ?: viewModel.resolveAvatarUrl(profile.partnerAvatarId),
+                    avatarUri = partnerAvatarToDisplay,
                     onAccept = { viewModel.acceptCall() },
                     onDecline = { viewModel.declineCall() },
                     onEndCall = { viewModel.endCall() },
@@ -147,11 +148,12 @@ fun CallScreen(
 
             // 4. Video Calling (Sheets 4, 5, 6)
             callSession.type == CallType.VIDEO -> {
+                val partnerAvatarToDisplay = profile.partnerAvatarUrl ?: viewModel.resolveAvatarUrl(profile.partnerAvatarId)
                 VideoCallScreen(
                     callSession = callSession,
                     partnerName = profile.partnerName.ifBlank { "My Love 💕" },
                     partnerNickname = profile.partnerNickname,
-                    avatarUri = profile.avatarUri ?: viewModel.resolveAvatarUrl(profile.partnerAvatarId),
+                    avatarUri = partnerAvatarToDisplay,
                     remoteVideoBitmap = remoteVideo,
                     inCallMessage = inCallMessage,
                     onAccept = { viewModel.acceptCall(incomingType = CallType.VIDEO) },

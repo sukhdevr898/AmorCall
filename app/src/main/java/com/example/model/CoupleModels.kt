@@ -32,13 +32,17 @@ enum class PresenceStatus(val label: String) {
 
 data class CoupleProfile(
     val userName: String = "You",
+    val fullName: String = "You",
+    val username: String = "duora_user",
     val partnerName: String = "My Love",
+    val partnerUsername: String = "",
     val partnerNickname: String = "Sweetheart",
     val myPairCode: String = "",
     val partnerPairCode: String = "",
     val isPaired: Boolean = false,
     val relationshipStartDateEpochMs: Long = System.currentTimeMillis() - (520L * 24 * 60 * 60 * 1000L),
     val partnerStatus: String = "Thinking of you always ❤️",
+    val statusMsg: String = "Always together ❤️",
     val avatarUri: String? = null,
     val avatarId: String = "boy_001",
     val partnerAvatarId: String = "girl_001",
@@ -58,11 +62,25 @@ data class CoupleProfile(
     val notificationRingtone: String = "Default",
     val blueTick: Boolean = false,
     val greenTick: Boolean = false,
+    val isVerified: Boolean = false,
     val partnerBlueTick: Boolean = false,
     val partnerGreenTick: Boolean = false,
+    val partnerIsVerified: Boolean = false,
     val avatarUrl: String? = null,
     val partnerAvatarUrl: String? = null,
-    val isBlocked: Boolean = false
+    val isBlocked: Boolean = false,
+    val appLockPin: String = "",
+    val securityQuestion: String = "What is your favorite color?",
+    val securityAnswer: String = ""
+)
+
+data class AdminNotice(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String = "Official Notice",
+    val message: String = "",
+    val timestamp: Long = System.currentTimeMillis(),
+    val isRead: Boolean = false,
+    val isAlert: Boolean = false
 )
 
 data class CallSession(

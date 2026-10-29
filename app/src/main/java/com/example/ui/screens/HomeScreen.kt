@@ -42,6 +42,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material3.CircularProgressIndicator
 import coil.compose.rememberAsyncImagePainter
@@ -168,6 +169,8 @@ fun HomeScreen(
     val sharedNote by viewModel.sharedNote.collectAsState()
     val chatMessages by viewModel.chatMessages.collectAsState()
     val memories by viewModel.memories.collectAsState()
+    val partnerPresence by viewModel.partnerPresence.collectAsState()
+    val adminAlertNotice by viewModel.adminAlertNotice.collectAsState()
 
     val callSession by viewModel.callSession.collectAsState()
     val isCallScreenMinimized by viewModel.isCallScreenMinimized.collectAsState()
@@ -763,13 +766,13 @@ fun HomeScreen(
                                 .fillMaxSize()
                                 .statusBarsPadding()
                         ) {
-                            // Top Bar: Official Duora Logo, Notification Bell & Circular Profile Avatar
-                            val partnerAvatar = profile.partnerAvatarUrl
-                                ?: viewModel.resolveAvatarThumbnailUrl(profile.partnerAvatarId)
+                            // Top Bar: Official Duora Logo, Notification Bell & Circular Profile Avatar (User's own DP)
+                            val myAvatar = profile.avatarUrl
+                                ?: viewModel.resolveAvatarThumbnailUrl(profile.avatarId)
                             HomeHeader(
-                                avatarUrl = partnerAvatar,
-                                unreadNotificationCount = 1,
-                                isPartnerOnline = profile.partnerStatus.equals("online", ignoreCase = true),
+                                avatarUrl = myAvatar,
+                                unreadNotificationCount = if (adminAlertNotice != null) 2 else 1,
+                                isPartnerOnline = partnerPresence.equals("online", ignoreCase = true) || profile.partnerStatus.equals("online", ignoreCase = true),
                                 onNotificationClick = { showNotificationPanel = true },
                                 onProfileClick = { showProfileMenu = true }
                             )
@@ -782,6 +785,64 @@ fun HomeScreen(
                                     .padding(horizontal = 18.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
+                // Official Real-Time Admin Notice / Alert Banner
+                val activeAdminAlert = adminAlertNotice
+                if (activeAdminAlert != null) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, LoveRose),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_alert_banner")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                    contentDescription = "Admin Verified Notice",
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "OFFICIAL DUORA ADMIN NOTICE",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = LoveRose
+                                    )
+                                    Text(
+                                        text = activeAdminAlert.title,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E293B)
+                                    )
+                                    Text(
+                                        text = activeAdminAlert.message,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF475569)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.dismissAdminAlert() },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Dismiss",
+                                        tint = LoveRose,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 // 0. Update Alert Banner (if update available)
                 val bannerUpdate = updateInfo
                 if (bannerUpdate != null && bannerUpdate.isAvailable) {
@@ -890,12 +951,13 @@ fun HomeScreen(
                         partnerNickname = profile.partnerNickname,
                         partnerCode = profile.partnerPairCode,
                         partnerStatus = profile.partnerStatus,
+                        partnerPresence = partnerPresence,
                         isPaired = profile.isPaired && profile.partnerPairCode.isNotBlank(),
                         isServerConnected = serverState == ServerConnectionState.CONNECTED,
-                        userBlueTick = profile.blueTick,
+                        userBlueTick = profile.isVerified || profile.blueTick,
                         userGreenTick = profile.greenTick,
                         userAvatarUrl = profile.avatarUrl ?: viewModel.resolveAvatarThumbnailUrl(profile.avatarId),
-                        partnerBlueTick = profile.partnerBlueTick,
+                        partnerBlueTick = profile.partnerIsVerified || profile.partnerBlueTick,
                         partnerGreenTick = profile.partnerGreenTick,
                         partnerAvatarUrl = profile.partnerAvatarUrl ?: viewModel.resolveAvatarThumbnailUrl(profile.partnerAvatarId),
                         onLinkClick = { viewModel.navigateTo(AppScreen.PAIRING) }
@@ -1274,6 +1336,7 @@ private fun CoupleHeroCard(
     partnerNickname: String,
     partnerCode: String,
     partnerStatus: String,
+    partnerPresence: String = "Online",
     isPaired: Boolean,
     isServerConnected: Boolean,
     userBlueTick: Boolean = false,
@@ -1343,20 +1406,18 @@ private fun CoupleHeroCard(
                         )
                         if (userBlueTick) {
                             Spacer(modifier = Modifier.width(3.dp))
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_blue_tick),
                                 contentDescription = "Verified User",
-                                tint = Color(0xFF3B82F6),
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                         if (userGreenTick) {
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Partner Verified",
-                                tint = Color(0xFF10B981),
-                                modifier = Modifier.size(14.dp)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                contentDescription = "Admin Verified",
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
@@ -1439,20 +1500,18 @@ private fun CoupleHeroCard(
                         )
                         if (partnerBlueTick) {
                             Spacer(modifier = Modifier.width(3.dp))
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_blue_tick),
                                 contentDescription = "Verified User",
-                                tint = Color(0xFF3B82F6),
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                         if (partnerGreenTick) {
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Partner Verified",
-                                tint = Color(0xFF10B981),
-                                modifier = Modifier.size(14.dp)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                contentDescription = "Admin Verified",
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
@@ -1467,12 +1526,20 @@ private fun CoupleHeroCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Partner status line or link button
+            // Partner Real-time Status / Connectivity Pill
             if (isPaired) {
+                val displayPresence = if (partnerPresence.isNotBlank()) partnerPresence else partnerStatus
+                val (pillBg, pillDot, pillBorder) = when (displayPresence.lowercase()) {
+                    "online" -> Triple(LoveAccentGreen.copy(alpha = 0.15f), LoveAccentGreen, LoveAccentGreen.copy(alpha = 0.4f))
+                    "calling" -> Triple(LoveRose.copy(alpha = 0.15f), LoveRose, LoveRose.copy(alpha = 0.4f))
+                    "in a call" -> Triple(Color(0xFF8B5CF6).copy(alpha = 0.15f), Color(0xFF8B5CF6), Color(0xFF8B5CF6).copy(alpha = 0.4f))
+                    "away" -> Triple(Color(0xFFF59E0B).copy(alpha = 0.15f), Color(0xFFF59E0B), Color(0xFFF59E0B).copy(alpha = 0.4f))
+                    else -> Triple(Color.Gray.copy(alpha = 0.12f), Color.Gray, Color.Gray.copy(alpha = 0.3f))
+                }
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = LoveAccentGreen.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, LoveAccentGreen.copy(alpha = 0.4f))
+                    color = pillBg,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, pillBorder)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1482,11 +1549,11 @@ private fun CoupleHeroCard(
                             modifier = Modifier
                                 .size(7.dp)
                                 .clip(CircleShape)
-                                .background(LoveAccentGreen)
+                                .background(pillDot)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = partnerStatus,
+                            text = displayPresence,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Medium

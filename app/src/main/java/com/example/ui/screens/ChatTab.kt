@@ -12,8 +12,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.rememberAsyncImagePainter
+import com.example.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,6 +57,8 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SentimentSatisfiedAlt
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -60,6 +67,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import com.example.ui.theme.LoveRose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -104,6 +112,12 @@ import com.example.ui.theme.LoveAccentGreen
 import com.example.viewmodel.LoveCallViewModel
 import kotlinx.coroutines.launch
 
+enum class ChatSubScreen {
+    LIST,
+    PARTNER_CHAT,
+    ADMIN_NOTICES
+}
+
 @Composable
 fun ChatTab(
     viewModel: LoveCallViewModel,
@@ -111,20 +125,45 @@ fun ChatTab(
     onBack: () -> Unit = {}
 ) {
     val isIndividualChatOpen by viewModel.isIndividualChatOpen.collectAsState()
+    var currentSubScreen by remember { mutableStateOf(ChatSubScreen.LIST) }
 
-    if (isIndividualChatOpen) {
-        IndividualChatView(
-            viewModel = viewModel,
-            onRequestPermissions = onRequestPermissions,
-            onBack = { viewModel.closeIndividualChat() }
-        )
-    } else {
-        ChatListView(
-            viewModel = viewModel,
-            onRequestPermissions = onRequestPermissions,
-            onOpenConversation = { viewModel.openIndividualChat() },
-            onBack = onBack
-        )
+    LaunchedEffect(isIndividualChatOpen) {
+        if (isIndividualChatOpen) {
+            currentSubScreen = ChatSubScreen.PARTNER_CHAT
+        }
+    }
+
+    when (currentSubScreen) {
+        ChatSubScreen.PARTNER_CHAT -> {
+            IndividualChatView(
+                viewModel = viewModel,
+                onRequestPermissions = onRequestPermissions,
+                onBack = {
+                    viewModel.closeIndividualChat()
+                    currentSubScreen = ChatSubScreen.LIST
+                }
+            )
+        }
+        ChatSubScreen.ADMIN_NOTICES -> {
+            AdminNoticesChatView(
+                viewModel = viewModel,
+                onBack = { currentSubScreen = ChatSubScreen.LIST }
+            )
+        }
+        ChatSubScreen.LIST -> {
+            ChatListView(
+                viewModel = viewModel,
+                onRequestPermissions = onRequestPermissions,
+                onOpenConversation = {
+                    viewModel.openIndividualChat()
+                    currentSubScreen = ChatSubScreen.PARTNER_CHAT
+                },
+                onOpenAdminNotices = {
+                    currentSubScreen = ChatSubScreen.ADMIN_NOTICES
+                },
+                onBack = onBack
+            )
+        }
     }
 }
 
@@ -133,6 +172,7 @@ fun ChatListView(
     viewModel: LoveCallViewModel,
     onRequestPermissions: (() -> Unit) -> Unit,
     onOpenConversation: () -> Unit,
+    onOpenAdminNotices: () -> Unit,
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
@@ -280,6 +320,9 @@ fun ChatListView(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Avatar with online indicator
+                    val partnerAvatarToDisplay = profile.partnerAvatarUrl
+                        ?: viewModel.resolveAvatarThumbnailUrl(profile.partnerAvatarId)
+
                     Box(
                         modifier = Modifier
                             .size(52.dp)
@@ -290,12 +333,21 @@ fun ChatListView(
                             .background(MaterialTheme.colorScheme.surface),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = partnerNameDisplay.take(1).uppercase(),
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = DuoraHotPink
-                        )
+                        if (!partnerAvatarToDisplay.isNullOrBlank()) {
+                            Image(
+                                painter = rememberAsyncImagePainter(partnerAvatarToDisplay),
+                                contentDescription = partnerNameDisplay,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Text(
+                                text = partnerNameDisplay.take(1).uppercase(),
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DuoraHotPink
+                            )
+                        }
 
                         if (isPartnerOnline) {
                             Box(
@@ -320,13 +372,26 @@ fun ChatListView(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = partnerNameDisplay,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f, fill = false)
+                            ) {
+                                Text(
+                                    text = partnerNameDisplay,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1
+                                )
+                                if (profile.partnerIsVerified || profile.partnerBlueTick) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ic_blue_tick),
+                                        contentDescription = "Verified Partner",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
 
                             // Timestamp
                             if (lastMessage != null) {
@@ -406,6 +471,109 @@ fun ChatListView(
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2nd Option: Official Duora Admin Messages (Read-only channel, user cannot reply/call)
+            val adminNotices by viewModel.adminNotices.collectAsState()
+            val latestNotice = adminNotices.firstOrNull()
+
+            Surface(
+                onClick = onOpenAdminNotices,
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f)),
+                shadowElevation = 1.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .testTag("admin_notices_conversation_item")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFECFDF5))
+                            .border(1.5.dp, Color(0xFF10B981), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                            contentDescription = "Admin Official",
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Duora Admin",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                    contentDescription = "Admin Verified",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+
+                            if (latestNotice != null) {
+                                Text(
+                                    text = "Official",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF10B981),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = latestNotice?.title ?: "Official notices & alerts • Read only",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            if (adminNotices.isNotEmpty()) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFF10B981).copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "${adminNotices.size}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF047857),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                             }
@@ -553,6 +721,9 @@ fun IndividualChatView(
                         Spacer(modifier = Modifier.width(4.dp))
 
                         // Avatar with green online dot
+                        val partnerAvatarToDisplay = profile.partnerAvatarUrl
+                            ?: viewModel.resolveAvatarThumbnailUrl(profile.partnerAvatarId)
+
                         Box(
                             modifier = Modifier
                                 .size(42.dp)
@@ -563,12 +734,21 @@ fun IndividualChatView(
                                 .background(MaterialTheme.colorScheme.surface),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = profile.partnerName.take(1).ifBlank { "P" }.uppercase(),
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = DuoraHotPink
-                            )
+                            if (!partnerAvatarToDisplay.isNullOrBlank()) {
+                                Image(
+                                    painter = rememberAsyncImagePainter(partnerAvatarToDisplay),
+                                    contentDescription = profile.partnerName,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Text(
+                                    text = profile.partnerName.take(1).ifBlank { "P" }.uppercase(),
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DuoraHotPink
+                                )
+                            }
                             if (isPartnerOnline) {
                                 Box(
                                     modifier = Modifier
@@ -584,12 +764,22 @@ fun IndividualChatView(
                         Spacer(modifier = Modifier.width(10.dp))
 
                         Column {
-                            Text(
-                                text = profile.partnerName.ifBlank { "My Love ❤️" },
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = profile.partnerName.ifBlank { "My Love ❤️" },
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (profile.partnerIsVerified || profile.partnerBlueTick) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Image(
+                                        painter = painterResource(id = R.drawable.ic_blue_tick),
+                                        contentDescription = "Verified Partner",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                             Text(
                                 text = if (isPartnerOnline) "Online • Private Space" else "Private Space",
                                 fontSize = 11.sp,
@@ -1155,6 +1345,257 @@ private fun ChatRomanticPattern() {
                 x += step
             }
             y += step
+        }
+    }
+}
+
+@Composable
+fun AdminNoticesChatView(
+    viewModel: LoveCallViewModel,
+    onBack: () -> Unit
+) {
+    BackHandler(onBack = onBack)
+    val adminNotices by viewModel.adminNotices.collectAsState()
+
+    Scaffold(
+        topBar = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp,
+                shadowElevation = 3.dp,
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFF10B981).copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .testTag("admin_chat_back_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFECFDF5))
+                            .border(1.5.dp, Color(0xFF10B981), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                            contentDescription = "Admin Verified",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Duora Admin",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                contentDescription = "Admin Verified",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Text(
+                            text = "Official Announcements • Read Only",
+                            fontSize = 11.sp,
+                            color = Color(0xFF10B981),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        },
+        bottomBar = {
+            // Read-Only Banner at bottom (No input, no calls)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding(),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Replies and calls are disabled in this official admin channel.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // Informational header notice card
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFFECFDF5),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Direct administrative bulletins, security alerts, and service updates from the Duora Operations Team.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF065F46),
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+
+            if (adminNotices.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No Official Notices Yet",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Any administrative announcements will appear here.",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(adminNotices, key = { it.id }) { notice ->
+                        val isCritical = notice.isAlert
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isCritical) Color(0xFFFEF2F2) else MaterialTheme.colorScheme.surface
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isCritical) LoveRose.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Image(
+                                            painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                            contentDescription = "Admin Notice",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isCritical) "SECURITY ALERT" else "OFFICIAL BULLETIN",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isCritical) LoveRose else Color(0xFF10B981)
+                                        )
+                                    }
+
+                                    val dateStr = java.text.SimpleDateFormat("MMM dd, HH:mm", java.util.Locale.getDefault())
+                                        .format(java.util.Date(notice.timestamp))
+                                    Text(
+                                        text = dateStr,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Text(
+                                    text = notice.title,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Text(
+                                    text = notice.message,
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        }
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
+            }
         }
     }
 }

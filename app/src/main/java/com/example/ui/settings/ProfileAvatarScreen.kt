@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +57,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -78,8 +81,10 @@ fun ProfileAvatarScreen(
     val profile by viewModel.profile.collectAsState()
     val avatars by viewModel.avatarCatalog.collectAsState()
 
+    var fullName by remember { mutableStateOf(profile.fullName) }
+    var username by remember { mutableStateOf(profile.username) }
     var displayName by remember { mutableStateOf(profile.userName) }
-    var statusMessage by remember { mutableStateOf(profile.partnerStatus) }
+    var statusMessage by remember { mutableStateOf(profile.statusMsg.ifBlank { profile.partnerStatus }) }
     var selectedAvatarId by remember { mutableStateOf(profile.avatarId) }
     var customPhotoUri by remember { mutableStateOf<Uri?>(profile.avatarUri?.let { Uri.parse(it) }) }
     var activeCategory by remember { mutableStateOf(if (profile.avatarId.startsWith("girl")) "GIRL" else "BOY") }
@@ -185,7 +190,7 @@ fun ProfileAvatarScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Name & Status Form Card
+        // Name, Username & Status Form Card
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -194,8 +199,85 @@ fun ProfileAvatarScreen(
                 .padding(horizontal = 20.dp)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
+                if (profile.isVerified || profile.blueTick) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFEFF6FF),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_blue_tick),
+                                contentDescription = "Verified Profile",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Verified Account Badge Active",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1D4ED8)
+                            )
+                        }
+                    }
+                }
+
                 Text(
-                    text = "Display Name",
+                    text = "Full Name",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF21102E)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = fullName,
+                    onValueChange = { fullName = it },
+                    singleLine = true,
+                    placeholder = { Text("e.g. Alex Johnson", color = Color(0xFFB0A7B5)) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DuoraHotPink,
+                        unfocusedBorderColor = Color(0xFFEADBEE)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("full_name_input")
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Username",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF21102E)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = { username = it },
+                    singleLine = true,
+                    placeholder = { Text("@username", color = Color(0xFFB0A7B5)) },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = DuoraHotPink,
+                        unfocusedBorderColor = Color(0xFFEADBEE)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("username_input")
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "Display Name / Nickname",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFF21102E)
@@ -228,6 +310,7 @@ fun ProfileAvatarScreen(
                     value = statusMessage,
                     onValueChange = { statusMessage = it },
                     singleLine = true,
+                    placeholder = { Text("Forever yours ❤️", color = Color(0xFFB0A7B5)) },
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = DuoraHotPink,
@@ -446,6 +529,11 @@ fun ProfileAvatarScreen(
         // Save Changes Button
         Button(
             onClick = {
+                viewModel.updateExtendedProfile(
+                    fullName = fullName,
+                    username = username,
+                    statusMsg = statusMessage
+                )
                 viewModel.updateRelationshipProfile(
                     userName = displayName,
                     partnerName = profile.partnerName,

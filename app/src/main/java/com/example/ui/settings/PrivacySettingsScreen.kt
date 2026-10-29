@@ -29,19 +29,32 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,6 +63,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.privacy.PrivacyIconManager
@@ -66,6 +80,10 @@ fun PrivacySettingsScreen(
     val context = LocalContext.current
     val profile by viewModel.profile.collectAsState()
     val currentIcon by PrivacyIconManager.currentIcon.collectAsState()
+
+    var showSetPinDialog by remember { mutableStateOf(false) }
+    var showSecurityQuestionDialog by remember { mutableStateOf(false) }
+    var showForgotPinDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -239,7 +257,368 @@ fun PrivacySettingsScreen(
             }
         }
 
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // Section: PIN & Password Recovery
+        Text(
+            text = "APP LOCK PIN & PASSWORD RECOVERY",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF89818E),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+        )
+
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showSetPinDialog = true }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Key,
+                            contentDescription = null,
+                            tint = DuoraHotPink,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "App Lock PIN",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF21102E)
+                            )
+                            Text(
+                                text = if (profile.appLockPin.isNotBlank()) "PIN active • Tap to change" else "Tap to set 4-digit PIN",
+                                fontSize = 12.sp,
+                                color = Color(0xFF89818E)
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFFF7F2F6), thickness = 1.dp)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showSecurityQuestionDialog = true }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.HelpOutline,
+                            contentDescription = null,
+                            tint = DuoraHotPink,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "Security Question",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF21102E)
+                            )
+                            Text(
+                                text = if (profile.securityQuestion.isNotBlank()) profile.securityQuestion else "Set question for PIN recovery",
+                                fontSize = 12.sp,
+                                color = Color(0xFF89818E),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFFF7F2F6), thickness = 1.dp)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showForgotPinDialog = true }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LockReset,
+                            contentDescription = null,
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "Forgot PIN / Reset",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF21102E)
+                            )
+                            Text(
+                                text = "Reset forgotten PIN using security answer",
+                                fontSize = 12.sp,
+                                color = Color(0xFF89818E)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(36.dp))
+    }
+
+    // Set PIN Dialog
+    if (showSetPinDialog) {
+        var pinInput by remember { mutableStateOf("") }
+        var confirmPinInput by remember { mutableStateOf("") }
+        var errorMessage by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showSetPinDialog = false },
+            title = {
+                Text(
+                    text = if (profile.appLockPin.isNotBlank()) "Change App Lock PIN" else "Set App Lock PIN",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Enter a 4-digit PIN to lock and protect Duora.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = { if (it.length <= 6) pinInput = it },
+                        label = { Text("New PIN") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = confirmPinInput,
+                        onValueChange = { if (it.length <= 6) confirmPinInput = it },
+                        label = { Text("Confirm PIN") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (errorMessage.isNotBlank()) {
+                        Text(text = errorMessage, color = Color(0xFFEF4444), fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (pinInput.length < 4) {
+                            errorMessage = "PIN must be at least 4 digits"
+                        } else if (pinInput != confirmPinInput) {
+                            errorMessage = "PINs do not match"
+                        } else {
+                            viewModel.setAppLockPin(pinInput)
+                            Toast.makeText(context, "PIN saved successfully", Toast.LENGTH_SHORT).show()
+                            showSetPinDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DuoraHotPink)
+                ) {
+                    Text("Save PIN")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSetPinDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Security Question Dialog
+    if (showSecurityQuestionDialog) {
+        var questionInput by remember { mutableStateOf(profile.securityQuestion.ifBlank { "Where did we first meet?" }) }
+        var answerInput by remember { mutableStateOf("") }
+        var errorMsg by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showSecurityQuestionDialog = false },
+            title = {
+                Text(
+                    text = "Security Question Setup",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "This secret answer allows you to reset your PIN if forgotten.",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = questionInput,
+                        onValueChange = { questionInput = it },
+                        label = { Text("Security Question") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = answerInput,
+                        onValueChange = { answerInput = it },
+                        label = { Text("Secret Answer") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (errorMsg.isNotBlank()) {
+                        Text(text = errorMsg, color = Color(0xFFEF4444), fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (questionInput.isBlank() || answerInput.isBlank()) {
+                            errorMsg = "Please fill both question and answer"
+                        } else {
+                            viewModel.setSecurityQuestionAndAnswer(questionInput.trim(), answerInput.trim())
+                            Toast.makeText(context, "Security question configured", Toast.LENGTH_SHORT).show()
+                            showSecurityQuestionDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DuoraHotPink)
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSecurityQuestionDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Forgot PIN Dialog
+    if (showForgotPinDialog) {
+        var answerInput by remember { mutableStateOf("") }
+        var newPinInput by remember { mutableStateOf("") }
+        var isVerifiedByAnswer by remember { mutableStateOf(false) }
+        var statusError by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showForgotPinDialog = false },
+            title = {
+                Text(
+                    text = if (isVerifiedByAnswer) "Enter New PIN" else "Forgot PIN Recovery",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (profile.securityQuestion.isBlank()) {
+                        Text(
+                            text = "No security question has been configured yet. Please configure a security question first in Privacy settings.",
+                            fontSize = 13.sp,
+                            color = Color(0xFFEF4444)
+                        )
+                    } else if (!isVerifiedByAnswer) {
+                        Text(
+                            text = "Security Question:\n${profile.securityQuestion}",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        OutlinedTextField(
+                            value = answerInput,
+                            onValueChange = { answerInput = it },
+                            label = { Text("Your Answer") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(
+                            text = "Answer verified! Set your new 4-digit PIN below.",
+                            fontSize = 13.sp,
+                            color = Color(0xFF10B981)
+                        )
+                        OutlinedTextField(
+                            value = newPinInput,
+                            onValueChange = { if (it.length <= 6) newPinInput = it },
+                            label = { Text("New PIN") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    if (statusError.isNotBlank()) {
+                        Text(text = statusError, color = Color(0xFFEF4444), fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                if (profile.securityQuestion.isNotBlank()) {
+                    Button(
+                        onClick = {
+                            if (!isVerifiedByAnswer) {
+                                if (viewModel.verifySecurityAnswer(answerInput)) {
+                                    isVerifiedByAnswer = true
+                                    statusError = ""
+                                } else {
+                                    statusError = "Incorrect answer. Please try again."
+                                }
+                            } else {
+                                if (newPinInput.length < 4) {
+                                    statusError = "PIN must be at least 4 digits"
+                                } else {
+                                    viewModel.setAppLockPin(newPinInput)
+                                    Toast.makeText(context, "New PIN set successfully", Toast.LENGTH_SHORT).show()
+                                    showForgotPinDialog = false
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DuoraHotPink)
+                    ) {
+                        Text(if (isVerifiedByAnswer) "Set New PIN" else "Verify Answer")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgotPinDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 

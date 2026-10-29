@@ -11,6 +11,7 @@ import com.example.model.MemoryPhoto
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -18,6 +19,8 @@ import java.util.UUID
 class CoupleRepository(private val context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("amour_couple_prefs", Context.MODE_PRIVATE)
+    private val callDb = com.example.data.db.CallHistoryDatabase.getInstance(context)
+    private val coroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO + kotlinx.coroutines.SupervisorJob())
 
     private val _profile = MutableStateFlow(loadProfile())
     val profile: StateFlow<CoupleProfile> = _profile.asStateFlow()
@@ -37,6 +40,9 @@ class CoupleRepository(private val context: Context) {
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(loadChatMessages())
     val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
 
+    private val _adminNotices = MutableStateFlow(loadAdminNotices())
+    val adminNotices: StateFlow<List<com.example.model.AdminNotice>> = _adminNotices.asStateFlow()
+
     private fun generateUniqueLoveCode(): String {
         val chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
         val random = java.security.SecureRandom()
@@ -45,8 +51,12 @@ class CoupleRepository(private val context: Context) {
 
     private fun loadProfile(): CoupleProfile {
         val userName = prefs.getString("user_name", "You") ?: "You"
+        val fullName = prefs.getString("full_name", userName) ?: userName
+        val username = prefs.getString("user_username", "duora_user") ?: "duora_user"
         val partnerName = prefs.getString("partner_name", "My Love") ?: "My Love"
+        val partnerUsername = prefs.getString("partner_username", "") ?: ""
         val partnerNickname = prefs.getString("partner_nickname", "Sweetheart") ?: "Sweetheart"
+        val statusMsg = prefs.getString("status_msg", "Always together ❤️") ?: "Always together ❤️"
 
         val existingMyCode = prefs.getString("my_pair_code", null)
         val myPairCode = if (existingMyCode.isNullOrBlank() || existingMyCode == "LOVE89" || existingMyCode == "ROSE99") {
@@ -93,21 +103,30 @@ class CoupleRepository(private val context: Context) {
         val ringPref = prefs.getString("ring_pref", "Default") ?: "Default"
         val blueTick = prefs.getBoolean("blue_tick", false)
         val greenTick = prefs.getBoolean("green_tick", false)
+        val isVerified = prefs.getBoolean("is_verified", false) || blueTick
         val partnerBlueTick = prefs.getBoolean("partner_blue_tick", false)
         val partnerGreenTick = prefs.getBoolean("partner_green_tick", false)
+        val partnerIsVerified = prefs.getBoolean("partner_is_verified", false) || partnerBlueTick
         val avatarUrl = prefs.getString("avatar_url", null)
         val partnerAvatarUrl = prefs.getString("partner_avatar_url", null)
         val isBlocked = prefs.getBoolean("is_blocked", false)
+        val appLockPin = prefs.getString("app_lock_pin", "") ?: ""
+        val securityQuestion = prefs.getString("security_question", "What is your favorite color?") ?: "What is your favorite color?"
+        val securityAnswer = prefs.getString("security_answer", "") ?: ""
 
         return CoupleProfile(
             userName = userName,
+            fullName = fullName,
+            username = username,
             partnerName = partnerName,
+            partnerUsername = partnerUsername,
             partnerNickname = partnerNickname,
             myPairCode = myPairCode,
             partnerPairCode = partnerPairCode,
             isPaired = isPaired,
             relationshipStartDateEpochMs = startDate,
             partnerStatus = status,
+            statusMsg = statusMsg,
             avatarUri = avatarUri,
             avatarId = avatarId,
             partnerAvatarId = partnerAvatarId,
@@ -127,11 +146,16 @@ class CoupleRepository(private val context: Context) {
             notificationRingtone = ringPref,
             blueTick = blueTick,
             greenTick = greenTick,
+            isVerified = isVerified,
             partnerBlueTick = partnerBlueTick,
             partnerGreenTick = partnerGreenTick,
+            partnerIsVerified = partnerIsVerified,
             avatarUrl = avatarUrl,
             partnerAvatarUrl = partnerAvatarUrl,
-            isBlocked = isBlocked
+            isBlocked = isBlocked,
+            appLockPin = appLockPin,
+            securityQuestion = securityQuestion,
+            securityAnswer = securityAnswer
         )
     }
 
@@ -186,8 +210,12 @@ class CoupleRepository(private val context: Context) {
 
         prefs.edit()
             .putString("user_name", profile.userName)
+            .putString("full_name", profile.fullName)
+            .putString("user_username", profile.username)
             .putString("partner_name", profile.partnerName)
+            .putString("partner_username", profile.partnerUsername)
             .putString("partner_nickname", profile.partnerNickname)
+            .putString("status_msg", profile.statusMsg)
             .putString("my_pair_code", profile.myPairCode)
             .putString("partner_pair_code", cleanPartnerCode)
             .putBoolean("is_paired", actualIsPaired)
@@ -212,11 +240,16 @@ class CoupleRepository(private val context: Context) {
             .putString("ring_pref", profile.notificationRingtone)
             .putBoolean("blue_tick", profile.blueTick)
             .putBoolean("green_tick", profile.greenTick)
+            .putBoolean("is_verified", profile.isVerified)
             .putBoolean("partner_blue_tick", profile.partnerBlueTick)
             .putBoolean("partner_green_tick", profile.partnerGreenTick)
+            .putBoolean("partner_is_verified", profile.partnerIsVerified)
             .putString("avatar_url", profile.avatarUrl)
             .putString("partner_avatar_url", profile.partnerAvatarUrl)
             .putBoolean("is_blocked", profile.isBlocked)
+            .putString("app_lock_pin", profile.appLockPin)
+            .putString("security_question", profile.securityQuestion)
+            .putString("security_answer", profile.securityAnswer)
             .apply()
         _profile.value = profile.copy(
             partnerPairCode = cleanPartnerCode,
@@ -340,23 +373,30 @@ class CoupleRepository(private val context: Context) {
     }
 
     private fun loadCallHistory(): List<CallRecord> {
-        val jsonStr = prefs.getString("call_history_json", null) ?: return defaultCallHistory()
         return try {
-            val array = JSONArray(jsonStr)
-            val list = mutableListOf<CallRecord>()
-            for (i in 0 until array.length()) {
-                val obj = array.getJSONObject(i)
-                list.add(
-                    CallRecord(
+            val dbCalls = callDb.queryCallsSync()
+            if (dbCalls.isNotEmpty()) {
+                dbCalls
+            } else {
+                val jsonStr = prefs.getString("call_history_json", null) ?: return defaultCallHistory()
+                val array = JSONArray(jsonStr)
+                val list = mutableListOf<CallRecord>()
+                for (i in 0 until array.length()) {
+                    val obj = array.getJSONObject(i)
+                    val rec = CallRecord(
                         id = obj.getString("id"),
                         type = CallType.valueOf(obj.getString("type")),
                         timestamp = obj.getLong("timestamp"),
                         durationSeconds = obj.getInt("durationSeconds"),
                         isOutgoing = obj.getBoolean("isOutgoing")
                     )
-                )
+                    list.add(rec)
+                    kotlinx.coroutines.runBlocking {
+                        callDb.insertCall(rec)
+                    }
+                }
+                list
             }
-            list
         } catch (_: Exception) {
             emptyList()
         }
@@ -367,26 +407,20 @@ class CoupleRepository(private val context: Context) {
     fun clearCallHistory() {
         prefs.edit().remove("call_history_json").apply()
         _callHistory.value = emptyList()
+        coroutineScope.launch {
+            callDb.clearHistory()
+        }
     }
 
     fun deleteCallRecord(id: String) {
         val current = _callHistory.value.filter { it.id != id }
-        val array = JSONArray()
-        current.forEach { rec ->
-            val obj = JSONObject()
-            obj.put("id", rec.id)
-            obj.put("type", rec.type.name)
-            obj.put("timestamp", rec.timestamp)
-            obj.put("durationSeconds", rec.durationSeconds)
-            obj.put("isOutgoing", rec.isOutgoing)
-            array.put(obj)
-        }
-        prefs.edit().putString("call_history_json", array.toString()).apply()
         _callHistory.value = current
+        coroutineScope.launch {
+            callDb.deleteCall(id)
+        }
     }
 
     fun recordCall(type: CallType, durationSeconds: Int, isOutgoing: Boolean) {
-        val current = _callHistory.value.toMutableList()
         val record = CallRecord(
             id = UUID.randomUUID().toString(),
             type = type,
@@ -394,21 +428,99 @@ class CoupleRepository(private val context: Context) {
             durationSeconds = durationSeconds,
             isOutgoing = isOutgoing
         )
+        val current = _callHistory.value.toMutableList()
         current.add(0, record)
-        val trimmed = if (current.size > 50) current.take(50) else current
-
-        val array = JSONArray()
-        trimmed.forEach { rec ->
-            val obj = JSONObject()
-            obj.put("id", rec.id)
-            obj.put("type", rec.type.name)
-            obj.put("timestamp", rec.timestamp)
-            obj.put("durationSeconds", rec.durationSeconds)
-            obj.put("isOutgoing", rec.isOutgoing)
-            array.put(obj)
-        }
-        prefs.edit().putString("call_history_json", array.toString()).apply()
+        val trimmed = if (current.size > 100) current.take(100) else current
         _callHistory.value = trimmed
+
+        val p = _profile.value
+        coroutineScope.launch {
+            callDb.insertCall(
+                record = record,
+                partnerCode = p.partnerPairCode,
+                partnerName = p.partnerName,
+                partnerAvatar = p.partnerAvatarUrl ?: p.partnerAvatarId
+            )
+        }
+    }
+
+    private fun loadAdminNotices(): List<com.example.model.AdminNotice> {
+        val jsonStr = prefs.getString("admin_notices_json", null) ?: return defaultAdminNotices()
+        return try {
+            val arr = JSONArray(jsonStr)
+            val list = mutableListOf<com.example.model.AdminNotice>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    com.example.model.AdminNotice(
+                        id = obj.getString("id"),
+                        title = obj.getString("title"),
+                        message = obj.getString("message"),
+                        timestamp = obj.getLong("timestamp"),
+                        isRead = obj.optBoolean("isRead", false),
+                        isAlert = obj.optBoolean("isAlert", false)
+                    )
+                )
+            }
+            if (list.isEmpty()) defaultAdminNotices() else list
+        } catch (_: Exception) {
+            defaultAdminNotices()
+        }
+    }
+
+    private fun defaultAdminNotices(): List<com.example.model.AdminNotice> {
+        return listOf(
+            com.example.model.AdminNotice(
+                id = "admin_welcome",
+                title = "Welcome to Duora Official",
+                message = "Welcome to Duora! Your private love sanctuary is end-to-end connected and fully encrypted. Official updates and server announcements will appear here.",
+                timestamp = System.currentTimeMillis() - 3600000L,
+                isRead = true,
+                isAlert = false
+            )
+        )
+    }
+
+    fun saveAdminNotice(notice: com.example.model.AdminNotice) {
+        val current = _adminNotices.value.toMutableList()
+        val index = current.indexOfFirst { it.id == notice.id }
+        if (index >= 0) {
+            current[index] = notice
+        } else {
+            current.add(0, notice)
+        }
+        val trimmed = if (current.size > 50) current.take(50) else current
+        persistAdminNotices(trimmed)
+        _adminNotices.value = trimmed
+    }
+
+    fun markAdminNoticeRead(id: String) {
+        val current = _adminNotices.value.map {
+            if (it.id == id) it.copy(isRead = true) else it
+        }
+        persistAdminNotices(current)
+        _adminNotices.value = current
+    }
+
+    fun clearAdminNotices() {
+        prefs.edit().remove("admin_notices_json").apply()
+        _adminNotices.value = defaultAdminNotices()
+    }
+
+    private fun persistAdminNotices(list: List<com.example.model.AdminNotice>) {
+        val arr = JSONArray()
+        list.forEach { notice ->
+            val obj = JSONObject().apply {
+                put("id", notice.id)
+                put("title", notice.title)
+                put("message", notice.message)
+                put("timestamp", notice.timestamp)
+                put("isRead", notice.isRead)
+                put("isAlert", notice.isAlert)
+            }
+            arr.put(obj)
+        }
+        prefs.edit().putString("admin_notices_json", arr.toString()).apply()
     }
 
     private fun loadSharedNote(): CoupleNote? {

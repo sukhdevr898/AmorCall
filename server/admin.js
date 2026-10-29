@@ -506,11 +506,33 @@ function getAdminHtml(baseUrl) {
 
     <!-- TAB 1: USERS & VERIFICATION -->
     <div id="tab-users">
+      <!-- BROADCAST NOTICE CARD -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title-row" style="margin-bottom:8px;">
+          <div>
+            <h2 style="font-size:1.15rem; display:flex; align-items:center; gap:8px;">
+              <span>📢 Real-Time Official Notice & Push Broadcast</span>
+            </h2>
+            <p style="color:var(--text-muted); font-size:0.8rem;">Broadcast official notices and urgent security alerts to all connected apps in real-time.</p>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <input class="input-box" id="broadcast-title" placeholder="Notice Title (e.g., Duora Team Official Notice)" style="margin:0;" />
+          <textarea class="input-box" id="broadcast-msg" rows="3" placeholder="Enter message for all users..." style="margin:0; resize:vertical; font-family:inherit;"></textarea>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px; flex-wrap:wrap; gap:8px;">
+            <label style="font-size:0.85rem; color:var(--text-muted); display:flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="broadcast-alert" /> Send as Priority Alert Popup in App
+            </label>
+            <button class="btn btn-pink" onclick="sendBroadcastNotice()">🚀 Send Broadcast to Users</button>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title-row">
           <div>
             <h2 style="font-size:1.15rem;">Registered Users & Accounts</h2>
-            <p style="color:var(--text-muted); font-size:0.8rem;">Manage Blue Ticks, Green Ticks & Account Suspension</p>
+            <p style="color:var(--text-muted); font-size:0.8rem;">Manage Blue Ticks (Verified), Green Ticks (Admin) & Account Suspension</p>
           </div>
           <button class="btn btn-outline" onclick="loadUsers()">↻ Refresh</button>
         </div>
@@ -626,38 +648,72 @@ function getAdminHtml(baseUrl) {
           return;
         }
 
-        container.innerHTML = users.map(u => \`
-          <div class="user-card \${u.isBlocked ? 'blocked' : ''}">
+        container.innerHTML = users.map(u => {
+          const userHandle = u.username ? ('@' + u.username) : ('@' + (u.userName || 'user').toLowerCase().replace(/\s+/g, '_'));
+          return `
+          <div class="user-card ${u.isBlocked ? 'blocked' : ''}">
             <div class="user-top">
-              <img class="user-avatar" src="\${u.avatarUrl || '/assets/avatars/' + (u.avatarId.startsWith('girl') ? 'girls/' : 'boys/') + u.avatarId + '.webp'}" onerror="this.src='/assets/avatars/boys/boy_001.webp'"/>
+              <img class="user-avatar" src="${u.avatarUrl || '/assets/avatars/' + (u.avatarId.startsWith('girl') ? 'girls/' : 'boys/') + u.avatarId + '.webp'}" onerror="this.src='/assets/avatars/boys/boy_001.webp'"/>
               <div class="user-info">
                 <div class="user-name">
-                  <span>\${u.userName || 'User'}</span>
-                  \${u.blueTick ? '<span class="tick-blue" title="Blue Tick Verified">🔵</span>' : ''}
-                  \${u.greenTick ? '<span class="tick-green" title="Green Tick Verified">🟢</span>' : ''}
-                  \${u.isBlocked ? '<span style="color:var(--red); font-size:0.75rem; font-weight:800;">[BLOCKED]</span>' : ''}
+                  <span>${u.fullName || u.userName || 'User'}</span>
+                  ${(u.blueTick || u.isVerified) ? '<img src="/assets/blue_tick.png" style="width:17px; height:17px; vertical-align:middle; display:inline-block;" title="Verified Blue Tick"/>' : ''}
+                  ${u.greenTick ? '<img src="/assets/green_tick.png" style="width:17px; height:17px; vertical-align:middle; display:inline-block;" title="Official Duora Admin Tick"/>' : ''}
+                  ${u.isBlocked ? '<span style="color:var(--red); font-size:0.75rem; font-weight:800; margin-left:4px;">[SUSPENDED]</span>' : ''}
                 </div>
-                <div>
-                  <span class="user-code">#\${u.pairCode}</span>
-                  \${u.partnerCode ? '<span style="font-size:0.72rem; color:var(--text-muted); margin-left:6px;">❤️ Linked to #' + u.partnerCode + '</span>' : '<span style="font-size:0.72rem; color:var(--text-muted); margin-left:6px;">Unpaired</span>'}
+                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:1px;">
+                  <span>${userHandle}</span>
+                  <span class="user-code" style="margin-left:6px;">#${u.pairCode}</span>
+                </div>
+                <div style="margin-top:2px;">
+                  ${u.partnerCode ? '<span style="font-size:0.72rem; color:var(--hot-pink);">❤️ Linked to #' + u.partnerCode + '</span>' : '<span style="font-size:0.72rem; color:var(--text-muted);">Unpaired</span>'}
+                  ${u.isOnline ? '<span style="font-size:0.72rem; color:var(--green-tick); margin-left:8px;">● Online</span>' : '<span style="font-size:0.72rem; color:var(--text-muted); margin-left:8px;">○ Offline</span>'}
                 </div>
               </div>
             </div>
             <div class="user-actions">
-              <button class="btn \${u.blueTick ? 'btn-outline' : 'btn-blue'}" onclick="toggleTick('\${u.pairCode}', 'blue', \${!u.blueTick})">
-                \${u.blueTick ? 'Remove 🔵' : 'Verify 🔵'}
+              <button class="btn ${(u.blueTick || u.isVerified) ? 'btn-outline' : 'btn-blue'}" onclick="toggleTick('${u.pairCode}', 'blue', ${!(u.blueTick || u.isVerified)})">
+                ${(u.blueTick || u.isVerified) ? 'Remove Blue Tick' : 'Verify Blue Tick'}
               </button>
-              <button class="btn \${u.greenTick ? 'btn-outline' : 'btn-green'}" onclick="toggleTick('\${u.pairCode}', 'green', \${!u.greenTick})">
-                \${u.greenTick ? 'Remove 🟢' : 'Verify 🟢'}
+              <button class="btn ${u.greenTick ? 'btn-outline' : 'btn-green'}" onclick="toggleTick('${u.pairCode}', 'green', ${!u.greenTick})">
+                ${u.greenTick ? 'Remove Admin Tick' : 'Make Admin Tick'}
               </button>
-              <button class="btn \${u.isBlocked ? 'btn-green' : 'btn-danger'}" onclick="toggleBlock('\${u.pairCode}', \${!u.isBlocked})">
-                \${u.isBlocked ? 'Unblock' : 'Block ⛔'}
+              <button class="btn ${u.isBlocked ? 'btn-green' : 'btn-danger'}" onclick="toggleBlock('${u.pairCode}', ${!u.isBlocked})">
+                ${u.isBlocked ? 'Unsuspend' : 'Suspend / Block'}
               </button>
             </div>
           </div>
-        \`).join('');
+        `;}).join('');
       } catch (e) {
         console.error(e);
+      }
+    }
+
+    async function sendBroadcastNotice() {
+      const title = document.getElementById('broadcast-title').value.trim();
+      const message = document.getElementById('broadcast-msg').value.trim();
+      const isAlert = document.getElementById('broadcast-alert').checked;
+      if (!message) {
+        alert('Please enter a message to broadcast.');
+        return;
+      }
+      try {
+        const res = await fetch('/api/admin/broadcast', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, message, isAlert })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Notice successfully broadcasted to ' + (data.sentCount || 0) + ' active client(s)!');
+          document.getElementById('broadcast-title').value = '';
+          document.getElementById('broadcast-msg').value = '';
+          document.getElementById('broadcast-alert').checked = false;
+        } else {
+          alert('Broadcast error: ' + (data.error || 'Failed'));
+        }
+      } catch (err) {
+        alert('Broadcast failed: ' + err.message);
       }
     }
 
@@ -954,9 +1010,11 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
       if (pool && isDbConnected) {
         const result = await pool.query(`
           SELECT pair_code AS "pairCode", partner_code AS "partnerCode", user_name AS "userName",
+                 COALESCE(username, '') AS "username", COALESCE(full_name, '') AS "fullName",
                  COALESCE(avatar_id, 'boy_001') AS "avatarId", COALESCE(avatar_url, '') AS "avatarUrl",
                  COALESCE(is_blocked, FALSE) AS "isBlocked", COALESCE(blue_tick, FALSE) AS "blueTick",
-                 COALESCE(green_tick, FALSE) AS "greenTick", last_seen AS "lastSeen"
+                 COALESCE(green_tick, FALSE) AS "greenTick", COALESCE(is_verified, FALSE) AS "isVerified",
+                 last_seen AS "lastSeen"
           FROM couples ORDER BY updated_at DESC;
         `);
         for (const r of result.rows) {
@@ -975,11 +1033,14 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
               pairCode: code,
               partnerCode: entry.partnerCode || "",
               userName: entry.userName || "You",
+              username: entry.username || "",
+              fullName: entry.fullName || entry.userName || "You",
               avatarId: entry.avatarId || "boy_001",
               avatarUrl: entry.avatarUrl || "",
               isBlocked: !!entry.isBlocked,
               blueTick: !!entry.blueTick,
               greenTick: !!entry.greenTick,
+              isVerified: !!entry.isVerified || !!entry.blueTick,
               isOnline: entry.sockets && entry.sockets.size > 0
             });
           }
@@ -1039,17 +1100,67 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
       const col = type === "green" ? "green_tick" : "blue_tick";
 
       if (pool && isDbConnected) {
-        await pool.query(`UPDATE couples SET ${col} = $1, updated_at = NOW() WHERE pair_code = $2;`, [!!status, code]);
+        if (type === "blue") {
+          await pool.query(`UPDATE couples SET blue_tick = $1, is_verified = $1, updated_at = NOW() WHERE pair_code = $2;`, [!!status, code]);
+        } else {
+          await pool.query(`UPDATE couples SET ${col} = $1, updated_at = NOW() WHERE pair_code = $2;`, [!!status, code]);
+        }
       }
       const entry = memoryClients ? memoryClients.get(code) : null;
       if (entry) {
         if (type === "green") entry.greenTick = !!status;
-        else entry.blueTick = !!status;
+        else {
+          entry.blueTick = !!status;
+          entry.isVerified = !!status;
+        }
       }
 
       logAudit("VERIFY_USER", `${type.toUpperCase()} tick set to ${status} for #${code}`);
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ success: true, code, type, status: !!status }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: e.message }));
+    }
+  }
+
+  // 7.5 Admin Broadcast Notice / Push Alert
+  if (pathname === "/api/admin/broadcast" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const { title, message, isAlert } = body;
+      if (!message || !message.trim()) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ success: false, error: "Message cannot be empty" }));
+      }
+
+      const noticeId = "notice_" + Date.now();
+      const timestamp = Date.now();
+      const noticePayload = {
+        type: isAlert ? "admin_alert" : "admin_notice",
+        id: noticeId,
+        title: (title || "Official Duora Notice").trim(),
+        message: message.trim(),
+        timestamp,
+        isAlert: !!isAlert
+      };
+
+      let sentCount = 0;
+      if (wss && wss.clients) {
+        const msgStr = JSON.stringify(noticePayload);
+        for (const ws of wss.clients) {
+          if (ws.readyState === 1) { // WebSocket.OPEN
+            try {
+              ws.send(msgStr);
+              sentCount++;
+            } catch (_) {}
+          }
+        }
+      }
+
+      logAudit("ADMIN_BROADCAST", `${isAlert ? "ALERT" : "NOTICE"}: "${(title || '').slice(0, 30)}" to ${sentCount} clients`);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: true, noticeId, sentCount }));
     } catch (e) {
       res.writeHead(500, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ success: false, error: e.message }));

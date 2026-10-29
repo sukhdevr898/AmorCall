@@ -108,6 +108,10 @@ async function initDatabaseTables() {
       ALTER TABLE couples ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT FALSE;
       ALTER TABLE couples ADD COLUMN IF NOT EXISTS blue_tick BOOLEAN DEFAULT FALSE;
       ALTER TABLE couples ADD COLUMN IF NOT EXISTS green_tick BOOLEAN DEFAULT FALSE;
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS username VARCHAR(64) DEFAULT '';
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS full_name VARCHAR(128) DEFAULT '';
+      ALTER TABLE couples ADD COLUMN IF NOT EXISTS status_msg TEXT DEFAULT '';
     `).catch(() => {});
 
     // 1.5. Pairing Requests table
@@ -448,11 +452,11 @@ const server = http.createServer(async (req, res) => {
   });
   if (handledAdmin !== false) return;
 
-  // Serve static curated avatar assets
-  if (pathname.startsWith("/assets/avatars/")) {
-    const relative = pathname.replace(/^\/assets\/avatars\//, "");
+  // Serve static assets (avatars, icons, ticks)
+  if (pathname.startsWith("/assets/")) {
+    const relative = pathname.replace(/^\/assets\//, "");
     const safePath = path.normalize(relative).replace(/^(\.\.[\/\\])+/, "");
-    const fullPath = path.join(__dirname, "assets", "avatars", safePath);
+    const fullPath = path.join(__dirname, "assets", safePath);
     if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
       const ext = path.extname(fullPath).toLowerCase();
       const contentType = ext === ".png" ? "image/png" : (ext === ".jpg" || ext === ".jpeg") ? "image/jpeg" : "image/webp";
@@ -463,7 +467,7 @@ const server = http.createServer(async (req, res) => {
       return fs.createReadStream(fullPath).pipe(res);
     } else {
       res.writeHead(404, { "Content-Type": "application/json" });
-      return res.end(JSON.stringify({ error: "Avatar asset not found" }));
+      return res.end(JSON.stringify({ error: "Asset not found" }));
     }
   }
 

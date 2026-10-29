@@ -93,6 +93,18 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         list.count { !it.isOutgoing && !it.isRead && !it.isDeleted }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
     val serverConnectionState: StateFlow<ServerConnectionState> = signalingClient.connectionState
+    val adminNotices: StateFlow<List<com.example.model.AdminNotice>> = repository.adminNotices
+
+    private val _adminAlertNotice = MutableStateFlow<com.example.model.AdminNotice?>(null)
+    val adminAlertNotice: StateFlow<com.example.model.AdminNotice?> = _adminAlertNotice.asStateFlow()
+
+    fun dismissAdminAlert() {
+        _adminAlertNotice.value = null
+    }
+
+    fun markAdminNoticeRead(id: String) {
+        repository.markAdminNoticeRead(id)
+    }
 
     // Settings Navigation & Sub-screens
     private val _settingsSubScreen = MutableStateFlow(SettingsSubScreen.MAIN)
@@ -711,10 +723,12 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     }
                     is SignalingEvent.PartnerStatus -> {
                         val status = if (event.isOnline) "Partner Online ❤️" else "Thinking of you always ❤️"
+                        _partnerPresence.value = if (event.isOnline) event.status else "Away"
                         var updated = profile.value.copy(
                             partnerStatus = status,
                             partnerBlueTick = event.blueTick,
-                            partnerGreenTick = event.greenTick
+                            partnerGreenTick = event.greenTick,
+                            partnerIsVerified = event.isVerified
                         )
                         if (event.partnerName.isNotBlank()) {
                             updated = updated.copy(partnerName = event.partnerName)
@@ -726,6 +740,20 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                             updated = updated.copy(partnerAvatarUrl = event.partnerAvatarUrl)
                         }
                         repository.saveProfile(updated)
+                    }
+                    is SignalingEvent.AdminNoticeReceived -> {
+                        val notice = com.example.model.AdminNotice(
+                            id = event.id,
+                            title = event.title,
+                            message = event.message,
+                            timestamp = event.timestamp,
+                            isRead = false,
+                            isAlert = event.isAlert
+                        )
+                        repository.saveAdminNotice(notice)
+                        if (event.isAlert) {
+                            _adminAlertNotice.value = notice
+                        }
                     }
                     is SignalingEvent.Registered -> {
                         val updated = profile.value.copy(
@@ -1040,6 +1068,44 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             partnerNickname = partnerNickname.ifBlank { "Sweetheart" }
         )
         repository.saveProfile(updated)
+    }
+
+    fun updateExtendedProfile(
+        userName: String = profile.value.userName,
+        fullName: String = profile.value.fullName,
+        username: String = profile.value.username,
+        partnerName: String = profile.value.partnerName,
+        statusMsg: String = profile.value.statusMsg
+    ) {
+        val updated = profile.value.copy(
+            userName = userName.ifBlank { "You" },
+            fullName = fullName.ifBlank { userName.ifBlank { "You" } },
+            username = username.ifBlank { "duora_user" },
+            partnerName = partnerName.ifBlank { "My Love" },
+            statusMsg = statusMsg.ifBlank { "Always together ❤️" }
+        )
+        repository.saveProfile(updated)
+    }
+
+    fun setAppLockPin(pin: String) {
+        val updated = profile.value.copy(
+            appLockPin = pin,
+            isAppLockEnabled = pin.isNotBlank()
+        )
+        repository.saveProfile(updated)
+    }
+
+    fun setSecurityQuestionAndAnswer(question: String, answer: String) {
+        val updated = profile.value.copy(
+            securityQuestion = question,
+            securityAnswer = answer.trim()
+        )
+        repository.saveProfile(updated)
+    }
+
+    fun verifySecurityAnswer(input: String): Boolean {
+        val real = profile.value.securityAnswer.trim()
+        return real.isNotBlank() && real.equals(input.trim(), ignoreCase = true)
     }
 
     fun getRedactedDiagnostics(): String {

@@ -42,7 +42,16 @@ sealed class SignalingEvent {
         val partnerAvatarId: String = "",
         val partnerAvatarUrl: String? = null,
         val blueTick: Boolean = false,
-        val greenTick: Boolean = false
+        val greenTick: Boolean = false,
+        val isVerified: Boolean = false,
+        val status: String = "Online"
+    ) : SignalingEvent()
+    data class AdminNoticeReceived(
+        val id: String,
+        val title: String,
+        val message: String,
+        val timestamp: Long,
+        val isAlert: Boolean = false
     ) : SignalingEvent()
     data class Registered(
         val pairCode: String,
@@ -270,6 +279,8 @@ class SignalingClient private constructor() {
                     val partnerAvatarUrl = json.optString("partnerAvatarUrl", "").takeIf { it.isNotBlank() }
                     val blueTick = json.optBoolean("blueTick", false)
                     val greenTick = json.optBoolean("greenTick", false)
+                    val isVerified = json.optBoolean("isVerified", blueTick)
+                    val connStatus = json.optString("status", if (isOnline) "Online" else "Away")
                     scope.launch {
                         _events.emit(
                             SignalingEvent.PartnerStatus(
@@ -278,7 +289,9 @@ class SignalingClient private constructor() {
                                 partnerAvatarId = partnerAvatarId,
                                 partnerAvatarUrl = partnerAvatarUrl,
                                 blueTick = blueTick,
-                                greenTick = greenTick
+                                greenTick = greenTick,
+                                isVerified = isVerified,
+                                status = connStatus
                             )
                         )
                     }
@@ -447,6 +460,26 @@ class SignalingClient private constructor() {
                     }
                     scope.launch {
                         _events.emit(SignalingEvent.ChatHistoryLoaded(list))
+                    }
+                }
+                "admin_notice", "admin_alert" -> {
+                    val id = json.optString("id", java.util.UUID.randomUUID().toString())
+                    val title = json.optString("title", "Official Notice")
+                    val message = json.optString("message", "")
+                    val timestamp = json.optLong("timestamp", System.currentTimeMillis())
+                    val isAlert = json.optBoolean("isAlert", json.optString("type") == "admin_alert")
+                    if (message.isNotBlank()) {
+                        scope.launch {
+                            _events.emit(
+                                SignalingEvent.AdminNoticeReceived(
+                                    id = id,
+                                    title = title,
+                                    message = message,
+                                    timestamp = timestamp,
+                                    isAlert = isAlert
+                                )
+                            )
+                        }
                     }
                 }
             }
