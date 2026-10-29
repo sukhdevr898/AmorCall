@@ -650,40 +650,40 @@ function getAdminHtml(baseUrl) {
 
         container.innerHTML = users.map(u => {
           const userHandle = u.username ? ('@' + u.username) : ('@' + (u.userName || 'user').toLowerCase().replace(/\s+/g, '_'));
-          return `
-          <div class="user-card ${u.isBlocked ? 'blocked' : ''}">
+          return \`
+          <div class="user-card \${u.isBlocked ? 'blocked' : ''}">
             <div class="user-top">
-              <img class="user-avatar" src="${u.avatarUrl || '/assets/avatars/' + (u.avatarId.startsWith('girl') ? 'girls/' : 'boys/') + u.avatarId + '.webp'}" onerror="this.src='/assets/avatars/boys/boy_001.webp'"/>
+              <img class="user-avatar" src="\${u.avatarUrl || '/assets/avatars/' + (u.avatarId.startsWith('girl') ? 'girls/' : 'boys/') + u.avatarId + '.webp'}" onerror="this.src='/assets/avatars/boys/boy_001.webp'"/>
               <div class="user-info">
                 <div class="user-name">
-                  <span>${u.fullName || u.userName || 'User'}</span>
-                  ${(u.blueTick || u.isVerified) ? '<img src="/assets/blue_tick.png" style="width:17px; height:17px; vertical-align:middle; display:inline-block;" title="Verified Blue Tick"/>' : ''}
-                  ${u.greenTick ? '<img src="/assets/green_tick.png" style="width:17px; height:17px; vertical-align:middle; display:inline-block;" title="Official Duora Admin Tick"/>' : ''}
-                  ${u.isBlocked ? '<span style="color:var(--red); font-size:0.75rem; font-weight:800; margin-left:4px;">[SUSPENDED]</span>' : ''}
+                  <span>\${u.fullName || u.userName || 'User'}</span>
+                  \${(u.blueTick || u.isVerified) ? '<img src="/assets/blue_tick.png" style="width:17px; height:17px; vertical-align:middle; display:inline-block;" title="Verified Blue Tick"/>' : ''}
+                  \${u.greenTick ? '<img src="/assets/green_tick.png" style="width:17px; height:17px; vertical-align:middle; display:inline-block;" title="Official Duora Admin Tick"/>' : ''}
+                  \${u.isBlocked ? '<span style="color:var(--red); font-size:0.75rem; font-weight:800; margin-left:4px;">[SUSPENDED]</span>' : ''}
                 </div>
                 <div style="font-size:0.75rem; color:var(--text-muted); margin-top:1px;">
-                  <span>${userHandle}</span>
-                  <span class="user-code" style="margin-left:6px;">#${u.pairCode}</span>
+                  <span>\${userHandle}</span>
+                  <span class="user-code" style="margin-left:6px;">#\${u.pairCode}</span>
                 </div>
                 <div style="margin-top:2px;">
-                  ${u.partnerCode ? '<span style="font-size:0.72rem; color:var(--hot-pink);">❤️ Linked to #' + u.partnerCode + '</span>' : '<span style="font-size:0.72rem; color:var(--text-muted);">Unpaired</span>'}
-                  ${u.isOnline ? '<span style="font-size:0.72rem; color:var(--green-tick); margin-left:8px;">● Online</span>' : '<span style="font-size:0.72rem; color:var(--text-muted); margin-left:8px;">○ Offline</span>'}
+                  \${u.partnerCode ? '<span style="font-size:0.72rem; color:var(--hot-pink);">❤️ Linked to #' + u.partnerCode + '</span>' : '<span style="font-size:0.72rem; color:var(--text-muted);">Unpaired</span>'}
+                  \${u.isOnline ? '<span style="font-size:0.72rem; color:var(--green-tick); margin-left:8px;">● Online</span>' : '<span style="font-size:0.72rem; color:var(--text-muted); margin-left:8px;">○ Offline</span>'}
                 </div>
               </div>
             </div>
             <div class="user-actions">
-              <button class="btn ${(u.blueTick || u.isVerified) ? 'btn-outline' : 'btn-blue'}" onclick="toggleTick('${u.pairCode}', 'blue', ${!(u.blueTick || u.isVerified)})">
-                ${(u.blueTick || u.isVerified) ? 'Remove Blue Tick' : 'Verify Blue Tick'}
+              <button class="btn \${(u.blueTick || u.isVerified) ? 'btn-outline' : 'btn-blue'}" onclick="toggleTick('\${u.pairCode}', 'blue', \${!(u.blueTick || u.isVerified)})">
+                \${(u.blueTick || u.isVerified) ? 'Remove Blue Tick' : 'Verify Blue Tick'}
               </button>
-              <button class="btn ${u.greenTick ? 'btn-outline' : 'btn-green'}" onclick="toggleTick('${u.pairCode}', 'green', ${!u.greenTick})">
-                ${u.greenTick ? 'Remove Admin Tick' : 'Make Admin Tick'}
+              <button class="btn \${u.greenTick ? 'btn-outline' : 'btn-green'}" onclick="toggleTick('\${u.pairCode}', 'green', \${!u.greenTick})">
+                \${u.greenTick ? 'Remove Admin Tick' : 'Make Admin Tick'}
               </button>
-              <button class="btn ${u.isBlocked ? 'btn-green' : 'btn-danger'}" onclick="toggleBlock('${u.pairCode}', ${!u.isBlocked})">
-                ${u.isBlocked ? 'Unsuspend' : 'Suspend / Block'}
+              <button class="btn \${u.isBlocked ? 'btn-green' : 'btn-danger'}" onclick="toggleBlock('\${u.pairCode}', \${!u.isBlocked})">
+                \${u.isBlocked ? 'Unsuspend' : 'Suspend / Block'}
               </button>
             </div>
           </div>
-        `;}).join('');
+        \`;}).join('');
       } catch (e) {
         console.error(e);
       }
