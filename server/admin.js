@@ -201,20 +201,24 @@ async function generateQrSvg(code) {
 }
 
 // Responsive, Mobile-friendly Single-Page Admin Web App
+// Responsive, Mobile-friendly Single-Page Admin Web App with Pure Vector SVG Icons
 function getAdminHtml(baseUrl) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Duora • Admin & User Manager</title>
+  <title>Duora • Cloud Hub & User Manager</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
   <style>
     :root {
-      --bg: #0E0713;
-      --card: #190E22;
-      --card-border: #2E1A3D;
+      --bg: #09040D;
+      --bg-gradient: radial-gradient(circle at 50% -20%, #2A0E38 0%, #09040D 70%);
+      --card: rgba(22, 12, 31, 0.75);
+      --card-hover: rgba(30, 16, 42, 0.9);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-focus: rgba(255, 45, 141, 0.5);
       --text: #F8F5FB;
       --text-muted: #9E91AC;
       --hot-pink: #FF2D8D;
@@ -224,22 +228,28 @@ function getAdminHtml(baseUrl) {
       --green-tick: #22C55E;
       --red: #EF4444;
       --yellow: #F59E0B;
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       font-family: 'Plus Jakarta Sans', sans-serif;
       background: var(--bg);
+      background-image: var(--bg-gradient);
+      background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
-      padding-bottom: 72px;
+      padding-bottom: 78px;
     }
     header {
-      background: rgba(25, 14, 34, 0.9);
-      backdrop-filter: blur(12px);
+      background: rgba(14, 7, 20, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--card-border);
-      padding: 12px 18px;
+      padding: 12px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -250,131 +260,246 @@ function getAdminHtml(baseUrl) {
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       font-weight: 800;
       font-size: 1.15rem;
+      letter-spacing: -0.3px;
     }
-    .heart-logo {
-      width: 32px;
-      height: 32px;
+    .brand-icon {
+      width: 36px;
+      height: 36px;
       background: linear-gradient(135deg, var(--hot-pink), var(--purple));
-      border-radius: 9px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      color: white;
+      box-shadow: 0 4px 14px var(--hot-pink-glow);
     }
+    .brand-text { display: flex; flex-direction: column; }
+    .brand-title { font-size: 1.05rem; font-weight: 800; line-height: 1.2; }
+    .brand-sub { font-size: 0.68rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; }
+    
     .desktop-nav { display: flex; gap: 6px; }
     @media (max-width: 768px) {
       .desktop-nav { display: none; }
     }
     .nav-btn {
-      padding: 7px 14px;
+      padding: 8px 16px;
       background: transparent;
-      border: none;
+      border: 1px solid transparent;
       color: var(--text-muted);
       font-weight: 600;
-      font-size: 0.85rem;
-      border-radius: 10px;
+      font-size: 0.84rem;
+      border-radius: var(--radius-md);
       cursor: pointer;
-      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .nav-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
     }
     .nav-btn.active {
       background: var(--hot-pink);
       color: white;
-      box-shadow: 0 4px 12px var(--hot-pink-glow);
+      box-shadow: 0 4px 14px var(--hot-pink-glow);
     }
     main {
       flex: 1;
-      padding: 16px;
-      max-width: 1200px;
+      padding: 20px 16px;
+      max-width: 1240px;
       margin: 0 auto;
       width: 100%;
     }
     .stats-bar {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 10px;
-      margin-bottom: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
     }
     .stat-pill {
       background: var(--card);
+      backdrop-filter: blur(10px);
       border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 12px 14px;
+      border-radius: var(--radius-md);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s;
     }
-    .stat-label { font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
-    .stat-num { font-size: 1.4rem; font-weight: 800; color: white; margin-top: 2px; }
+    .stat-pill:hover { border-color: rgba(255,255,255,0.18); }
+    .stat-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-muted);
+    }
+    .stat-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+    .stat-num { font-size: 1.55rem; font-weight: 800; color: white; margin-top: 4px; font-feature-settings: "tnum"; }
+    
     .card {
       background: var(--card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border: 1px solid var(--card-border);
-      border-radius: 18px;
-      padding: 18px;
-      margin-bottom: 16px;
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
     }
     .card-title-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 14px;
+      margin-bottom: 16px;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 12px;
     }
     .btn {
       padding: 8px 14px;
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       border: none;
       font-weight: 700;
       font-size: 0.82rem;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      transition: transform 0.15s;
+      gap: 7px;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
     }
-    .btn:active { transform: scale(0.96); }
-    .btn-pink { background: var(--hot-pink); color: white; }
-    .btn-blue { background: rgba(56, 189, 248, 0.15); color: var(--blue-tick); border: 1px solid rgba(56,189,248,0.4); }
-    .btn-green { background: rgba(34, 197, 94, 0.15); color: var(--green-tick); border: 1px solid rgba(34,197,94,0.4); }
-    .btn-danger { background: rgba(239, 68, 68, 0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.4); }
-    .btn-outline { background: rgba(255,255,255,0.06); color: var(--text); border: 1px solid var(--card-border); }
+    .btn:active { transform: scale(0.97); }
+    .btn-pink { background: var(--hot-pink); color: white; box-shadow: 0 3px 10px var(--hot-pink-glow); }
+    .btn-pink:hover { background: #FF479D; }
+    .btn-blue { background: rgba(56, 189, 248, 0.12); color: var(--blue-tick); border: 1px solid rgba(56,189,248,0.35); }
+    .btn-blue:hover { background: rgba(56, 189, 248, 0.22); }
+    .btn-green { background: rgba(34, 197, 94, 0.12); color: var(--green-tick); border: 1px solid rgba(34,197,94,0.35); }
+    .btn-green:hover { background: rgba(34, 197, 94, 0.22); }
+    .btn-danger { background: rgba(239, 68, 68, 0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.35); }
+    .btn-danger:hover { background: rgba(239, 68, 68, 0.22); }
+    .btn-outline { background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid var(--card-border); }
+    .btn-outline:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
     
-    /* Users Grid / Card View (Mobile Friendly) */
+    /* Search & Filter Bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .filter-chip {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.15s;
+    }
+    .filter-chip.active {
+      color: white;
+      background: var(--hot-pink);
+      border-color: var(--hot-pink);
+      box-shadow: 0 2px 8px var(--hot-pink-glow);
+    }
+    
+    /* Search input box with icon */
+    .search-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      min-width: 220px;
+      flex: 1;
+      max-width: 320px;
+    }
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      color: var(--text-muted);
+      pointer-events: none;
+      display: flex;
+    }
+    .search-input {
+      width: 100%;
+      background: rgba(14, 7, 20, 0.85);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-md);
+      padding: 9px 12px 9px 36px;
+      color: white;
+      font-size: 0.82rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .search-input:focus {
+      border-color: var(--hot-pink);
+      outline: none;
+      box-shadow: 0 0 0 3px var(--hot-pink-glow);
+    }
+    
+    /* Users Grid */
     .user-list {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 14px;
     }
     .user-card {
-      background: rgba(14, 7, 19, 0.65);
+      background: rgba(14, 7, 20, 0.65);
       border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 14px;
+      border-radius: var(--radius-md);
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .user-card:hover {
+      border-color: rgba(255, 255, 255, 0.18);
+      transform: translateY(-2px);
     }
     .user-card.blocked {
       border-color: rgba(239, 68, 68, 0.5);
-      background: rgba(239, 68, 68, 0.05);
+      background: rgba(239, 68, 68, 0.06);
     }
     .user-top {
       display: flex;
       align-items: center;
       gap: 12px;
     }
+    .avatar-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
     .user-avatar {
-      width: 48px;
-      height: 48px;
+      width: 52px;
+      height: 52px;
       border-radius: 50%;
       object-fit: cover;
-      background: #2A173B;
+      background: #251336;
       border: 2px solid var(--card-border);
+      display: block;
     }
+    .status-badge {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 2px solid #0E0714;
+    }
+    .status-badge.online { background: var(--green-tick); box-shadow: 0 0 6px rgba(34, 197, 94, 0.8); }
+    .status-badge.offline { background: #64748B; }
+    
     .user-info { flex: 1; overflow: hidden; }
-    .user-name {
-      font-size: 0.95rem;
-      font-weight: 700;
+    .user-name-row {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -382,25 +507,78 @@ function getAdminHtml(baseUrl) {
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .tick-blue { color: var(--blue-tick); font-size: 0.85rem; }
-    .tick-green { color: var(--green-tick); font-size: 0.85rem; }
-    .user-code {
-      font-family: 'JetBrains Mono', monospace;
+    .user-name {
+      font-size: 0.96rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge-icon {
+      width: 17px;
+      height: 17px;
+      flex-shrink: 0;
+      vertical-align: middle;
+      display: inline-flex;
+    }
+    .user-handle {
       font-size: 0.75rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .user-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+    .code-chip {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      font-weight: 700;
       color: var(--hot-pink);
       background: rgba(255, 45, 141, 0.12);
-      padding: 2px 6px;
-      border-radius: 5px;
-      display: inline-block;
-      margin-top: 2px;
+      border: 1px solid rgba(255, 45, 141, 0.25);
+      padding: 2px 7px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
     }
+    .code-chip:hover { background: rgba(255, 45, 141, 0.2); }
+    
+    .partner-box {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.76rem;
+    }
+    .partner-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--hot-pink);
+      font-weight: 600;
+    }
+    .partner-unpaired {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    
     .user-actions {
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
+      margin-top: 2px;
     }
-    .user-actions .btn { flex: 1; min-width: 80px; justify-content: center; }
-
+    .user-actions .btn { flex: 1; min-width: 90px; justify-content: center; font-size: 0.76rem; padding: 7px 10px; }
+    
     /* Mobile Bottom Navigation */
     .mobile-nav {
       display: none;
@@ -408,8 +586,9 @@ function getAdminHtml(baseUrl) {
       bottom: 0;
       left: 0;
       right: 0;
-      background: rgba(25, 14, 34, 0.95);
-      backdrop-filter: blur(14px);
+      background: rgba(14, 7, 20, 0.94);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
       border-top: 1px solid var(--card-border);
       padding: 6px 12px;
       z-index: 90;
@@ -422,26 +601,28 @@ function getAdminHtml(baseUrl) {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 2px;
+      gap: 3px;
       font-size: 0.7rem;
       font-weight: 600;
       color: var(--text-muted);
       background: transparent;
       border: none;
-      padding: 6px 10px;
-      border-radius: 8px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
       cursor: pointer;
+      transition: color 0.15s;
     }
     .m-tab.active { color: var(--hot-pink); }
-    .m-tab-icon { font-size: 1.15rem; }
-
+    .m-tab-icon { display: flex; align-items: center; justify-content: center; }
+    
     /* Modal */
     .modal-wrap {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.75);
-      backdrop-filter: blur(8px);
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       z-index: 100;
       align-items: center;
       justify-content: center;
@@ -449,98 +630,238 @@ function getAdminHtml(baseUrl) {
     }
     .modal-wrap.open { display: flex; }
     .modal-box {
-      background: var(--card);
+      background: #170C22;
       border: 1px solid var(--card-border);
-      border-radius: 20px;
+      border-radius: var(--radius-lg);
       width: 100%;
       max-width: 480px;
-      padding: 22px;
+      padding: 24px;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.5);
     }
     .input-box {
       width: 100%;
-      background: rgba(14, 7, 19, 0.85);
+      background: rgba(10, 4, 15, 0.85);
       border: 1px solid var(--card-border);
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       padding: 10px 14px;
       color: white;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       margin-top: 6px;
       margin-bottom: 12px;
+      transition: border-color 0.2s;
     }
     .input-box:focus { border-color: var(--hot-pink); outline: none; }
+    
+    /* Toast System */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    @media (max-width: 768px) {
+      #toast-container { bottom: 84px; right: 16px; left: 16px; }
+    }
+    .toast {
+      background: rgba(26, 14, 38, 0.95);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(12px);
+      color: white;
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      font-size: 0.84rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      animation: slideIn 0.25s ease-out;
+      pointer-events: auto;
+    }
+    .toast.success { border-color: rgba(34, 197, 94, 0.5); color: #86EFAC; }
+    .toast.error { border-color: rgba(239, 68, 68, 0.5); color: #FCA5A5; }
+    @keyframes slideIn { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   </style>
 </head>
 <body>
+  <div id="toast-container"></div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal-wrap" id="confirm-modal">
+    <div class="modal-box">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <div id="confirm-icon" style="color:var(--hot-pink);"></div>
+        <h3 id="confirm-title" style="font-size:1.1rem; font-weight:700;">Confirm Action</h3>
+      </div>
+      <p id="confirm-message" style="color:var(--text-muted); font-size:0.86rem; line-height:1.45; margin-bottom:18px;"></p>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn btn-outline" onclick="closeConfirmModal()">Cancel</button>
+        <button class="btn btn-pink" id="confirm-btn">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <header>
     <div class="brand">
-      <div class="heart-logo">💕</div>
-      <span>Duora Cloud Hub</span>
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-title">Duora Cloud Hub</span>
+        <span class="brand-sub">Admin Engine</span>
+      </div>
     </div>
     <div class="desktop-nav">
-      <button class="nav-btn active" onclick="goTab('users')">Users & Verification</button>
-      <button class="nav-btn" onclick="goTab('avatars')">Avatars & UploadThing</button>
-      <button class="nav-btn" onclick="goTab('files')">Files</button>
-      <button class="nav-btn" onclick="goTab('audit')">Audit</button>
+      <button class="nav-btn active" onclick="goTab('users', this)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Users & Verification
+      </button>
+      <button class="nav-btn" onclick="goTab('avatars', this)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+        Avatars & CDN
+      </button>
+      <button class="nav-btn" onclick="goTab('files', this)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Files
+      </button>
+      <button class="nav-btn" onclick="goTab('audit', this)">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+        Audit Log
+      </button>
     </div>
   </header>
 
   <main>
     <div class="stats-bar">
       <div class="stat-pill">
-        <div class="stat-label">Total Users</div>
+        <div class="stat-header">
+          <span class="stat-label">Total Users</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        </div>
         <div class="stat-num" id="stat-users">--</div>
       </div>
       <div class="stat-pill">
-        <div class="stat-label">Active Pairs</div>
+        <div class="stat-header">
+          <span class="stat-label">Paired Couples</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--hot-pink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+        </div>
         <div class="stat-num" id="stat-pairs" style="color:var(--hot-pink);">--</div>
       </div>
       <div class="stat-pill">
-        <div class="stat-label">Avatars</div>
+        <div class="stat-header">
+          <span class="stat-label">Verified</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--blue-tick)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="stat-num" id="stat-verified" style="color:var(--blue-tick);">--</div>
+      </div>
+      <div class="stat-pill">
+        <div class="stat-header">
+          <span class="stat-label">Avatars</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+        </div>
         <div class="stat-num" id="stat-avatars">--</div>
       </div>
       <div class="stat-pill">
-        <div class="stat-label">UploadThing</div>
-        <div class="stat-num" id="stat-ut" style="font-size:1rem; color:var(--green-tick); margin-top:6px;">Ready</div>
+        <div class="stat-header">
+          <span class="stat-label">UploadThing</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--green-tick)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="stat-num" id="stat-ut" style="font-size:1rem; color:var(--green-tick); margin-top:8px;">Ready</div>
       </div>
     </div>
 
     <!-- TAB 1: USERS & VERIFICATION -->
     <div id="tab-users">
-      <!-- BROADCAST NOTICE CARD -->
-      <div class="card" style="margin-bottom:16px;">
-        <div class="card-title-row" style="margin-bottom:8px;">
+      <!-- REAL-TIME NOTICE CARD -->
+      <div class="card">
+        <div class="card-title-row">
           <div>
-            <h2 style="font-size:1.15rem; display:flex; align-items:center; gap:8px;">
-              <span>📢 Real-Time Official Notice & Push Broadcast</span>
+            <h2 style="font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--hot-pink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+              Real-Time Notice & Push Broadcast
             </h2>
-            <p style="color:var(--text-muted); font-size:0.8rem;">Broadcast official notices and urgent security alerts to all connected apps in real-time.</p>
+            <p style="color:var(--text-muted); font-size:0.8rem; margin-top:2px;">Instantly send official notices or alert banners to all connected couple devices.</p>
           </div>
         </div>
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <input class="input-box" id="broadcast-title" placeholder="Notice Title (e.g., Duora Team Official Notice)" style="margin:0;" />
-          <textarea class="input-box" id="broadcast-msg" rows="3" placeholder="Enter message for all users..." style="margin:0; resize:vertical; font-family:inherit;"></textarea>
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-top:4px; flex-wrap:wrap; gap:8px;">
-            <label style="font-size:0.85rem; color:var(--text-muted); display:flex; align-items:center; gap:6px; cursor:pointer;">
-              <input type="checkbox" id="broadcast-alert" /> Send as Priority Alert Popup in App
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <input class="input-box" id="broadcast-title" placeholder="Notice Title (e.g. Duora Team Announcement)" style="margin:0;" />
+          <textarea class="input-box" id="broadcast-msg" rows="2" placeholder="Write notice content to broadcast to all apps in real-time..." style="margin:0; resize:vertical; font-family:inherit;"></textarea>
+          <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:2px;">
+            <label style="font-size:0.82rem; color:var(--text-muted); display:inline-flex; align-items:center; gap:6px; cursor:pointer;">
+              <input type="checkbox" id="broadcast-alert" style="accent-color:var(--hot-pink);" />
+              <span>Send as priority alert popup in app</span>
             </label>
-            <button class="btn btn-pink" onclick="sendBroadcastNotice()">🚀 Send Broadcast to Users</button>
+            <button class="btn btn-pink" onclick="sendBroadcastNotice()">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              Broadcast Notice
+            </button>
           </div>
         </div>
       </div>
 
+      <!-- USERS MANAGEMENT CARD -->
       <div class="card">
-        <div class="card-title-row" style="flex-wrap:wrap; gap:10px;">
+        <div class="card-title-row">
           <div>
-            <h2 style="font-size:1.15rem;">Registered Users & Accounts</h2>
-            <p style="color:var(--text-muted); font-size:0.8rem;">Manage Real Names, Blue Ticks (Verified), Admin Ticks, Unpairing & Account Suspension</p>
+            <h2 style="font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Registered Users & Accounts
+            </h2>
+            <p style="color:var(--text-muted); font-size:0.8rem; margin-top:2px;">Verified Blue Ticks, Admin Green Ticks, Account Suspension & Single-Click Unpairing</p>
           </div>
           <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-            <input id="search-users" class="input-box" placeholder="🔍 Search users, codes..." oninput="filterUsers()" style="margin:0; width:190px; padding:6px 10px; font-size:0.8rem;" />
-            <button class="btn btn-outline" onclick="loadUsers()">↻ Refresh</button>
-            <button class="btn btn-outline" style="border-color:var(--yellow); color:var(--yellow);" onclick="cleanDuplicates()">🧹 Clean Stale</button>
-            <button class="btn btn-danger" onclick="wipeDatabase()">⚠️ Wipe (Fresh Start)</button>
+            <div class="search-wrap">
+              <span class="search-icon">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </span>
+              <input id="search-users" class="search-input" placeholder="Search name, code, partner..." oninput="filterUsers()" />
+            </div>
+            <button class="btn btn-outline" onclick="loadUsers()" title="Refresh User List">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              Refresh
+            </button>
+            <button class="btn btn-outline" style="border-color:rgba(245,158,11,0.4); color:var(--yellow);" onclick="cleanDuplicates()" title="Clean Duplicate Codes">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg>
+              Clean Stale
+            </button>
+            <button class="btn btn-danger" onclick="wipeDatabase()" title="Wipe all data for fresh testing">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Wipe (Fresh Start)
+            </button>
           </div>
         </div>
+
+        <!-- Filter Chips Row -->
+        <div class="filter-bar">
+          <button class="filter-chip active" data-filter="all" onclick="setFilter('all', this)">All Accounts</button>
+          <button class="filter-chip" data-filter="online" onclick="setFilter('online', this)">
+            <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--green-tick);"></span>
+            Online
+          </button>
+          <button class="filter-chip" data-filter="paired" onclick="setFilter('paired', this)">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Paired
+          </button>
+          <button class="filter-chip" data-filter="verified" onclick="setFilter('verified', this)">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="var(--blue-tick)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Verified Blue
+          </button>
+          <button class="filter-chip" data-filter="admin" onclick="setFilter('admin', this)">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="var(--green-tick)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Admin Green
+          </button>
+          <button class="filter-chip" data-filter="suspended" onclick="setFilter('suspended', this)">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            Suspended
+          </button>
+        </div>
+
         <div class="user-list" id="users-container">Loading users...</div>
       </div>
     </div>
@@ -550,12 +871,18 @@ function getAdminHtml(baseUrl) {
       <div class="card">
         <div class="card-title-row">
           <div>
-            <h2 style="font-size:1.15rem;">Remote Avatar & DP Hub</h2>
-            <p style="color:var(--text-muted); font-size:0.8rem;">Serve curated avatars or upload to UploadThing CDN</p>
+            <h2 style="font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--hot-pink)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+              Remote Avatar & DP Catalog
+            </h2>
+            <p style="color:var(--text-muted); font-size:0.8rem; margin-top:2px;">Curate avatar collections or upload new styles directly to UploadThing CDN</p>
           </div>
-          <button class="btn btn-pink" onclick="openUploadModal()">+ Upload Avatar</button>
+          <button class="btn btn-pink" onclick="openUploadModal()">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Upload Avatar
+          </button>
         </div>
-        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(135px, 1fr)); gap:10px;" id="avatar-grid">
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:12px;" id="avatar-grid">
           Loading avatars...
         </div>
       </div>
@@ -564,7 +891,10 @@ function getAdminHtml(baseUrl) {
     <!-- TAB 3: FILES -->
     <div id="tab-files" style="display:none;">
       <div class="card">
-        <h2 style="font-size:1.15rem; margin-bottom:12px;">Storage File Browser</h2>
+        <h2 style="font-size:1.1rem; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--blue-tick)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Storage File Browser
+        </h2>
         <div id="files-list">Loading files...</div>
       </div>
     </div>
@@ -572,7 +902,10 @@ function getAdminHtml(baseUrl) {
     <!-- TAB 4: AUDIT -->
     <div id="tab-audit" style="display:none;">
       <div class="card">
-        <h2 style="font-size:1.15rem; margin-bottom:12px;">Audit & Security Log</h2>
+        <h2 style="font-size:1.1rem; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="var(--green-tick)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          Audit & Security Activity Log
+        </h2>
         <div id="audit-list">Loading audit trail...</div>
       </div>
     </div>
@@ -581,19 +914,27 @@ function getAdminHtml(baseUrl) {
   <!-- Mobile Bottom Tab Bar -->
   <div class="mobile-nav">
     <button class="m-tab active" onclick="goTab('users', this)">
-      <span class="m-tab-icon">👥</span>
+      <span class="m-tab-icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </span>
       <span>Users</span>
     </button>
     <button class="m-tab" onclick="goTab('avatars', this)">
-      <span class="m-tab-icon">🎨</span>
+      <span class="m-tab-icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+      </span>
       <span>Avatars</span>
     </button>
     <button class="m-tab" onclick="goTab('files', this)">
-      <span class="m-tab-icon">📁</span>
+      <span class="m-tab-icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      </span>
       <span>Files</span>
     </button>
     <button class="m-tab" onclick="goTab('audit', this)">
-      <span class="m-tab-icon">📝</span>
+      <span class="m-tab-icon">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+      </span>
       <span>Audit</span>
     </button>
   </div>
@@ -601,21 +942,29 @@ function getAdminHtml(baseUrl) {
   <!-- Upload Avatar Modal -->
   <div class="modal-wrap" id="upload-modal">
     <div class="modal-box">
-      <h3 style="margin-bottom:12px;">Upload Avatar (UploadThing / Local)</h3>
-      <label style="font-size:0.8rem; color:var(--text-muted);">Category</label>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 style="font-size:1.1rem; font-weight:700;">Upload Avatar (UploadThing / Local)</h3>
+        <button onclick="closeUploadModal()" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <label style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">Category</label>
       <select class="input-box" id="new-cat">
         <option value="BOY">BOY</option>
         <option value="GIRL">GIRL</option>
       </select>
-      <label style="font-size:0.8rem; color:var(--text-muted);">Display Name</label>
-      <input class="input-box" id="new-name" placeholder="e.g. Leo (Cool Smile)" />
-      <label style="font-size:0.8rem; color:var(--text-muted);">Avatar ID</label>
+      <label style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">Display Name</label>
+      <input class="input-box" id="new-name" placeholder="e.g. Leo (Cool Jacket)" />
+      <label style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">Avatar ID</label>
       <input class="input-box" id="new-id" placeholder="e.g. boy_011 or girl_011" />
-      <label style="font-size:0.8rem; color:var(--text-muted);">Select Image</label>
+      <label style="font-size:0.78rem; color:var(--text-muted); font-weight:600;">Select Image</label>
       <input type="file" id="new-file" accept="image/*" class="input-box" />
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
         <button class="btn btn-outline" onclick="closeUploadModal()">Cancel</button>
-        <button class="btn btn-pink" onclick="submitAvatar()">Save Avatar</button>
+        <button class="btn btn-pink" onclick="submitAvatar()">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Save Avatar
+        </button>
       </div>
     </div>
   </div>
@@ -623,6 +972,38 @@ function getAdminHtml(baseUrl) {
   <script>
     let users = [];
     let avatars = [];
+    let currentFilter = 'all';
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast ' + type;
+      toast.innerText = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        toast.style.transition = 'all 0.2s';
+        setTimeout(() => toast.remove(), 250);
+      }, 3500);
+    }
+
+    function showConfirm(title, message, btnText, isDanger, onConfirm) {
+      document.getElementById('confirm-title').innerText = title;
+      document.getElementById('confirm-message').innerText = message;
+      const btn = document.getElementById('confirm-btn');
+      btn.innerText = btnText;
+      btn.className = 'btn ' + (isDanger ? 'btn-danger' : 'btn-pink');
+      btn.onclick = () => {
+        closeConfirmModal();
+        onConfirm();
+      };
+      document.getElementById('confirm-modal').classList.add('open');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirm-modal').classList.remove('open');
+    }
 
     function goTab(name, elem) {
       document.querySelectorAll('.nav-btn, .m-tab').forEach(b => b.classList.remove('active'));
@@ -631,12 +1012,28 @@ function getAdminHtml(baseUrl) {
         if (b.innerText.toLowerCase().includes(name)) b.classList.add('active');
       });
       ['users', 'avatars', 'files', 'audit'].forEach(t => {
-        document.getElementById('tab-' + t).style.display = (t === name) ? 'block' : 'none';
+        const el = document.getElementById('tab-' + t);
+        if (el) el.style.display = (t === name) ? 'block' : 'none';
       });
       if (name === 'users') loadUsers();
       if (name === 'avatars') loadAvatars();
       if (name === 'files') loadFiles();
       if (name === 'audit') loadAudit();
+    }
+
+    function setFilter(filter, elem) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      if (elem) elem.classList.add('active');
+      filterUsers();
+    }
+
+    function copyCode(code) {
+      navigator.clipboard.writeText(code).then(() => {
+        showToast('Pair code #' + code + ' copied to clipboard', 'success');
+      }).catch(() => {
+        showToast('Code: #' + code, 'info');
+      });
     }
 
     async function loadUsers() {
@@ -646,127 +1043,181 @@ function getAdminHtml(baseUrl) {
         users = json.users || [];
         document.getElementById('stat-users').innerText = users.length;
         document.getElementById('stat-pairs').innerText = users.filter(u => u.partnerCode).length;
+        document.getElementById('stat-verified').innerText = users.filter(u => u.blueTick || u.isVerified || u.greenTick).length;
 
-        const container = document.getElementById('users-container');
-        if (users.length === 0) {
-          container.innerHTML = '<p style="color:var(--text-muted); padding:10px;">No users registered yet.</p>';
-          return;
-        }
-
-        container.innerHTML = users.map(u => {
-          const userHandle = u.username ? ('@' + u.username) : ('@' + (u.userName || 'user').toLowerCase().replace(/\s+/g, '_'));
-          return \`
-          <div class="user-card \${u.isBlocked ? 'blocked' : ''}">
-            <div class="user-top">
-              <img class="user-avatar" src="\${u.avatarUrl || '/assets/avatars/' + (u.avatarId.startsWith('girl') ? 'girls/' : 'boys/') + u.avatarId + '.webp'}" onerror="this.src='/assets/avatars/boys/boy_001.webp'"/>
-              <div class="user-info">
-                <div class="user-name">
-                  <span>\${u.fullName || u.userName || 'User'}</span>
-                  \${(u.blueTick || u.isVerified) ? '<img src="/assets/blue_tick.png" style="width:17px; height:17px; vertical-align:middle; display:inline-block;" title="Verified Blue Tick"/>' : ''}
-                  \${u.greenTick ? '<img src="/assets/green_tick.png" style="width:17px; height:17px; vertical-align:middle; display:inline-block;" title="Official Duora Admin Tick"/>' : ''}
-                  \${u.isBlocked ? '<span style="color:var(--red); font-size:0.75rem; font-weight:800; margin-left:4px;">[SUSPENDED]</span>' : ''}
-                </div>
-                <div style="font-size:0.75rem; color:var(--text-muted); margin-top:1px;">
-                  <span>\${userHandle}</span>
-                  <span class="user-code" style="margin-left:6px;">#\${u.pairCode}</span>
-                </div>
-                <div style="margin-top:2px;">
-                  \${u.partnerCode ? '<span style="font-size:0.72rem; color:var(--hot-pink);">❤️ Linked to #' + u.partnerCode + '</span>' : '<span style="font-size:0.72rem; color:var(--text-muted);">Unpaired</span>'}
-                  \${u.isOnline ? '<span style="font-size:0.72rem; color:var(--green-tick); margin-left:8px;">● Online</span>' : '<span style="font-size:0.72rem; color:var(--text-muted); margin-left:8px;">○ Offline</span>'}
-                </div>
-              </div>
-            </div>
-            <div class="user-actions">
-              <button class="btn \${(u.blueTick || u.isVerified) ? 'btn-outline' : 'btn-blue'}" onclick="toggleTick('\${u.pairCode}', 'blue', \${!(u.blueTick || u.isVerified)})">
-                \${(u.blueTick || u.isVerified) ? 'Remove Blue Tick' : 'Verify Blue Tick'}
-              </button>
-              <button class="btn \${u.greenTick ? 'btn-outline' : 'btn-green'}" onclick="toggleTick('\${u.pairCode}', 'green', \${!u.greenTick})">
-                \${u.greenTick ? 'Remove Admin Tick' : 'Make Admin Tick'}
-              </button>
-              \${u.partnerCode ? \`<button class="btn btn-outline" style="color:var(--hot-pink); border-color:rgba(255,45,141,0.4);" onclick="unpairUser('\${u.pairCode}')">💔 Unpair</button>\` : ''}
-              <button class="btn \${u.isBlocked ? 'btn-green' : 'btn-danger'}" onclick="toggleBlock('\${u.pairCode}', \${!u.isBlocked})">
-                \${u.isBlocked ? 'Unsuspend' : 'Suspend / Block'}
-              </button>
-              <button class="btn btn-outline" style="color:var(--red); border-color:rgba(239,68,68,0.3); min-width:40px; flex:0;" title="Delete User" onclick="deleteUser('\${u.pairCode}')">🗑️</button>
-            </div>
-          </div>
-        \`;}).join('');
+        renderUserCards();
       } catch (e) {
-        console.error(e);
+        showToast('Error loading users: ' + e.message, 'error');
       }
     }
 
-    async function unpairUser(pairCode) {
-      if (!confirm('Unlink / unpair user #' + pairCode + ' from their partner?')) return;
-      try {
-        const res = await fetch('/api/admin/users/unpair', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pairCode })
-        });
-        const data = await res.json();
-        if (data.success) {
-          alert('User #' + pairCode + ' unpaired successfully.');
-          loadUsers();
+    function renderUserCards() {
+      const container = document.getElementById('users-container');
+      if (users.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No users registered yet. Launch the Duora Android app to create an account.</p>';
+        return;
+      }
+
+      const q = (document.getElementById('search-users')?.value || '').toLowerCase().trim();
+
+      const filtered = users.filter(u => {
+        if (currentFilter === 'online' && !u.isOnline) return false;
+        if (currentFilter === 'paired' && !u.partnerCode) return false;
+        if (currentFilter === 'verified' && !(u.blueTick || u.isVerified)) return false;
+        if (currentFilter === 'admin' && !u.greenTick) return false;
+        if (currentFilter === 'suspended' && !u.isBlocked) return false;
+
+        if (q) {
+          const hay = ((u.fullName || '') + ' ' + (u.userName || '') + ' ' + (u.username || '') + ' ' + (u.pairCode || '') + ' ' + (u.partnerCode || '')).toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-muted); padding:16px;">No matching accounts found for the current filter/search.</p>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(u => {
+        const userHandle = u.username ? ('@' + u.username) : ('@' + (u.userName || 'user').toLowerCase().replace(/\\s+/g, '_'));
+        const displayName = u.fullName || u.userName || 'User';
+        const partnerName = u.partnerName || 'Partner';
+        const avatarSrc = u.avatarUrl || ('/assets/avatars/' + (u.avatarId.startsWith('girl') ? 'girls/' : 'boys/') + u.avatarId + '.webp');
+
+        const blueBadge = (u.blueTick || u.isVerified)
+          ? '<img class="badge-icon" src="/assets/blue_tick.png" title="Verified Blue Badge" onerror="this.style.display=\\'none\\'"/>'
+          : '';
+        const greenBadge = u.greenTick
+          ? '<img class="badge-icon" src="/assets/green_tick.png" title="Official Admin Green Badge" onerror="this.style.display=\\'none\\'"/>'
+          : '';
+
+        let partnerRow = '';
+        if (u.partnerCode) {
+          partnerRow = '<div class="partner-box">' +
+            '<div class="partner-info">' +
+              '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>' +
+              '<span>' + partnerName + '</span>' +
+              '<span style="font-family:JetBrains Mono, monospace; font-size:0.72rem; color:var(--text-muted);">#' + u.partnerCode + '</span>' +
+            '</div>' +
+            (u.partnerCode ? '<button class="btn btn-outline" style="padding:4px 8px; font-size:0.7rem; color:var(--hot-pink);" onclick="unpairUser(\\'' + u.pairCode + '\\')">Unlink</button>' : '') +
+          '</div>';
         } else {
-          alert('Unpair failed: ' + (data.error || 'Unknown error'));
+          partnerRow = '<div class="partner-box">' +
+            '<span class="partner-unpaired">Single / Not Paired</span>' +
+          '</div>';
         }
-      } catch (e) {
-        alert('Unpair failed: ' + e.message);
-      }
+
+        return '<div class="user-card ' + (u.isBlocked ? 'blocked' : '') + '">' +
+          '<div class="user-top">' +
+            '<div class="avatar-wrap">' +
+              '<img class="user-avatar" src="' + avatarSrc + '" onerror="this.src=\\'/assets/avatars/boys/boy_001.webp\\'"/>' +
+              '<span class="status-badge ' + (u.isOnline ? 'online' : 'offline') + '" title="' + (u.isOnline ? 'Online' : 'Offline') + '"></span>' +
+            '</div>' +
+            '<div class="user-info">' +
+              '<div class="user-name-row">' +
+                '<span class="user-name">' + displayName + '</span>' +
+                blueBadge +
+                greenBadge +
+                (u.isBlocked ? '<span style="color:var(--red); font-size:0.72rem; font-weight:800; background:rgba(239,68,68,0.15); padding:1px 6px; border-radius:4px;">SUSPENDED</span>' : '') +
+              '</div>' +
+              '<div class="user-meta-row">' +
+                '<span class="user-handle">' + userHandle + '</span>' +
+                '<span class="code-chip" onclick="copyCode(\\'' + u.pairCode + '\\')" title="Click to copy pair code">#' + u.pairCode +
+                  '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+                '</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          partnerRow +
+          '<div class="user-actions">' +
+            '<button class="btn ' + ((u.blueTick || u.isVerified) ? 'btn-outline' : 'btn-blue') + '" onclick="toggleTick(\\'' + u.pairCode + '\\', \\'blue\\', ' + (!(u.blueTick || u.isVerified)) + ')">' +
+              '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+              ((u.blueTick || u.isVerified) ? 'Remove Blue' : 'Verify Blue') +
+            '</button>' +
+            '<button class="btn ' + (u.greenTick ? 'btn-outline' : 'btn-green') + '" onclick="toggleTick(\\'' + u.pairCode + '\\', \\'green\\', ' + (!u.greenTick) + ')">' +
+              '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>' +
+              (u.greenTick ? 'Remove Admin' : 'Admin Tick') +
+            '</button>' +
+            '<button class="btn ' + (u.isBlocked ? 'btn-green' : 'btn-danger') + '" onclick="toggleBlock(\\'' + u.pairCode + '\\', ' + (!u.isBlocked) + ')">' +
+              '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>' +
+              (u.isBlocked ? 'Unsuspend' : 'Suspend') +
+            '</button>' +
+            '<button class="btn btn-outline" style="color:var(--red); border-color:rgba(239,68,68,0.3); min-width:38px; flex:0;" title="Delete User Permanently" onclick="deleteUser(\\'' + u.pairCode + '\\')">' +
+              '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
     }
 
-    async function deleteUser(pairCode) {
-      if (!confirm('Delete user #' + pairCode + ' permanently? This cannot be undone.')) return;
-      try {
-        const res = await fetch('/api/admin/users/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pairCode })
-        });
-        const data = await res.json();
-        if (data.success) {
-          alert('User #' + pairCode + ' deleted.');
-          loadUsers();
-        } else {
-          alert('Delete failed: ' + (data.error || 'Unknown error'));
-        }
-      } catch (e) {
-        alert('Delete failed: ' + e.message);
-      }
+    function filterUsers() {
+      renderUserCards();
     }
 
-    async function wipeDatabase() {
-      const conf = prompt('⚠️ WARNING: This will permanently wipe ALL users, pairings, call logs, notes, and chat messages for a fresh registration! Type WIPE to confirm:');
+    function unpairUser(pairCode) {
+      showConfirm('Unlink Partner', 'Unlink user #' + pairCode + ' from their partner? Both users can re-pair anytime.', 'Unlink Partner', true, async () => {
+        try {
+          const res = await fetch('/api/admin/users/unpair', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pairCode })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showToast('User #' + pairCode + ' unlinked successfully', 'success');
+            loadUsers();
+          } else {
+            showToast('Unlink failed: ' + (data.error || 'Unknown error'), 'error');
+          }
+        } catch (e) {
+          showToast('Unlink failed: ' + e.message, 'error');
+        }
+      });
+    }
+
+    function deleteUser(pairCode) {
+      showConfirm('Delete User', 'Delete user #' + pairCode + ' permanently? This cannot be undone.', 'Delete Permanently', true, async () => {
+        try {
+          const res = await fetch('/api/admin/users/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pairCode })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showToast('User #' + pairCode + ' deleted', 'success');
+            loadUsers();
+          } else {
+            showToast('Delete failed: ' + (data.error || 'Unknown error'), 'error');
+          }
+        } catch (e) {
+          showToast('Delete failed: ' + e.message, 'error');
+        }
+      });
+    }
+
+    function wipeDatabase() {
+      const conf = prompt('WARNING: This will permanently wipe ALL users, pairings, call logs, notes, and messages for a fresh registration! Type WIPE to confirm:');
       if (conf !== 'WIPE') return;
-      try {
-        const res = await fetch('/api/admin/database/clear-all', { method: 'POST' });
-        const data = await res.json();
-        alert(data.message || 'Database wiped successfully.');
-        loadUsers();
-      } catch (e) {
-        alert('Wipe failed: ' + e.message);
-      }
+      fetch('/api/admin/database/clear-all', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          showToast(data.message || 'Database wiped successfully', 'success');
+          loadUsers();
+        })
+        .catch(e => showToast('Wipe failed: ' + e.message, 'error'));
     }
 
     async function cleanDuplicates() {
       try {
         const res = await fetch('/api/admin/clean-duplicates', { method: 'POST' });
         const data = await res.json();
-        alert(data.message || 'Cleaned stale records.');
+        showToast(data.message || 'Cleaned stale records', 'success');
         loadUsers();
       } catch (e) {
-        alert('Clean failed: ' + e.message);
+        showToast('Clean failed: ' + e.message, 'error');
       }
-    }
-
-    function filterUsers() {
-      const q = (document.getElementById('search-users')?.value || '').toLowerCase().trim();
-      const cards = document.querySelectorAll('.user-card');
-      cards.forEach(c => {
-        const text = c.innerText.toLowerCase();
-        c.style.display = (!q || text.includes(q)) ? 'flex' : 'none';
-      });
     }
 
     async function sendBroadcastNotice() {
@@ -774,7 +1225,7 @@ function getAdminHtml(baseUrl) {
       const message = document.getElementById('broadcast-msg').value.trim();
       const isAlert = document.getElementById('broadcast-alert').checked;
       if (!message) {
-        alert('Please enter a message to broadcast.');
+        showToast('Please enter a notice message', 'error');
         return;
       }
       try {
@@ -785,35 +1236,47 @@ function getAdminHtml(baseUrl) {
         });
         const data = await res.json();
         if (data.success) {
-          alert('Notice successfully broadcasted to ' + (data.sentCount || 0) + ' active client(s)!');
+          showToast('Notice broadcasted to ' + (data.sentCount || 0) + ' active client(s)', 'success');
           document.getElementById('broadcast-title').value = '';
           document.getElementById('broadcast-msg').value = '';
           document.getElementById('broadcast-alert').checked = false;
         } else {
-          alert('Broadcast error: ' + (data.error || 'Failed'));
+          showToast('Broadcast error: ' + (data.error || 'Failed'), 'error');
         }
       } catch (err) {
-        alert('Broadcast failed: ' + err.message);
+        showToast('Broadcast failed: ' + err.message, 'error');
       }
     }
 
     async function toggleTick(pairCode, type, status) {
-      await fetch('/api/admin/users/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pairCode, type, status })
-      });
-      loadUsers();
+      try {
+        await fetch('/api/admin/users/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pairCode, type, status })
+        });
+        showToast('Updated ' + (type === 'blue' ? 'Blue' : 'Admin') + ' tick for #' + pairCode, 'success');
+        loadUsers();
+      } catch (e) {
+        showToast('Failed to update verification tick', 'error');
+      }
     }
 
-    async function toggleBlock(pairCode, isBlocked) {
-      if (!confirm((isBlocked ? 'Block' : 'Unblock') + ' user #' + pairCode + '?')) return;
-      await fetch('/api/admin/users/block', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pairCode, isBlocked })
+    function toggleBlock(pairCode, isBlocked) {
+      const action = isBlocked ? 'Suspend' : 'Unsuspend';
+      showConfirm(action + ' User', 'Are you sure you want to ' + action.toLowerCase() + ' user #' + pairCode + '?', action, isBlocked, async () => {
+        try {
+          await fetch('/api/admin/users/block', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pairCode, isBlocked })
+          });
+          showToast('User #' + pairCode + ' ' + (isBlocked ? 'suspended' : 'unsuspended'), 'success');
+          loadUsers();
+        } catch (e) {
+          showToast('Failed to change suspension state', 'error');
+        }
       });
-      loadUsers();
     }
 
     async function loadAvatars() {
@@ -823,13 +1286,13 @@ function getAdminHtml(baseUrl) {
         avatars = json.items || [];
         document.getElementById('stat-avatars').innerText = avatars.length;
 
-        document.getElementById('avatar-grid').innerHTML = avatars.map(a => \`
-          <div style="background:rgba(14,7,19,0.7); border:1px solid var(--card-border); border-radius:12px; padding:8px; text-align:center;">
-            <img src="\${a.imageUrl}" style="width:100%; aspect-ratio:1; border-radius:8px; object-fit:cover;" onerror="this.src='\${a.thumbnailUrl}'"/>
-            <div style="font-size:0.75rem; font-weight:700; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">\${a.name}</div>
-            <div style="font-size:0.65rem; color:var(--hot-pink); font-family:monospace;">\${a.id}</div>
-          </div>
-        \`).join('');
+        document.getElementById('avatar-grid').innerHTML = avatars.map(a =>
+          '<div style="background:rgba(14,7,20,0.7); border:1px solid var(--card-border); border-radius:12px; padding:10px; text-align:center; transition:transform 0.2s;" onmouseenter="this.style.transform=\\'translateY(-2px)\\'" onmouseleave="this.style.transform=\\'none\\'">' +
+            '<img src="' + a.imageUrl + '" style="width:100%; aspect-ratio:1; border-radius:10px; object-fit:cover;" onerror="this.src=\\'' + a.thumbnailUrl + '\\'"/>' +
+            '<div style="font-size:0.78rem; font-weight:700; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + a.name + '</div>' +
+            '<div style="font-size:0.68rem; color:var(--hot-pink); font-family:JetBrains Mono, monospace; margin-top:2px;">' + a.id + '</div>' +
+          '</div>'
+        ).join('');
       } catch (e) {}
     }
 
@@ -837,12 +1300,20 @@ function getAdminHtml(baseUrl) {
       try {
         const res = await fetch('/api/admin/files');
         const json = await res.json();
-        document.getElementById('files-list').innerHTML = (json.files || []).map(f => \`
-          <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:0.82rem;">
-            <span>\${f.path}</span>
-            <span style="color:var(--text-muted);">\${f.size}</span>
-          </div>
-        \`).join('');
+        const files = json.files || [];
+        if (files.length === 0) {
+          document.getElementById('files-list').innerHTML = '<p style="color:var(--text-muted); padding:10px;">No static files found.</p>';
+          return;
+        }
+        document.getElementById('files-list').innerHTML = files.map(f =>
+          '<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:0.84rem;">' +
+            '<div style="display:flex; align-items:center; gap:8px;">' +
+              '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--blue-tick)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+              '<span>' + f.path + '</span>' +
+            '</div>' +
+            '<span style="color:var(--text-muted); font-family:JetBrains Mono, monospace; font-size:0.75rem;">' + f.size + '</span>' +
+          '</div>'
+        ).join('');
       } catch (e) {}
     }
 
@@ -850,12 +1321,20 @@ function getAdminHtml(baseUrl) {
       try {
         const res = await fetch('/api/admin/audit');
         const json = await res.json();
-        document.getElementById('audit-list').innerHTML = (json.audit || []).map(a => \`
-          <div style="padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:0.8rem;">
-            <div style="font-weight:700; color:var(--hot-pink);">\${a.action} • \${a.target}</div>
-            <div style="color:var(--text-muted); font-size:0.72rem;">\${a.timestamp} by \${a.user}</div>
-          </div>
-        \`).join('');
+        const logs = json.audit || [];
+        if (logs.length === 0) {
+          document.getElementById('audit-list').innerHTML = '<p style="color:var(--text-muted); padding:10px;">No audit events yet.</p>';
+          return;
+        }
+        document.getElementById('audit-list').innerHTML = logs.map(a =>
+          '<div style="padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.06); font-size:0.82rem;">' +
+            '<div style="font-weight:700; color:var(--hot-pink); display:flex; align-items:center; gap:6px;">' +
+              '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+              '<span>' + a.action + '</span> • <span style="color:var(--text);">' + a.target + '</span>' +
+            '</div>' +
+            '<div style="color:var(--text-muted); font-size:0.72rem; margin-top:2px;">' + a.timestamp + ' by ' + a.user + '</div>' +
+          '</div>'
+        ).join('');
       } catch (e) {}
     }
 
@@ -867,7 +1346,7 @@ function getAdminHtml(baseUrl) {
       const name = document.getElementById('new-name').value.trim();
       const id = document.getElementById('new-id').value.trim();
       const fileInput = document.getElementById('new-file');
-      if (!name || !id) { alert('Fill out Name and ID'); return; }
+      if (!name || !id) { showToast('Please enter both Avatar Name and ID', 'error'); return; }
 
       let base64 = null;
       if (fileInput.files[0]) {
@@ -878,17 +1357,22 @@ function getAdminHtml(baseUrl) {
         });
       }
 
-      const res = await fetch('/api/admin/avatars', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, name, id, imageBase64: base64 })
-      });
-      const data = await res.json();
-      if (data.success) {
-        closeUploadModal();
-        loadAvatars();
-      } else {
-        alert(data.error || 'Failed');
+      try {
+        const res = await fetch('/api/admin/avatars', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category, name, id, imageBase64: base64 })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeUploadModal();
+          showToast('Avatar ' + name + ' saved successfully', 'success');
+          loadAvatars();
+        } else {
+          showToast(data.error || 'Failed to save avatar', 'error');
+        }
+      } catch (err) {
+        showToast('Upload error: ' + err.message, 'error');
       }
     }
 
