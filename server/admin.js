@@ -529,12 +529,17 @@ function getAdminHtml(baseUrl) {
       </div>
 
       <div class="card">
-        <div class="card-title-row">
+        <div class="card-title-row" style="flex-wrap:wrap; gap:10px;">
           <div>
             <h2 style="font-size:1.15rem;">Registered Users & Accounts</h2>
-            <p style="color:var(--text-muted); font-size:0.8rem;">Manage Blue Ticks (Verified), Green Ticks (Admin) & Account Suspension</p>
+            <p style="color:var(--text-muted); font-size:0.8rem;">Manage Real Names, Blue Ticks (Verified), Admin Ticks, Unpairing & Account Suspension</p>
           </div>
-          <button class="btn btn-outline" onclick="loadUsers()">↻ Refresh</button>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input id="search-users" class="input-box" placeholder="🔍 Search users, codes..." oninput="filterUsers()" style="margin:0; width:190px; padding:6px 10px; font-size:0.8rem;" />
+            <button class="btn btn-outline" onclick="loadUsers()">↻ Refresh</button>
+            <button class="btn btn-outline" style="border-color:var(--yellow); color:var(--yellow);" onclick="cleanDuplicates()">🧹 Clean Stale</button>
+            <button class="btn btn-danger" onclick="wipeDatabase()">⚠️ Wipe (Fresh Start)</button>
+          </div>
         </div>
         <div class="user-list" id="users-container">Loading users...</div>
       </div>
@@ -678,15 +683,90 @@ function getAdminHtml(baseUrl) {
               <button class="btn \${u.greenTick ? 'btn-outline' : 'btn-green'}" onclick="toggleTick('\${u.pairCode}', 'green', \${!u.greenTick})">
                 \${u.greenTick ? 'Remove Admin Tick' : 'Make Admin Tick'}
               </button>
+              \${u.partnerCode ? \`<button class="btn btn-outline" style="color:var(--hot-pink); border-color:rgba(255,45,141,0.4);" onclick="unpairUser('\${u.pairCode}')">💔 Unpair</button>\` : ''}
               <button class="btn \${u.isBlocked ? 'btn-green' : 'btn-danger'}" onclick="toggleBlock('\${u.pairCode}', \${!u.isBlocked})">
                 \${u.isBlocked ? 'Unsuspend' : 'Suspend / Block'}
               </button>
+              <button class="btn btn-outline" style="color:var(--red); border-color:rgba(239,68,68,0.3); min-width:40px; flex:0;" title="Delete User" onclick="deleteUser('\${u.pairCode}')">🗑️</button>
             </div>
           </div>
         \`;}).join('');
       } catch (e) {
         console.error(e);
       }
+    }
+
+    async function unpairUser(pairCode) {
+      if (!confirm('Unlink / unpair user #' + pairCode + ' from their partner?')) return;
+      try {
+        const res = await fetch('/api/admin/users/unpair', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pairCode })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('User #' + pairCode + ' unpaired successfully.');
+          loadUsers();
+        } else {
+          alert('Unpair failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Unpair failed: ' + e.message);
+      }
+    }
+
+    async function deleteUser(pairCode) {
+      if (!confirm('Delete user #' + pairCode + ' permanently? This cannot be undone.')) return;
+      try {
+        const res = await fetch('/api/admin/users/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pairCode })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('User #' + pairCode + ' deleted.');
+          loadUsers();
+        } else {
+          alert('Delete failed: ' + (data.error || 'Unknown error'));
+        }
+      } catch (e) {
+        alert('Delete failed: ' + e.message);
+      }
+    }
+
+    async function wipeDatabase() {
+      const conf = prompt('⚠️ WARNING: This will permanently wipe ALL users, pairings, call logs, notes, and chat messages for a fresh registration! Type WIPE to confirm:');
+      if (conf !== 'WIPE') return;
+      try {
+        const res = await fetch('/api/admin/database/clear-all', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || 'Database wiped successfully.');
+        loadUsers();
+      } catch (e) {
+        alert('Wipe failed: ' + e.message);
+      }
+    }
+
+    async function cleanDuplicates() {
+      try {
+        const res = await fetch('/api/admin/clean-duplicates', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || 'Cleaned stale records.');
+        loadUsers();
+      } catch (e) {
+        alert('Clean failed: ' + e.message);
+      }
+    }
+
+    function filterUsers() {
+      const q = (document.getElementById('search-users')?.value || '').toLowerCase().trim();
+      const cards = document.querySelectorAll('.user-card');
+      cards.forEach(c => {
+        const text = c.innerText.toLowerCase();
+        c.style.display = (!q || text.includes(q)) ? 'flex' : 'none';
+      });
     }
 
     async function sendBroadcastNotice() {
@@ -1124,7 +1204,119 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
     }
   }
 
-  // 7.5 Admin Broadcast Notice / Push Alert
+  // 7.1 Admin User Unpair
+  if (pathname === "/api/admin/users/unpair" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const code = (body.pairCode || "").toUpperCase().trim();
+      if (!code) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ success: false, error: "Missing pairCode" }));
+      }
+      let partnerCode = "";
+      if (pool && isDbConnected) {
+        const row = await pool.query("SELECT partner_code FROM couples WHERE pair_code = $1;", [code]);
+        if (row.rows.length > 0) partnerCode = row.rows[0].partner_code || "";
+        await pool.query("UPDATE couples SET partner_code = '', updated_at = NOW() WHERE pair_code = $1;", [code]);
+        if (partnerCode) {
+          await pool.query("UPDATE couples SET partner_code = '', updated_at = NOW() WHERE pair_code = $1;", [partnerCode]);
+        }
+      }
+      const entry = memoryClients ? memoryClients.get(code) : null;
+      if (entry) {
+        if (!partnerCode) partnerCode = entry.partnerCode || "";
+        entry.partnerCode = "";
+      }
+      if (partnerCode) {
+        const partnerEntry = memoryClients ? memoryClients.get(partnerCode) : null;
+        if (partnerEntry) partnerEntry.partnerCode = "";
+        if (forwardToTarget) {
+          forwardToTarget(partnerCode, { type: "unpaired", byCode: code, message: "Unpaired by Administrator." });
+        }
+      }
+      if (forwardToTarget) {
+        forwardToTarget(code, { type: "unpaired", byCode: "admin", message: "Unpaired by Administrator." });
+      }
+      logAudit("UNPAIR_USER", `User #${code} and #${partnerCode} unlinked`);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: true, code, partnerCode }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: e.message }));
+    }
+  }
+
+  // 7.2 Admin User Delete
+  if (pathname === "/api/admin/users/delete" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const code = (body.pairCode || "").toUpperCase().trim();
+      if (!code) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ success: false, error: "Missing pairCode" }));
+      }
+      if (pool && isDbConnected) {
+        await pool.query("DELETE FROM couples WHERE pair_code = $1;", [code]);
+      }
+      if (memoryClients && memoryClients.has(code)) {
+        const entry = memoryClients.get(code);
+        if (entry.sockets) {
+          for (const s of entry.sockets) {
+            try { s.close(); } catch (_) {}
+          }
+        }
+        memoryClients.delete(code);
+      }
+      logAudit("DELETE_USER", `User #${code} deleted by admin`);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: true, code }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: e.message }));
+    }
+  }
+
+  // 7.3 Admin Database Clear All (Fresh Registration)
+  if (pathname === "/api/admin/database/clear-all" && req.method === "POST") {
+    try {
+      if (pool && isDbConnected) {
+        await pool.query(`
+          DELETE FROM pairing_requests;
+          DELETE FROM call_logs;
+          DELETE FROM shared_notes;
+          DELETE FROM chat_messages;
+          DELETE FROM couples;
+        `);
+      }
+      if (memoryClients) memoryClients.clear();
+      logAudit("WIPE_DATABASE", "All users, pairs, call logs and chat messages wiped for fresh start");
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: true, message: "Database completely cleared. Ready for fresh registration." }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: e.message }));
+    }
+  }
+
+  // 7.4 Clean Duplicate / Orphaned Unlinked User Codes
+  if (pathname === "/api/admin/clean-duplicates" && req.method === "POST") {
+    try {
+      let removedCount = 0;
+      if (pool && isDbConnected) {
+        const resClean = await pool.query(`
+          DELETE FROM couples
+          WHERE partner_code = '' AND user_name = 'You' AND updated_at < NOW() - INTERVAL '2 hours';
+        `);
+        removedCount = resClean.rowCount || 0;
+      }
+      logAudit("CLEAN_DUPLICATES", `Cleaned ${removedCount} duplicate / abandoned records`);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: true, removedCount, message: `Removed ${removedCount} stale duplicate records.` }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ success: false, error: e.message }));
+    }
+  }
   if (pathname === "/api/admin/broadcast" && req.method === "POST") {
     try {
       const body = await readJsonBody(req);

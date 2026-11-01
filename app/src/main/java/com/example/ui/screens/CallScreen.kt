@@ -125,11 +125,15 @@ fun CallScreen(
             // 3. Audio Calling (Sheets 1, 2, 3)
             callSession.type == CallType.VOICE -> {
                 val partnerAvatarToDisplay = profile.partnerAvatarUrl ?: viewModel.resolveAvatarUrl(profile.partnerAvatarId)
+                val partnerNameToDisplay = profile.partnerName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+                    ?: "Partner"
                 AudioCallScreen(
                     callSession = callSession,
-                    partnerName = profile.partnerName.ifBlank { "My Love 💕" },
+                    partnerName = partnerNameToDisplay,
                     partnerNickname = profile.partnerNickname,
                     avatarUri = partnerAvatarToDisplay,
+                    partnerBlueTick = profile.partnerBlueTick || profile.partnerIsVerified,
+                    partnerGreenTick = profile.partnerGreenTick,
                     onAccept = { viewModel.acceptCall() },
                     onDecline = { viewModel.declineCall() },
                     onEndCall = { viewModel.endCall() },
@@ -137,7 +141,7 @@ fun CallScreen(
                     onToggleSpeaker = { viewModel.toggleSpeaker() },
                     onSendMessageQuick = {
                         viewModel.sendChatMessage("Can't talk right now ❤️, texting you!")
-                        Toast.makeText(context, "Quick text sent to ${profile.partnerName} ❤️", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Quick text sent to $partnerNameToDisplay ❤️", Toast.LENGTH_SHORT).show()
                     },
                     onRemindMe = {
                         Toast.makeText(context, "Call reminder set for 10 minutes", Toast.LENGTH_SHORT).show()
@@ -149,11 +153,15 @@ fun CallScreen(
             // 4. Video Calling (Sheets 4, 5, 6)
             callSession.type == CallType.VIDEO -> {
                 val partnerAvatarToDisplay = profile.partnerAvatarUrl ?: viewModel.resolveAvatarUrl(profile.partnerAvatarId)
+                val partnerNameToDisplay = profile.partnerName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+                    ?: "Partner"
                 VideoCallScreen(
                     callSession = callSession,
-                    partnerName = profile.partnerName.ifBlank { "My Love 💕" },
+                    partnerName = partnerNameToDisplay,
                     partnerNickname = profile.partnerNickname,
                     avatarUri = partnerAvatarToDisplay,
+                    partnerBlueTick = profile.partnerBlueTick || profile.partnerIsVerified,
+                    partnerGreenTick = profile.partnerGreenTick,
                     remoteVideoBitmap = remoteVideo,
                     inCallMessage = inCallMessage,
                     onAccept = { viewModel.acceptCall(incomingType = CallType.VIDEO) },

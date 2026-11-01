@@ -1307,23 +1307,32 @@ if (shouldShowBottomBar) {
         )
     }
 
-    // Profile & Settings Menu Sheet from Design Reference
+    // Profile Overview & Quick Account Sheet
     if (showProfileMenu) {
+        val myAvatar = profile.avatarUrl ?: viewModel.resolveAvatarThumbnailUrl(profile.avatarId)
+        val partnerAvatar = profile.partnerAvatarUrl ?: viewModel.resolveAvatarThumbnailUrl(profile.partnerAvatarId)
         ProfileMenuSheet(
-            partnerName = profile.partnerName,
-            isOnline = profile.partnerStatus.equals("online", ignoreCase = true),
+            profile = profile,
+            avatarUrl = myAvatar,
+            partnerAvatarUrl = partnerAvatar,
+            isPartnerOnline = partnerPresence.equals("online", ignoreCase = true) || profile.partnerStatus.equals("online", ignoreCase = true),
             onDismissRequest = { showProfileMenu = false },
-            onPartnerPairingClick = { viewModel.navigateTo(AppScreen.PAIRING) },
-            onThemeClick = { showThemeDialog = true },
-            onServerSettingsClick = { showServerHealthDialog = true },
-            onProfileClick = { showProfileDialog = true },
-            onPrivacySecurityClick = {
+            onEditProfileClick = {
                 showProfileMenu = false
                 currentBottomTab = HomeBottomTab.SETTINGS
-                viewModel.navigateSettingsTo(com.example.viewmodel.SettingsSubScreen.PRIVACY_APP_ICON)
+                viewModel.navigateSettingsTo(com.example.viewmodel.SettingsSubScreen.PROFILE_AVATAR)
             },
-            onHelpSupportClick = { showAboutDialog = true },
-            onLogoutClick = { viewModel.signOut() }
+            onPartnerPairingClick = {
+                showProfileMenu = false
+                viewModel.navigateTo(AppScreen.PAIRING)
+            },
+            onUnpairClick = {
+                viewModel.unpairPartner { success ->
+                    if (success) {
+                        Toast.makeText(context, "Partner unpaired successfully 💔", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
         )
     }
 }

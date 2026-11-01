@@ -670,7 +670,17 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
 
         // Connect to signaling server
         val prof = profile.value
-        signalingClient.connect(prof.serverUrl, prof.myPairCode, prof.partnerPairCode)
+        signalingClient.connect(
+            serverUrl = prof.serverUrl,
+            myCode = prof.myPairCode,
+            partnerCode = prof.partnerPairCode,
+            userName = prof.userName,
+            fullName = prof.fullName,
+            username = prof.username,
+            avatarId = prof.avatarId,
+            avatarUrl = prof.avatarUrl ?: "",
+            statusMsg = prof.statusMsg
+        )
 
         // Poll pairing status to check for pending requests
         pollPairingStatus()
@@ -693,7 +703,33 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         } else {
                             CallType.VOICE
                         }
-                        triggerIncomingCall(type, incomingCallId = event.callId)
+                        var updated = profile.value.copy(
+                            partnerBlueTick = event.callerBlueTick,
+                            partnerGreenTick = event.callerGreenTick,
+                            partnerIsVerified = event.callerIsVerified
+                        )
+                        if (event.callerName.isNotBlank() && !event.callerName.equals("You", ignoreCase = true) && !event.callerName.equals(profile.value.userName, ignoreCase = true)) {
+                            updated = updated.copy(partnerName = event.callerName)
+                        }
+                        if (event.callerAvatarId.isNotBlank()) {
+                            updated = updated.copy(partnerAvatarId = event.callerAvatarId)
+                        }
+                        if (event.callerAvatarUrl != null) {
+                            updated = updated.copy(partnerAvatarUrl = event.callerAvatarUrl)
+                        }
+                        repository.saveProfile(updated)
+                        triggerIncomingCall(type, callerName = event.callerName, incomingCallId = event.callId)
+                    }
+                    is SignalingEvent.Unpaired -> {
+                        repository.unlinkPartner()
+                        _pairingStatusMessage.value = event.message.ifBlank { "Partner unpaired" }
+                        viewModelScope.launch(Dispatchers.Main) {
+                            android.widget.Toast.makeText(getApplication(), event.message.ifBlank { "Your partner unpaired the connection." }, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    is SignalingEvent.RegenerateCodeSuccess -> {
+                        val updated = profile.value.copy(myPairCode = event.newCode)
+                        repository.saveProfile(updated)
                     }
                     is SignalingEvent.CallRinging -> {
                         if (_callSession.value.status == CallStatus.OUTGOING_RINGING) {
@@ -730,7 +766,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                             partnerGreenTick = event.greenTick,
                             partnerIsVerified = event.isVerified
                         )
-                        if (event.partnerName.isNotBlank()) {
+                        if (event.partnerName.isNotBlank() && !event.partnerName.equals("You", ignoreCase = true) && !event.partnerName.equals(profile.value.userName, ignoreCase = true)) {
                             updated = updated.copy(partnerName = event.partnerName)
                         }
                         if (event.partnerAvatarId.isNotBlank()) {
@@ -1068,6 +1104,14 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             partnerNickname = partnerNickname.ifBlank { "Sweetheart" }
         )
         repository.saveProfile(updated)
+        signalingClient.updateProfile(
+            userName = updated.userName,
+            fullName = updated.fullName,
+            username = updated.username,
+            avatarId = updated.avatarId,
+            avatarUrl = updated.avatarUrl ?: resolveAvatarUrl(updated.avatarId),
+            statusMsg = updated.statusMsg
+        )
     }
 
     fun updateExtendedProfile(
@@ -1085,6 +1129,14 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             statusMsg = statusMsg.ifBlank { "Always together ❤️" }
         )
         repository.saveProfile(updated)
+        signalingClient.updateProfile(
+            userName = updated.userName,
+            fullName = updated.fullName,
+            username = updated.username,
+            avatarId = updated.avatarId,
+            avatarUrl = updated.avatarUrl ?: resolveAvatarUrl(updated.avatarId),
+            statusMsg = updated.statusMsg
+        )
     }
 
     fun setAppLockPin(pin: String) {
@@ -1158,7 +1210,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        val partner = profile.value.partnerName
+        val partner = profile.value.partnerName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) } ?: "Partner"
         val callId = "call_${System.currentTimeMillis()}_${Random.nextInt(1000, 9999)}"
         isCallRecordedForCurrentSession = false
         _isCallScreenMinimized.value = false
@@ -1177,12 +1229,20 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         audioHaptics.startOutgoingRinging(viewModelScope)
         syncCallStateToService()
 
+        val myCallerName = profile.value.fullName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+            ?: profile.value.userName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+            ?: "Partner"
+
         // Send signal to partner via WebSocket & Firestore
         signalingClient.sendCallInitiate(
             to = profile.value.partnerPairCode,
-            callerName = profile.value.userName.ifBlank { "My Love" },
+            callerName = myCallerName,
             callType = type.name,
-            callId = callId
+            callId = callId,
+            callerAvatarId = profile.value.avatarId,
+            callerAvatarUrl = profile.value.avatarUrl ?: resolveAvatarUrl(profile.value.avatarId),
+            callerBlueTick = profile.value.blueTick || profile.value.isVerified,
+            callerGreenTick = profile.value.greenTick
         )
         if (profile.value.isPaired && profile.value.partnerPairCode.isNotBlank()) {
             val coupleId = firebaseRepo.getCoupleId(profile.value.myPairCode, profile.value.partnerPairCode)
@@ -1237,8 +1297,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun triggerIncomingCall(type: CallType, incomingCallId: String = "") {
-        val partner = profile.value.partnerName
+    fun triggerIncomingCall(type: CallType, incomingCallId: String = "", callerName: String? = null) {
+        val resolvedPartnerName = callerName?.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) && !it.equals(profile.value.userName, ignoreCase = true) }
+            ?: profile.value.partnerName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+            ?: "Partner"
         val callId = if (incomingCallId.isNotBlank()) incomingCallId else "call_${System.currentTimeMillis()}"
         isCallRecordedForCurrentSession = false
         _isCallScreenMinimized.value = false
@@ -1250,7 +1312,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             durationSeconds = 0,
             isSpeakerOn = type == CallType.VIDEO,
             isPartnerRinging = true,
-            statusMessage = "Incoming Call"
+            statusMessage = "Incoming Call from $resolvedPartnerName"
         )
         // Acknowledge back that destination device has received call and is ringing
         if (profile.value.partnerPairCode.isNotBlank()) {
@@ -1262,7 +1324,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         }
         CallNotificationHelper.showIncomingCallNotification(
             getApplication(),
-            partner,
+            resolvedPartnerName,
             type,
             isMuted = profile.value.isNotificationsMuted
         )
@@ -1728,10 +1790,38 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun regenerateMyCode(): String {
+        val oldCode = profile.value.myPairCode
         val newCode = repository.regenerateMyCode()
-        val prof = profile.value
-        signalingClient.connect(prof.serverUrl, newCode, prof.partnerPairCode)
+        signalingClient.regenerateCode(oldCode = oldCode, newCode = newCode)
         return newCode
+    }
+
+    fun unpairPartner(onComplete: (Boolean) -> Unit = {}) {
+        val prof = profile.value
+        val partnerCode = prof.partnerPairCode
+        val myCode = prof.myPairCode
+        signalingClient.unpairPartner(myCode, partnerCode)
+        repository.unlinkPartner()
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
+                val url = java.net.URL("$base/api/pairing/unlink")
+                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    setRequestProperty("Content-Type", "application/json")
+                }
+                val body = org.json.JSONObject().apply {
+                    put("code", myCode)
+                    put("partnerCode", partnerCode)
+                }
+                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
+                val code = conn.responseCode
+                withContext(Dispatchers.Main) { onComplete(code in 200..299) }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) { onComplete(true) }
+            }
+        }
     }
 
     fun updateProfile(partnerName: String, partnerNickname: String, partnerCode: String) {
@@ -1749,13 +1839,21 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             isPaired = finalPartnerCode.isNotBlank()
         )
         repository.saveProfile(updated)
-        signalingClient.connect(updated.serverUrl, updated.myPairCode, updated.partnerPairCode)
+        signalingClient.connect(
+            serverUrl = updated.serverUrl,
+            myCode = updated.myPairCode,
+            partnerCode = updated.partnerPairCode,
+            userName = updated.userName,
+            fullName = updated.fullName,
+            username = updated.username,
+            avatarId = updated.avatarId,
+            avatarUrl = updated.avatarUrl ?: resolveAvatarUrl(updated.avatarId),
+            statusMsg = updated.statusMsg
+        )
     }
 
     fun unlinkPartner() {
-        repository.unlinkPartner()
-        val prof = profile.value
-        signalingClient.connect(prof.serverUrl, prof.myPairCode, "")
+        unpairPartner()
     }
 
     fun checkPartnerStatus() {

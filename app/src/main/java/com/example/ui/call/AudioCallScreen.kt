@@ -59,6 +59,9 @@ import coil.compose.AsyncImage
 import com.example.model.CallSession
 import com.example.model.CallStatus
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.IconButton
 
@@ -74,6 +77,8 @@ fun AudioCallScreen(
     partnerName: String,
     partnerNickname: String,
     avatarUri: String?,
+    partnerBlueTick: Boolean = false,
+    partnerGreenTick: Boolean = false,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
     onEndCall: () -> Unit,
@@ -178,12 +183,32 @@ fun AudioCallScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                Text(
-                    text = partnerName.ifBlank { "My Love 💕" },
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CallColors.PrimaryText
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = partnerName.ifBlank { "My Love 💕" },
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = CallColors.PrimaryText
+                    )
+                    if (partnerGreenTick) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                            contentDescription = "Admin Verified",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    } else if (partnerBlueTick) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_blue_tick),
+                            contentDescription = "Verified Partner",
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
 
                 Text(
                     text = "Audio Call",

@@ -175,10 +175,15 @@ async function initDatabaseTables() {
 }
 
 // Data access operations
-async function dbSaveCouple(pairCode, partnerCode, userName, avatarId, avatarUrl) {
+async function dbSaveCouple(pairCode, partnerCode, userName, avatarId, avatarUrl, fullName, username, statusMsg) {
   let entry = memoryClients.get(pairCode) || { sockets: new Set() };
-  entry.partnerCode = partnerCode;
-  if (userName) entry.userName = userName;
+  if (partnerCode !== undefined) entry.partnerCode = partnerCode;
+  if (userName && userName !== "You") entry.userName = userName;
+  else if (!entry.userName) entry.userName = userName || "User";
+  if (fullName && fullName !== "You") entry.fullName = fullName;
+  else if (!entry.fullName) entry.fullName = entry.userName || "User";
+  if (username) entry.username = username;
+  if (statusMsg) entry.statusMsg = statusMsg;
   if (avatarId) entry.avatarId = avatarId;
   if (avatarUrl) entry.avatarUrl = avatarUrl;
   memoryClients.set(pairCode, entry);
@@ -186,16 +191,19 @@ async function dbSaveCouple(pairCode, partnerCode, userName, avatarId, avatarUrl
   if (pool && isDbConnected) {
     try {
       await pool.query(`
-        INSERT INTO couples (pair_code, partner_code, user_name, avatar_id, avatar_url, last_seen, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        INSERT INTO couples (pair_code, partner_code, user_name, full_name, username, status_msg, avatar_id, avatar_url, last_seen, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
         ON CONFLICT (pair_code) DO UPDATE
-        SET partner_code = COALESCE(EXCLUDED.partner_code, couples.partner_code),
-            user_name = COALESCE(NULLIF(EXCLUDED.user_name, ''), couples.user_name),
+        SET partner_code = COALESCE(NULLIF(EXCLUDED.partner_code, ''), couples.partner_code),
+            user_name = CASE WHEN EXCLUDED.user_name <> 'You' AND EXCLUDED.user_name <> '' THEN EXCLUDED.user_name ELSE couples.user_name END,
+            full_name = CASE WHEN EXCLUDED.full_name <> 'You' AND EXCLUDED.full_name <> '' THEN EXCLUDED.full_name ELSE couples.full_name END,
+            username = COALESCE(NULLIF(EXCLUDED.username, ''), couples.username),
+            status_msg = COALESCE(NULLIF(EXCLUDED.status_msg, ''), couples.status_msg),
             avatar_id = COALESCE(NULLIF(EXCLUDED.avatar_id, ''), couples.avatar_id),
             avatar_url = COALESCE(NULLIF(EXCLUDED.avatar_url, ''), couples.avatar_url),
             last_seen = EXCLUDED.last_seen,
             updated_at = NOW();
-      `, [pairCode, partnerCode, userName || "You", avatarId || "boy_001", avatarUrl || "", Date.now()]);
+      `, [pairCode, partnerCode || "", userName || "User", fullName || userName || "User", username || "", statusMsg || "", avatarId || "boy_001", avatarUrl || "", Date.now()]);
     } catch (e) {
       console.warn("DB save couple error:", e.message);
     }
@@ -205,7 +213,7 @@ async function dbSaveCouple(pairCode, partnerCode, userName, avatarId, avatarUrl
 async function dbUpdateAvatar(pairCode, avatarId, avatarUrl) {
   let entry = memoryClients.get(pairCode);
   if (!entry) {
-    entry = { sockets: new Set(), partnerCode: "", connectedAt: Date.now(), userName: "You", avatarId, avatarUrl: avatarUrl || "" };
+    entry = { sockets: new Set(), partnerCode: "", connectedAt: Date.now(), userName: "User", avatarId, avatarUrl: avatarUrl || "" };
     memoryClients.set(pairCode, entry);
   } else {
     entry.avatarId = avatarId;
@@ -235,9 +243,12 @@ async function dbGetProfile(pairCode) {
     try {
       const res = await pool.query(`
         SELECT pair_code AS "pairCode", partner_code AS "partnerCode", user_name AS "userName",
+               COALESCE(full_name, user_name) AS "fullName", COALESCE(username, '') AS "username",
+               COALESCE(status_msg, '') AS "statusMsg",
                partner_status AS "partnerStatus", COALESCE(avatar_id, 'boy_001') AS "avatarId",
                COALESCE(avatar_url, '') AS "avatarUrl", COALESCE(is_blocked, FALSE) AS "isBlocked",
-               COALESCE(blue_tick, FALSE) AS "blueTick", COALESCE(green_tick, FALSE) AS "greenTick"
+               COALESCE(blue_tick, FALSE) AS "blueTick", COALESCE(green_tick, FALSE) AS "greenTick",
+               COALESCE(is_verified, FALSE) AS "isVerified"
         FROM couples WHERE pair_code = $1;
       `, [pairCode]);
       if (res.rows.length > 0) prof = res.rows[0];
@@ -248,13 +259,17 @@ async function dbGetProfile(pairCode) {
     prof = {
       pairCode,
       partnerCode: entry?.partnerCode || "",
-      userName: entry?.userName || "You",
+      userName: entry?.userName || "User",
+      fullName: entry?.fullName || entry?.userName || "User",
+      username: entry?.username || "",
+      statusMsg: entry?.statusMsg || "",
       partnerStatus: "Thinking of you always ❤️",
       avatarId: entry?.avatarId || "boy_001",
       avatarUrl: entry?.avatarUrl || "",
       isBlocked: !!entry?.isBlocked,
       blueTick: !!entry?.blueTick,
-      greenTick: !!entry?.greenTick
+      greenTick: !!entry?.greenTick,
+      isVerified: !!entry?.isVerified || !!entry?.blueTick
     };
   }
 
@@ -915,9 +930,12 @@ wss.on("connection", (ws, req) => {
         case "register": {
           const code = (data.pairCode || "").toUpperCase().trim();
           const partnerCode = (data.partnerPairCode || "").toUpperCase().trim();
-          const userName = data.userName || "You";
-
+          const userName = (data.userName || "").trim() || "User";
+          const fullName = (data.fullName || "").trim() || userName;
+          const username = (data.username || "").trim();
+          const statusMsg = (data.statusMsg || "").trim();
           const avatarId = (data.avatarId || "boy_001").trim();
+          const avatarUrl = (data.avatarUrl || "").trim();
 
           if (!code) return;
 
@@ -941,15 +959,19 @@ wss.on("connection", (ws, req) => {
           }
           entry.sockets.add(ws);
           entry.avatarId = avatarId;
-          entry.userName = userName;
+          if (avatarUrl) entry.avatarUrl = avatarUrl;
+          if (userName && userName !== "You") entry.userName = userName;
+          if (fullName && fullName !== "You") entry.fullName = fullName;
+          if (username) entry.username = username;
+          if (statusMsg) entry.statusMsg = statusMsg;
           if (partnerCode) {
             entry.partnerCode = partnerCode;
           }
 
-          console.log(`[+] Device connected: #${code}. Target: #${partnerCode}, Avatar: ${avatarId}`);
+          console.log(`[+] Device connected: #${code}. Target: #${partnerCode}, Name: ${fullName || userName}, Avatar: ${avatarId}`);
 
           // Persist to Postgres
-          dbSaveCouple(code, partnerCode, userName, avatarId);
+          await dbSaveCouple(code, partnerCode, userName, avatarId, avatarUrl, fullName, username, statusMsg);
 
           // Confirmation
           ws.send(JSON.stringify({
@@ -959,6 +981,7 @@ wss.on("connection", (ws, req) => {
             avatarUrl: clientProf ? clientProf.avatarUrl : null,
             blueTick: clientProf ? !!clientProf.blueTick : false,
             greenTick: clientProf ? !!clientProf.greenTick : false,
+            isVerified: clientProf ? (!!clientProf.isVerified || !!clientProf.blueTick) : false,
             dbConnected: isDbConnected
           }));
 
@@ -967,15 +990,22 @@ wss.on("connection", (ws, req) => {
           const isPartnerOnline = !!(partnerEntry && partnerEntry.sockets && partnerEntry.sockets.size > 0);
           const partnerProfile = await dbGetProfile(partnerCode);
 
+          const realPartnerName = (partnerProfile.fullName && partnerProfile.fullName !== "You")
+            ? partnerProfile.fullName
+            : ((partnerProfile.userName && partnerProfile.userName !== "You") ? partnerProfile.userName : "Partner");
+
           ws.send(JSON.stringify({
             type: "partner_status",
             isOnline: isPartnerOnline,
             partnerCode,
-            partnerName: partnerProfile.userName,
+            partnerName: realPartnerName,
+            partnerFullName: partnerProfile.fullName,
+            partnerUsername: partnerProfile.username,
             partnerAvatarId: partnerProfile.avatarId,
             partnerAvatarUrl: partnerProfile.avatarUrl,
             blueTick: !!partnerProfile.blueTick,
-            greenTick: !!partnerProfile.greenTick
+            greenTick: !!partnerProfile.greenTick,
+            isVerified: !!partnerProfile.isVerified || !!partnerProfile.blueTick
           }));
 
           if (isPartnerOnline) {
@@ -983,11 +1013,14 @@ wss.on("connection", (ws, req) => {
               type: "partner_status",
               isOnline: true,
               partnerCode: code,
-              partnerName: userName,
+              partnerName: fullName || userName,
+              partnerFullName: fullName,
+              partnerUsername: username,
               partnerAvatarId: avatarId,
-              partnerAvatarUrl: clientProf ? clientProf.avatarUrl : null,
+              partnerAvatarUrl: avatarUrl || (clientProf ? clientProf.avatarUrl : null),
               blueTick: clientProf ? !!clientProf.blueTick : false,
-              greenTick: clientProf ? !!clientProf.greenTick : false
+              greenTick: clientProf ? !!clientProf.greenTick : false,
+              isVerified: clientProf ? (!!clientProf.isVerified || !!clientProf.blueTick) : false
             });
           }
 
@@ -1004,6 +1037,131 @@ wss.on("connection", (ws, req) => {
                 createdAt: Number(activeNote.created_at || activeNote.createdAt)
               }));
             }
+          }
+          break;
+        }
+
+        case "update_profile": {
+          const code = (data.pairCode || registeredCode || "").toUpperCase().trim();
+          if (!code) break;
+          const userName = (data.userName || "").trim();
+          const fullName = (data.fullName || "").trim();
+          const username = (data.username || "").trim();
+          const avatarId = (data.avatarId || "").trim();
+          const avatarUrl = (data.avatarUrl || "").trim();
+          const statusMsg = (data.statusMsg || "").trim();
+
+          let entry = memoryClients.get(code);
+          if (!entry) {
+            entry = { sockets: new Set(), partnerCode: "", connectedAt: Date.now() };
+            memoryClients.set(code, entry);
+          }
+          if (userName && userName !== "You") entry.userName = userName;
+          if (fullName && fullName !== "You") entry.fullName = fullName;
+          if (username) entry.username = username;
+          if (avatarId) entry.avatarId = avatarId;
+          if (avatarUrl) entry.avatarUrl = avatarUrl;
+          if (statusMsg) entry.statusMsg = statusMsg;
+
+          if (pool && isDbConnected) {
+            try {
+              await pool.query(`
+                UPDATE couples
+                SET user_name = CASE WHEN $1 <> '' AND $1 <> 'You' THEN $1 ELSE user_name END,
+                    full_name = CASE WHEN $2 <> '' AND $2 <> 'You' THEN $2 ELSE full_name END,
+                    username = COALESCE(NULLIF($3, ''), username),
+                    avatar_id = COALESCE(NULLIF($4, ''), avatar_id),
+                    avatar_url = COALESCE(NULLIF($5, ''), avatar_url),
+                    status_msg = COALESCE(NULLIF($6, ''), status_msg),
+                    updated_at = NOW()
+                WHERE pair_code = $7;
+              `, [userName, fullName, username, avatarId, avatarUrl, statusMsg, code]);
+            } catch (e) {
+              console.warn("DB update profile error:", e.message);
+            }
+          }
+
+          const clientProf = await dbGetProfile(code);
+          if (clientProf && clientProf.partnerCode) {
+            forwardToTarget(clientProf.partnerCode, {
+              type: "partner_status",
+              isOnline: true,
+              partnerCode: code,
+              partnerName: clientProf.fullName || clientProf.userName,
+              partnerFullName: clientProf.fullName,
+              partnerUsername: clientProf.username,
+              partnerAvatarId: clientProf.avatarId,
+              partnerAvatarUrl: clientProf.avatarUrl,
+              blueTick: !!clientProf.blueTick,
+              greenTick: !!clientProf.greenTick,
+              isVerified: !!clientProf.isVerified || !!clientProf.blueTick
+            });
+          }
+          break;
+        }
+
+        case "unpair": {
+          const myCode = (data.pairCode || registeredCode || "").toUpperCase().trim();
+          const partnerCode = (data.partnerPairCode || "").toUpperCase().trim();
+          if (myCode) {
+            if (pool && isDbConnected) {
+              try {
+                await pool.query("UPDATE couples SET partner_code = '', updated_at = NOW() WHERE pair_code = $1;", [myCode]);
+                if (partnerCode) {
+                  await pool.query("UPDATE couples SET partner_code = '', updated_at = NOW() WHERE pair_code = $1;", [partnerCode]);
+                }
+              } catch (e) {
+                console.warn("DB unpair error:", e.message);
+              }
+            }
+            const myEntry = memoryClients.get(myCode);
+            if (myEntry) myEntry.partnerCode = "";
+            if (partnerCode) {
+              const partnerEntry = memoryClients.get(partnerCode);
+              if (partnerEntry) partnerEntry.partnerCode = "";
+              forwardToTarget(partnerCode, {
+                type: "unpaired",
+                byCode: myCode,
+                message: "Your partner unpaired the connection."
+              });
+            }
+            ws.send(JSON.stringify({
+              type: "unpaired_success",
+              pairCode: myCode
+            }));
+          }
+          break;
+        }
+
+        case "regenerate_code": {
+          const oldCode = (data.oldCode || "").toUpperCase().trim();
+          const newCode = (data.newCode || "").toUpperCase().trim();
+          if (oldCode && newCode && oldCode !== newCode) {
+            if (pool && isDbConnected) {
+              try {
+                await pool.query(`
+                  UPDATE couples
+                  SET pair_code = $1, updated_at = NOW()
+                  WHERE pair_code = $2;
+                `, [newCode, oldCode]);
+                await pool.query("UPDATE couples SET partner_code = $1 WHERE partner_code = $2;", [newCode, oldCode]);
+                await pool.query("UPDATE pairing_requests SET from_code = $1 WHERE from_code = $2;", [newCode, oldCode]);
+                await pool.query("UPDATE pairing_requests SET to_code = $1 WHERE to_code = $2;", [newCode, oldCode]);
+              } catch (e) {
+                console.warn("DB regenerate code error:", e.message);
+              }
+            }
+            const oldEntry = memoryClients.get(oldCode);
+            if (oldEntry) {
+              memoryClients.delete(oldCode);
+              memoryClients.set(newCode, oldEntry);
+            }
+            registeredCode = newCode;
+            ws.send(JSON.stringify({
+              type: "regenerate_code_success",
+              oldCode,
+              newCode
+            }));
           }
           break;
         }
@@ -1159,11 +1317,21 @@ wss.on("connection", (ws, req) => {
           };
           activeCallSessions.set(callId, session);
 
+          const callerProfile = await dbGetProfile(from);
+          const callerDisplayName = (data.callerName && data.callerName !== "You" && data.callerName.trim() !== "")
+            ? data.callerName.trim()
+            : (callerProfile?.fullName || callerProfile?.userName || "Partner");
+
           const delivered = forwardToTarget(target, {
             type: "call_incoming",
             callId,
             from,
-            callerName: data.callerName || "My Love",
+            callerName: callerDisplayName,
+            callerAvatarId: callerProfile?.avatarId || "boy_001",
+            callerAvatarUrl: callerProfile?.avatarUrl || "",
+            callerBlueTick: callerProfile ? !!callerProfile.blueTick : false,
+            callerGreenTick: callerProfile ? !!callerProfile.greenTick : false,
+            callerIsVerified: callerProfile ? (!!callerProfile.isVerified || !!callerProfile.blueTick) : false,
             callType: data.callType || "VOICE"
           });
 

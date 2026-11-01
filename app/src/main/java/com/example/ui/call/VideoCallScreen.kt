@@ -64,6 +64,8 @@ import com.example.model.CallSession
 import com.example.model.CallStatus
 import com.example.model.ChatMessage
 import com.example.ui.components.CameraPreview
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -80,6 +82,8 @@ fun VideoCallScreen(
     partnerName: String,
     partnerNickname: String,
     avatarUri: String?,
+    partnerBlueTick: Boolean = false,
+    partnerGreenTick: Boolean = false,
     remoteVideoBitmap: Bitmap?,
     inCallMessage: ChatMessage?,
     onAccept: () -> Unit,
@@ -409,12 +413,32 @@ fun VideoCallScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Text(
-                        text = partnerName.ifBlank { "My Love 💕" },
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = CallColors.PrimaryText
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = partnerName.ifBlank { "My Love 💕" },
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CallColors.PrimaryText
+                        )
+                        if (partnerGreenTick) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                contentDescription = "Admin Verified",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        } else if (partnerBlueTick) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_blue_tick),
+                                contentDescription = "Verified Partner",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
 
                     Text(
                         text = if (callSession.status == CallStatus.INCOMING_RINGING) "Incoming Video Call" else "Video Call",

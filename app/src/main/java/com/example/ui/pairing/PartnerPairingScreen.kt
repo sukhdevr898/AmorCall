@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Share
 import com.example.ui.pairing.DuoraQrCodeView
 import com.example.ui.pairing.QrCodeGenerator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -57,6 +58,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -101,6 +105,47 @@ fun PartnerPairingScreen(
     var sentRequestToCode by remember { mutableStateOf<String?>(null) }
     var isVerifyingQr by remember { mutableStateOf(false) }
     var recognizedPartner by remember { mutableStateOf<PairingRecognizedPartner?>(null) }
+    var showUnpairDialog by remember { mutableStateOf(false) }
+
+    if (showUnpairDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnpairDialog = false },
+            title = {
+                Text(
+                    text = "Unpair Partner?",
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF21102E)
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to unpair from ${profile.partnerName}? Both users will be unlinked, and you can re-pair anytime using your pair codes.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF89818E)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUnpairDialog = false
+                        viewModel.unpairPartner { success ->
+                            Toast.makeText(context, "Partner unpaired successfully 💔", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                ) {
+                    Text("Unpair", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnpairDialog = false }) {
+                    Text("Cancel", color = Color(0xFF89818E))
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 
     // Dialog 1: Partner Request Received Dialog (Screen 7)
     if (incomingRequest != null) {
@@ -343,6 +388,85 @@ fun PartnerPairingScreen(
         }
 
         Spacer(modifier = Modifier.height(10.dp))
+
+        if (profile.isPaired && profile.partnerPairCode.isNotBlank()) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, DuoraHotPink.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 6.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val pAvatar = profile.partnerAvatarUrl ?: viewModel.resolveAvatarThumbnailUrl(profile.partnerAvatarId)
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .border(2.5.dp, DuoraHotPink, CircleShape)
+                    ) {
+                        Image(
+                            painter = rememberAsyncImagePainter(
+                                model = ImageRequest.Builder(context).data(pAvatar).crossfade(true).build()
+                            ),
+                            contentDescription = "Partner Avatar",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val partnerDisplayName = profile.partnerName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) } ?: "Partner"
+                            Text(
+                                text = partnerDisplayName,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF21102E)
+                            )
+                            if (profile.partnerGreenTick) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                    contentDescription = "Admin Verified",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            } else if (profile.partnerBlueTick || profile.partnerIsVerified) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_blue_tick),
+                                    contentDescription = "Verified Partner",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = "Linked with #${profile.partnerPairCode}",
+                            fontSize = 12.sp,
+                            color = DuoraHotPink,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Button(
+                        onClick = { showUnpairDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFF1F2)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("💔 Unpair", color = Color(0xFFE11D48), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+        }
 
         // Tabs: Enter Code vs Scan QR
         Row(

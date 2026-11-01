@@ -65,6 +65,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import com.example.ui.pairing.PartnerPairingScreen
 import com.example.ui.theme.DuoraHotPink
 import com.example.viewmodel.LoveCallViewModel
@@ -268,12 +270,30 @@ private fun SettingsMainView(
                 Spacer(modifier = Modifier.width(14.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = profile.userName.ifBlank { "You" },
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF21102E)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = profile.fullName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+                                ?: profile.userName.ifBlank { "You" },
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF21102E)
+                        )
+                        if (profile.greenTick) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_admin_green_tick),
+                                contentDescription = "Admin Verified",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        } else if (profile.blueTick || profile.isVerified) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_blue_tick),
+                                contentDescription = "Verified User",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
@@ -283,7 +303,7 @@ private fun SettingsMainView(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = profile.partnerStatus.ifBlank { "Always Together 💕" },
+                            text = if (profile.statusMsg.isNotBlank()) profile.statusMsg else profile.partnerStatus.ifBlank { "Always Together 💕" },
                             fontSize = 12.sp,
                             color = Color(0xFF89818E)
                         )

@@ -28,7 +28,19 @@ enum class ServerConnectionState {
 }
 
 sealed class SignalingEvent {
-    data class IncomingCall(val from: String, val callerName: String, val callType: String, val callId: String = "") : SignalingEvent()
+    data class IncomingCall(
+        val from: String,
+        val callerName: String,
+        val callType: String,
+        val callId: String = "",
+        val callerAvatarId: String = "boy_001",
+        val callerAvatarUrl: String? = null,
+        val callerBlueTick: Boolean = false,
+        val callerGreenTick: Boolean = false,
+        val callerIsVerified: Boolean = false
+    ) : SignalingEvent()
+    data class Unpaired(val byCode: String, val message: String = "") : SignalingEvent()
+    data class RegenerateCodeSuccess(val newCode: String) : SignalingEvent()
     data class CallRinging(val from: String, val callId: String = "") : SignalingEvent()
     data class CallAccepted(val from: String, val callId: String = "") : SignalingEvent()
     data class CallDeclined(val from: String, val callId: String = "") : SignalingEvent()
@@ -112,29 +124,103 @@ class SignalingClient private constructor() {
     private var currentServerUrl: String = ""
     private var currentMyCode: String = ""
     private var currentPartnerCode: String = ""
+    private var currentUserName: String = ""
+    private var currentFullName: String = ""
+    private var currentUsername: String = ""
+    private var currentAvatarId: String = ""
+    private var currentAvatarUrl: String = ""
+    private var currentStatusMsg: String = ""
     private var isExplicitDisconnect = false
 
-    fun connect(serverUrl: String, myCode: String, partnerCode: String) {
+    fun connect(
+        serverUrl: String,
+        myCode: String,
+        partnerCode: String,
+        userName: String = "",
+        fullName: String = "",
+        username: String = "",
+        avatarId: String = "",
+        avatarUrl: String = "",
+        statusMsg: String = ""
+    ) {
         if (myCode.isBlank()) return
 
         currentServerUrl = serverUrl
         currentMyCode = myCode.uppercase().trim()
         currentPartnerCode = partnerCode.uppercase().trim()
+        if (userName.isNotBlank()) currentUserName = userName
+        if (fullName.isNotBlank()) currentFullName = fullName
+        if (username.isNotBlank()) currentUsername = username
+        if (avatarId.isNotBlank()) currentAvatarId = avatarId
+        if (avatarUrl.isNotBlank()) currentAvatarUrl = avatarUrl
+        if (statusMsg.isNotBlank()) currentStatusMsg = statusMsg
         isExplicitDisconnect = false
 
         if (webSocket != null && _connectionState.value == ServerConnectionState.CONNECTED) {
-            // Already connected, send updated registration if needed
-            val regMsg = JSONObject().apply {
-                put("type", "register")
-                put("pairCode", currentMyCode)
-                put("partnerPairCode", currentPartnerCode)
-            }
+            val regMsg = buildRegisterMessage()
             send(regMsg)
             return
         }
 
         reconnectJob?.cancel()
         performConnect()
+    }
+
+    private fun buildRegisterMessage(): JSONObject = JSONObject().apply {
+        put("type", "register")
+        put("pairCode", currentMyCode)
+        put("partnerPairCode", currentPartnerCode)
+        put("userName", currentUserName.ifBlank { "User" })
+        put("fullName", currentFullName.ifBlank { currentUserName.ifBlank { "User" } })
+        put("username", currentUsername)
+        put("avatarId", currentAvatarId.ifBlank { "boy_001" })
+        put("avatarUrl", currentAvatarUrl)
+        put("statusMsg", currentStatusMsg)
+    }
+
+    fun updateProfile(userName: String, fullName: String, username: String, avatarId: String, avatarUrl: String, statusMsg: String) {
+        if (userName.isNotBlank()) currentUserName = userName
+        if (fullName.isNotBlank()) currentFullName = fullName
+        if (username.isNotBlank()) currentUsername = username
+        if (avatarId.isNotBlank()) currentAvatarId = avatarId
+        if (avatarUrl.isNotBlank()) currentAvatarUrl = avatarUrl
+        if (statusMsg.isNotBlank()) currentStatusMsg = statusMsg
+
+        val msg = JSONObject().apply {
+            put("type", "update_profile")
+            put("pairCode", currentMyCode)
+            put("userName", currentUserName)
+            put("fullName", currentFullName)
+            put("username", currentUsername)
+            put("avatarId", currentAvatarId)
+            put("avatarUrl", currentAvatarUrl)
+            put("statusMsg", currentStatusMsg)
+        }
+        send(msg)
+    }
+
+    fun unpairPartner(myCode: String, partnerCode: String) {
+        currentPartnerCode = ""
+        val msg = JSONObject().apply {
+            put("type", "unpair")
+            put("pairCode", myCode.uppercase().trim())
+            put("partnerPairCode", partnerCode.uppercase().trim())
+        }
+        send(msg)
+    }
+
+    fun regenerateCode(oldCode: String, newCode: String) {
+        currentMyCode = newCode.uppercase().trim()
+        val msg = JSONObject().apply {
+            put("type", "regenerate_code")
+            put("oldCode", oldCode.uppercase().trim())
+            put("newCode", currentMyCode)
+            put("userName", currentUserName)
+            put("fullName", currentFullName)
+            put("username", currentUsername)
+            put("avatarId", currentAvatarId)
+        }
+        send(msg)
     }
 
     private fun performConnect() {
@@ -163,14 +249,10 @@ class SignalingClient private constructor() {
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 _connectionState.value = ServerConnectionState.CONNECTED
-                Log.d("SignalingClient", "WebSocket connected. Registering as #$currentMyCode")
+                Log.d("SignalingClient", "WebSocket connected. Registering as #$currentMyCode (${currentFullName.ifBlank { currentUserName }})")
 
                 // Register with server
-                val regMsg = JSONObject().apply {
-                    put("type", "register")
-                    put("pairCode", currentMyCode)
-                    put("partnerPairCode", currentPartnerCode)
-                }
+                val regMsg = buildRegisterMessage()
                 webSocket.send(regMsg.toString())
             }
 
@@ -215,11 +297,41 @@ class SignalingClient private constructor() {
             when (json.optString("type")) {
                 "call_incoming" -> {
                     val from = json.optString("from")
-                    val callerName = json.optString("callerName", "My Love")
+                    val callerName = json.optString("callerName", "Partner")
                     val callType = json.optString("callType", "VOICE")
                     val callId = json.optString("callId", "")
+                    val callerAvatarId = json.optString("callerAvatarId", "boy_001")
+                    val callerAvatarUrl = json.optString("callerAvatarUrl", "").takeIf { it.isNotBlank() }
+                    val callerBlueTick = json.optBoolean("callerBlueTick", false)
+                    val callerGreenTick = json.optBoolean("callerGreenTick", false)
+                    val callerIsVerified = json.optBoolean("callerIsVerified", callerBlueTick)
                     scope.launch {
-                        _events.emit(SignalingEvent.IncomingCall(from, callerName, callType, callId))
+                        _events.emit(
+                            SignalingEvent.IncomingCall(
+                                from = from,
+                                callerName = callerName,
+                                callType = callType,
+                                callId = callId,
+                                callerAvatarId = callerAvatarId,
+                                callerAvatarUrl = callerAvatarUrl,
+                                callerBlueTick = callerBlueTick,
+                                callerGreenTick = callerGreenTick,
+                                callerIsVerified = callerIsVerified
+                            )
+                        )
+                    }
+                }
+                "unpaired", "unpaired_success" -> {
+                    val byCode = json.optString("byCode", json.optString("pairCode", ""))
+                    val message = json.optString("message", "Partner unlinked.")
+                    scope.launch {
+                        _events.emit(SignalingEvent.Unpaired(byCode, message))
+                    }
+                }
+                "regenerate_code_success" -> {
+                    val newCode = json.optString("newCode", "")
+                    scope.launch {
+                        _events.emit(SignalingEvent.RegenerateCodeSuccess(newCode))
                     }
                 }
                 "call_ringing" -> {
@@ -496,13 +608,26 @@ class SignalingClient private constructor() {
         send(payload)
     }
 
-    fun sendCallInitiate(to: String, callerName: String, callType: String, callId: String = "") {
+    fun sendCallInitiate(
+        to: String,
+        callerName: String,
+        callType: String,
+        callId: String = "",
+        callerAvatarId: String = "",
+        callerAvatarUrl: String = "",
+        callerBlueTick: Boolean = false,
+        callerGreenTick: Boolean = false
+    ) {
         val payload = JSONObject().apply {
             put("type", "call_initiate")
             put("from", currentMyCode)
             put("to", to.uppercase().trim())
-            put("callerName", callerName)
+            put("callerName", callerName.ifBlank { currentFullName.ifBlank { currentUserName.ifBlank { "Partner" } } })
             put("callType", callType)
+            if (callerAvatarId.isNotBlank()) put("callerAvatarId", callerAvatarId)
+            if (callerAvatarUrl.isNotBlank()) put("callerAvatarUrl", callerAvatarUrl)
+            if (callerBlueTick) put("callerBlueTick", true)
+            if (callerGreenTick) put("callerGreenTick", true)
             if (callId.isNotBlank()) put("callId", callId)
         }
         send(payload)
