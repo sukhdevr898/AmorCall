@@ -614,11 +614,11 @@ const server = http.createServer(async (req, res) => {
   // 5. Partner Pairing Request
   if (pathname === "/api/pairing/request" && req.method === "POST") {
     const body = await readJsonBody(req);
-    const myCode = (body.myCode || "").toUpperCase().trim();
+    const myCode = (body.myCode || "").toUpperCase().replace(/^#/, "").trim();
     const myName = (body.myName || "You").trim();
     const myAvatarId = (body.myAvatarId || "boy_001").trim();
     const myAvatarUrl = (body.myAvatarUrl || "").trim();
-    const partnerCode = (body.partnerCode || "").toUpperCase().trim();
+    const partnerCode = (body.partnerCode || "").toUpperCase().replace(/^#/, "").trim();
 
     if (!myCode || !partnerCode) {
       res.writeHead(400, { "Content-Type": "application/json" });
@@ -627,6 +627,37 @@ const server = http.createServer(async (req, res) => {
     if (myCode === partnerCode) {
       res.writeHead(400, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ success: false, error: "Cannot pair with yourself" }));
+    }
+
+    // Check if partner already sent a pairing request to me (Mutual auto-accept!)
+    const existingOpposite = pendingPairingRequests.get(myCode);
+    if (existingOpposite && existingOpposite.fromCode === partnerCode) {
+      pendingPairingRequests.delete(myCode);
+      const myProfile = await dbGetProfile(myCode);
+      const partnerProfile = await dbGetProfile(partnerCode);
+
+      await dbSaveCouple(myCode, partnerCode, myProfile.userName, myProfile.avatarId, myProfile.avatarUrl);
+      await dbSaveCouple(partnerCode, myCode, partnerProfile.userName, partnerProfile.avatarId, partnerProfile.avatarUrl);
+
+      const mutualPayload = {
+        type: "pairing_success",
+        partnerCode: myCode,
+        partnerName: myProfile.userName,
+        partnerAvatarId: myProfile.avatarId,
+        partnerAvatarUrl: myProfile.avatarUrl || ""
+      };
+      forwardToTarget(partnerCode, mutualPayload);
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({
+        success: true,
+        isPaired: true,
+        message: `Mutual pairing connected with #${partnerCode}! 💕`,
+        partnerCode,
+        partnerName: partnerProfile.userName,
+        partnerAvatarId: partnerProfile.avatarId,
+        partnerAvatarUrl: partnerProfile.avatarUrl || ""
+      }));
     }
 
     const reqData = {
@@ -675,8 +706,8 @@ const server = http.createServer(async (req, res) => {
   // 6. Partner Pairing Respond
   if (pathname === "/api/pairing/respond" && req.method === "POST") {
     const body = await readJsonBody(req);
-    const myCode = (body.myCode || "").toUpperCase().trim();
-    const partnerCode = (body.partnerCode || "").toUpperCase().trim();
+    const myCode = (body.myCode || "").toUpperCase().replace(/^#/, "").trim();
+    const partnerCode = (body.partnerCode || "").toUpperCase().replace(/^#/, "").trim();
     const action = (body.action || "").toUpperCase().trim();
 
     if (!myCode || !partnerCode || !action) {
@@ -1096,6 +1127,66 @@ wss.on("connection", (ws, req) => {
               greenTick: !!clientProf.greenTick,
               isVerified: !!clientProf.isVerified || !!clientProf.blueTick
             });
+          }
+          break;
+        }
+
+        case "pairing_request": {
+          const fromCode = (data.fromCode || registeredCode || "").toUpperCase().replace(/^#/, "").trim();
+          const targetCode = (data.targetCode || "").toUpperCase().replace(/^#/, "").trim();
+          const fromName = data.fromName || "Partner";
+          const fromAvatarId = data.fromAvatarId || "boy_001";
+          const fromAvatarUrl = data.fromAvatarUrl || "";
+          if (fromCode && targetCode && fromCode !== targetCode) {
+            pendingPairingRequests.set(targetCode, {
+              fromCode,
+              fromName,
+              fromAvatarId,
+              fromAvatarUrl,
+              createdAt: Date.now()
+            });
+            forwardToTarget(targetCode, {
+              type: "pairing_request_received",
+              fromCode,
+              fromName,
+              fromAvatarId,
+              fromAvatarUrl
+            });
+          }
+          break;
+        }
+
+        case "pairing_respond": {
+          const myCode = (data.myCode || registeredCode || "").toUpperCase().replace(/^#/, "").trim();
+          const partnerCode = (data.partnerCode || "").toUpperCase().replace(/^#/, "").trim();
+          const action = (data.action || "").toUpperCase().trim();
+          if (myCode && partnerCode) {
+            pendingPairingRequests.delete(myCode);
+            if (action === "ACCEPT") {
+              const myProfile = await dbGetProfile(myCode);
+              const partnerProfile = await dbGetProfile(partnerCode);
+              await dbSaveCouple(myCode, partnerCode, myProfile.userName, myProfile.avatarId, myProfile.avatarUrl);
+              await dbSaveCouple(partnerCode, myCode, partnerProfile.userName, partnerProfile.avatarId, partnerProfile.avatarUrl);
+              forwardToTarget(partnerCode, {
+                type: "pairing_success",
+                partnerCode: myCode,
+                partnerName: myProfile.userName,
+                partnerAvatarId: myProfile.avatarId,
+                partnerAvatarUrl: myProfile.avatarUrl || ""
+              });
+              ws.send(JSON.stringify({
+                type: "pairing_success",
+                partnerCode: partnerCode,
+                partnerName: partnerProfile.userName,
+                partnerAvatarId: partnerProfile.avatarId,
+                partnerAvatarUrl: partnerProfile.avatarUrl || ""
+              }));
+            } else {
+              forwardToTarget(partnerCode, {
+                type: "pairing_request_declined",
+                fromCode: myCode
+              });
+            }
           }
           break;
         }

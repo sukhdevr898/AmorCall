@@ -83,7 +83,12 @@ class CoupleRepository(private val context: Context) {
         val avatarId = prefs.getString("avatar_id", "boy_001") ?: "boy_001"
         val partnerAvatarId = prefs.getString("partner_avatar_id", "girl_001") ?: "girl_001"
         val accentColorHex = prefs.getLong("accent_color_hex", 0xFFFF2D8DL)
-        val serverUrl = "ws://amorcall.onrender.com/"
+        val savedUrl = prefs.getString("server_url", "wss://amorcall.onrender.com/") ?: "wss://amorcall.onrender.com/"
+        val serverUrl = if (savedUrl.startsWith("ws://") && !savedUrl.contains("localhost") && !savedUrl.contains("10.0.2.2")) {
+            "wss://" + savedUrl.removePrefix("ws://")
+        } else {
+            savedUrl
+        }
         val isOnboardingCompleted = prefs.getBoolean("is_onboarding_completed", true)
         val isNotificationsMuted = prefs.getBoolean("is_notifications_muted", false)
         val themeStr = prefs.getString("app_theme", com.example.model.AppTheme.LOVE.name) ?: com.example.model.AppTheme.LOVE.name

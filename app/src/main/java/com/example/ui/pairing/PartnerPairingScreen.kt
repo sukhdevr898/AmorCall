@@ -557,10 +557,10 @@ fun PartnerPairingScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Flexible 6 to 9-Character Partner Code Entry (A-Z, 0-9)
-                val cleanInput = inputCode.uppercase().filter { it.isLetterOrDigit() }.take(9)
+                // Flexible 6 to 10-Character Partner Code Entry (A-Z, 0-9)
+                val cleanInput = inputCode.uppercase().replace("#", "").filter { it.isLetterOrDigit() }.take(10)
                 val isSelfCode = cleanInput.isNotEmpty() && cleanInput.equals(profile.myPairCode.trim(), ignoreCase = true)
-                val isCodeValid = cleanInput.length in 6..9 && !isSelfCode
+                val isCodeValid = cleanInput.length in 4..10 && !isSelfCode
 
                 Card(
                     shape = RoundedCornerShape(18.dp),
@@ -569,7 +569,7 @@ fun PartnerPairingScreen(
                         1.5.dp,
                         when {
                             isSelfCode -> Color(0xFFEF4444)
-                            cleanInput.length in 6..9 -> DuoraHotPink
+                            isCodeValid -> DuoraHotPink
                             cleanInput.isNotEmpty() -> DuoraHotPink.copy(alpha = 0.5f)
                             else -> Color(0xFFEADBEE)
                         }
@@ -595,7 +595,7 @@ fun PartnerPairingScreen(
                             )
                             BasicTextField(
                                 value = cleanInput,
-                                onValueChange = { inputCode = it.uppercase().filter { ch -> ch.isLetterOrDigit() }.take(9) },
+                                onValueChange = { inputCode = it.uppercase().replace("#", "").filter { ch -> ch.isLetterOrDigit() }.take(10) },
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
                                 singleLine = true,
                                 modifier = Modifier
@@ -604,7 +604,7 @@ fun PartnerPairingScreen(
                                 decorationBox = { innerTextField ->
                                     if (cleanInput.isEmpty()) {
                                         Text(
-                                            text = "Enter 6-9 digit code",
+                                            text = "Enter partner code",
                                             fontSize = 18.sp,
                                             color = Color(0xFFA19BA6),
                                             fontFamily = FontFamily.Monospace,
@@ -665,24 +665,24 @@ fun PartnerPairingScreen(
                             Text(
                                 text = when {
                                     isSelfCode -> "⚠️ Cannot pair with your own code"
-                                    cleanInput.length in 6..9 -> "✓ Valid partner code format"
-                                    cleanInput.isNotEmpty() -> "Need ${6 - cleanInput.length} more characters"
-                                    else -> "Supports 6 to 9 alphanumeric characters"
+                                    isCodeValid -> "✓ Valid partner code"
+                                    cleanInput.isNotEmpty() -> "Need ${4 - cleanInput.length} more characters"
+                                    else -> "Enter partner code to connect"
                                 },
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = when {
                                     isSelfCode -> Color(0xFFEF4444)
-                                    cleanInput.length in 6..9 -> Color(0xFF10B981)
+                                    isCodeValid -> Color(0xFF10B981)
                                     else -> Color(0xFF89818E)
                                 }
                             )
 
                             Text(
-                                text = "${cleanInput.length}/9",
+                                text = "${cleanInput.length}/10",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (cleanInput.length in 6..9) DuoraHotPink else Color(0xFF89818E)
+                                color = if (isCodeValid) DuoraHotPink else Color(0xFF89818E)
                             )
                         }
                     }
@@ -700,11 +700,11 @@ fun PartnerPairingScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Send Request Button (Enabled when code is 6 to 9 valid characters)
+                // Send Request Button (Enabled when code is valid)
                 Button(
                     onClick = {
                         if (!isCodeValid) {
-                            Toast.makeText(context, "Please enter 6 to 9 partner code characters", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Please enter a valid partner code", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
                         isSendingRequest = true

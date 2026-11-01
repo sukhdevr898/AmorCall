@@ -199,6 +199,28 @@ class SignalingClient private constructor() {
         send(msg)
     }
 
+    fun sendPairingRequest(targetPartnerCode: String, myName: String = "", myAvatarId: String = "boy_001", myAvatarUrl: String? = null) {
+        val msg = JSONObject().apply {
+            put("type", "pairing_request")
+            put("fromCode", currentMyCode)
+            put("fromName", myName.ifBlank { currentUserName })
+            put("fromAvatarId", myAvatarId.ifBlank { currentAvatarId })
+            put("fromAvatarUrl", myAvatarUrl ?: currentAvatarUrl ?: "")
+            put("targetCode", targetPartnerCode.uppercase().replace("#", "").trim())
+        }
+        send(msg)
+    }
+
+    fun respondPairingRequest(targetPartnerCode: String, action: String) {
+        val msg = JSONObject().apply {
+            put("type", "pairing_respond")
+            put("myCode", currentMyCode)
+            put("partnerCode", targetPartnerCode.uppercase().replace("#", "").trim())
+            put("action", action.uppercase().trim())
+        }
+        send(msg)
+    }
+
     fun unpairPartner(myCode: String, partnerCode: String) {
         currentPartnerCode = ""
         val msg = JSONObject().apply {

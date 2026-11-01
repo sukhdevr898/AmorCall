@@ -210,8 +210,68 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         _incomingPairingRequest.value = null
     }
 
+    private fun getHttpBase(serverUrl: String): String {
+        var clean = serverUrl.trim().trimEnd('/')
+        if (clean.startsWith("ws://")) {
+            val host = clean.removePrefix("ws://")
+            clean = if (host.startsWith("localhost") || host.startsWith("10.0.2.2") || host.startsWith("192.168.")) {
+                "http://$host"
+            } else {
+                "https://$host"
+            }
+        } else if (clean.startsWith("wss://")) {
+            clean = "https://" + clean.removePrefix("wss://")
+        } else if (clean.startsWith("http://")) {
+            val host = clean.removePrefix("http://")
+            clean = if (host.startsWith("localhost") || host.startsWith("10.0.2.2") || host.startsWith("192.168.")) {
+                "http://$host"
+            } else {
+                "https://$host"
+            }
+        } else if (!clean.startsWith("https://")) {
+            clean = "https://$clean"
+        }
+        return clean
+    }
+
+    private fun executeJsonPost(urlStr: String, jsonBody: org.json.JSONObject, maxRedirects: Int = 3): Pair<Int, String> {
+        var currentUrl = urlStr
+        var redirects = 0
+        while (redirects < maxRedirects) {
+            val url = java.net.URL(currentUrl)
+            val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 8000
+                readTimeout = 8000
+                instanceFollowRedirects = false
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                setRequestProperty("Accept", "application/json")
+            }
+            java.io.OutputStreamWriter(conn.outputStream, java.nio.charset.StandardCharsets.UTF_8).use {
+                it.write(jsonBody.toString())
+                it.flush()
+            }
+            val code = conn.responseCode
+            if (code in 300..399) {
+                val loc = conn.getHeaderField("Location")
+                if (!loc.isNullOrBlank()) {
+                    currentUrl = if (loc.startsWith("http")) loc else {
+                        java.net.URI(currentUrl).resolve(loc).toString()
+                    }
+                    redirects++
+                    continue
+                }
+            }
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val respText = stream?.bufferedReader()?.use { it.readText() } ?: ""
+            return Pair(code, respText)
+        }
+        return Pair(500, "Too many redirects")
+    }
+
     fun sendPairingRequest(targetCode: String, onResult: (Boolean, String) -> Unit) {
-        val clean = targetCode.trim().uppercase()
+        val clean = targetCode.trim().uppercase().replace("#", "")
         val prof = profile.value
         if (clean.isBlank()) {
             onResult(false, "Please enter a valid partner code")
@@ -221,17 +281,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             onResult(false, "You cannot pair with yourself")
             return
         }
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
-                val url = java.net.URL("$base/api/pairing/request")
-                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    connectTimeout = 5000
-                    readTimeout = 5000
-                    setRequestProperty("Content-Type", "application/json")
-                }
+                val base = getHttpBase(prof.serverUrl)
                 val body = org.json.JSONObject().apply {
                     put("myCode", prof.myPairCode)
                     put("myName", prof.userName)
@@ -239,17 +291,49 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                     put("myAvatarUrl", prof.avatarUrl ?: resolveAvatarUrl(prof.avatarId))
                     put("partnerCode", clean)
                 }
-                val writer = java.io.OutputStreamWriter(conn.outputStream)
-                writer.write(body.toString())
-                writer.flush()
-                writer.close()
-                if (conn.responseCode in 200..299) {
-                    onResult(true, "Pairing request sent to #$clean ❤️")
+
+                // Dual delivery: notify via WebSocket signaling immediately
+                try {
+                    signalingClient.sendPairingRequest(clean, prof.userName, prof.avatarId, prof.avatarUrl)
+                } catch (_: Exception) {}
+
+                val (code, respText) = executeJsonPost("$base/api/pairing/request", body)
+                if (code in 200..299) {
+                    val json = try { org.json.JSONObject(respText) } catch (_: Exception) { null }
+                    if (json != null && json.optBoolean("isPaired", false)) {
+                        // Mutual auto-pairing resolved!
+                        val partnerUrl = json.optString("partnerAvatarUrl").takeIf { it.isNotBlank() } ?: resolveAvatarUrl(json.optString("partnerAvatarId", "girl_001"))
+                        val updated = prof.copy(
+                            partnerPairCode = clean,
+                            partnerName = json.optString("partnerName", "Partner"),
+                            partnerAvatarId = json.optString("partnerAvatarId", "girl_001"),
+                            partnerAvatarUrl = partnerUrl,
+                            isPaired = true
+                        )
+                        repository.saveProfile(updated)
+                        withContext(Dispatchers.Main) {
+                            _isPairingSuccessful.value = true
+                            onResult(true, "Mutual pairing connected with #$clean! 💕")
+                        }
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            onResult(true, "Pairing request sent to #$clean ❤️")
+                        }
+                    }
                 } else {
-                    onResult(false, "Could not send pairing request. Try again.")
+                    val errMsg = try {
+                        org.json.JSONObject(respText).optString("error", "Could not send pairing request. (HTTP $code)")
+                    } catch (_: Exception) {
+                        "Could not send pairing request. (HTTP $code)"
+                    }
+                    withContext(Dispatchers.Main) {
+                        onResult(false, errMsg)
+                    }
                 }
             } catch (e: Exception) {
-                onResult(false, "Connection error: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    onResult(false, "Connection error: ${e.localizedMessage ?: e.javaClass.simpleName}")
+                }
             }
         }
     }
@@ -257,27 +341,22 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
     fun respondPairingRequest(action: String, onComplete: () -> Unit = {}) {
         val req = _incomingPairingRequest.value ?: return
         val prof = profile.value
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
-                val url = java.net.URL("$base/api/pairing/respond")
-                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    connectTimeout = 5000
-                    readTimeout = 5000
-                    setRequestProperty("Content-Type", "application/json")
-                }
+                val base = getHttpBase(prof.serverUrl)
                 val body = org.json.JSONObject().apply {
                     put("myCode", prof.myPairCode)
                     put("partnerCode", req.fromCode)
                     put("action", action)
                 }
-                val writer = java.io.OutputStreamWriter(conn.outputStream)
-                writer.write(body.toString())
-                writer.flush()
-                writer.close()
-                if (action == "ACCEPT" && conn.responseCode in 200..299) {
+
+                // Dual delivery over WebSocket
+                try {
+                    signalingClient.respondPairingRequest(req.fromCode, action)
+                } catch (_: Exception) {}
+
+                val (code, _) = executeJsonPost("$base/api/pairing/respond", body)
+                if (action == "ACCEPT" && code in 200..299) {
                     val partnerUrl = req.fromAvatarUrl ?: resolveAvatarUrl(req.fromAvatarId)
                     val updated = prof.copy(
                         partnerPairCode = req.fromCode,
@@ -287,11 +366,22 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         isPaired = true
                     )
                     repository.saveProfile(updated)
-                    _isPairingSuccessful.value = true
+                    withContext(Dispatchers.Main) {
+                        _isPairingSuccessful.value = true
+                        _incomingPairingRequest.value = null
+                    }
+                } else if (action == "DECLINE") {
+                    withContext(Dispatchers.Main) {
+                        _incomingPairingRequest.value = null
+                    }
                 }
-            } catch (_: Exception) {}
-            _incomingPairingRequest.value = null
-            onComplete()
+            } catch (e: Exception) {
+                android.util.Log.e("LoveCallViewModel", "respondPairingRequest error", e)
+            } finally {
+                withContext(Dispatchers.Main) {
+                    onComplete()
+                }
+            }
         }
     }
 
@@ -300,11 +390,13 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         if (prof.myPairCode.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
+                val base = getHttpBase(prof.serverUrl)
                 val url = java.net.URL("$base/api/pairing/status?code=${prof.myPairCode}")
                 val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 4000
-                    readTimeout = 4000
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                    instanceFollowRedirects = true
+                    setRequestProperty("Accept", "application/json")
                 }
                 if (conn.responseCode in 200..299) {
                     val txt = conn.inputStream.bufferedReader().use { it.readText() }
@@ -344,16 +436,10 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         val prof = profile.value
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
-                val url = java.net.URL("$base/api/pairing/unlink")
-                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json")
-                }
+                val base = getHttpBase(prof.serverUrl)
                 val body = org.json.JSONObject().put("code", prof.myPairCode)
-                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-                if (conn.responseCode in 200..299) {
+                val (code, _) = executeJsonPost("$base/api/pairing/unlink", body)
+                if (code in 200..299) {
                     withContext(Dispatchers.Main) {
                         val reset = prof.copy(
                             partnerPairCode = "",
@@ -547,32 +633,20 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         onResult: (success: Boolean, message: String, partnerCode: String?, partnerName: String?, partnerAvatarId: String?, partnerAvatarUrl: String?, blueTick: Boolean, greenTick: Boolean) -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val base = profile.value.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
+            val parsedCode = com.example.ui.pairing.QrCodeGenerator.parseScannedCode(qrPayload)
+            val base = getHttpBase(profile.value.serverUrl)
             val endpoint = "$base/api/pairing/qr/scan"
             try {
-                val url = java.net.URL(endpoint)
-                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    setRequestProperty("Content-Type", "application/json")
-                    setRequestProperty("Accept", "application/json")
-                }
                 val body = org.json.JSONObject().apply {
                     put("qrPayload", qrPayload.trim())
                     put("scannedByCode", profile.value.myPairCode)
                 }
-                java.io.OutputStreamWriter(conn.outputStream).use {
-                    it.write(body.toString())
-                    it.flush()
-                }
-                if (conn.responseCode in 200..299) {
-                    val text = java.io.BufferedReader(java.io.InputStreamReader(conn.inputStream)).use { it.readText() }
-                    val json = org.json.JSONObject(text)
+                val (code, respText) = executeJsonPost(endpoint, body)
+                if (code in 200..299) {
+                    val json = org.json.JSONObject(respText)
                     if (json.optBoolean("success", false)) {
                         val pObj = json.optJSONObject("partner")
-                        val code = pObj?.optString("code") ?: json.optString("partnerCode")
+                        val pCode = pObj?.optString("code") ?: json.optString("partnerCode", parsedCode)
                         val name = pObj?.optString("name") ?: json.optString("partnerName", "Partner")
                         val avatarId = pObj?.optString("avatarId") ?: json.optString("partnerAvatarId", "girl_001")
                         val avatarUrl = (pObj?.optString("avatarUrl") ?: json.optString("partnerAvatarUrl")).takeIf { it.isNotBlank() }
@@ -582,7 +656,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                             onResult(
                                 true,
                                 "Partner recognized 💕",
-                                code,
+                                pCode,
                                 name,
                                 avatarId,
                                 avatarUrl,
@@ -591,25 +665,49 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                             )
                         }
                         return@launch
-                    } else {
-                        val errMsg = json.optString("error", json.optString("message", "Invalid QR code"))
-                        withContext(Dispatchers.Main) {
-                            onResult(false, errMsg, null, null, null, null, false, false)
-                        }
-                        return@launch
                     }
-                } else {
+                }
+
+                // If server didn't respond 200, but QR contains a valid partner code:
+                if (parsedCode.length >= 4) {
                     withContext(Dispatchers.Main) {
-                        onResult(false, "Server error (${conn.responseCode})", null, null, null, null, false, false)
+                        onResult(
+                            true,
+                            "Partner recognized from QR 💕",
+                            parsedCode,
+                            "Partner",
+                            "girl_001",
+                            null,
+                            false,
+                            false
+                        )
                     }
+                    return@launch
+                }
+
+                val errMsg = try {
+                    org.json.JSONObject(respText).optString("error", "Could not verify QR code (HTTP $code)")
+                } catch (_: Exception) {
+                    "Could not verify QR code (HTTP $code)"
+                }
+                withContext(Dispatchers.Main) {
+                    onResult(false, errMsg, null, null, null, null, false, false)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    val parsedCode = com.example.ui.pairing.QrCodeGenerator.parseScannedCode(qrPayload)
-                    if (parsedCode.length in 6..9) {
-                        onResult(true, "Offline Code Detected", parsedCode, "Partner", "girl_001", null, false, false)
+                    if (parsedCode.length >= 4) {
+                        onResult(
+                            true,
+                            "Partner recognized from QR 💕",
+                            parsedCode,
+                            "Partner",
+                            "girl_001",
+                            null,
+                            false,
+                            false
+                        )
                     } else {
-                        onResult(false, "Could not verify QR code: ${e.message}", null, null, null, null, false, false)
+                        onResult(false, "Could not verify QR code: ${e.localizedMessage ?: "Network error"}", null, null, null, null, false, false)
                     }
                 }
             }
@@ -1804,19 +1902,12 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         repository.unlinkPartner()
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val base = prof.serverUrl.replace("ws://", "http://").replace("wss://", "https://").trimEnd('/')
-                val url = java.net.URL("$base/api/pairing/unlink")
-                val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json")
-                }
+                val base = getHttpBase(prof.serverUrl)
                 val body = org.json.JSONObject().apply {
                     put("code", myCode)
                     put("partnerCode", partnerCode)
                 }
-                conn.outputStream.bufferedWriter().use { it.write(body.toString()) }
-                val code = conn.responseCode
+                val (code, _) = executeJsonPost("$base/api/pairing/unlink", body)
                 withContext(Dispatchers.Main) { onComplete(code in 200..299) }
             } catch (_: Exception) {
                 withContext(Dispatchers.Main) { onComplete(true) }

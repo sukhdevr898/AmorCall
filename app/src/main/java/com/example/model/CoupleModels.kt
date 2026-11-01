@@ -47,7 +47,7 @@ data class CoupleProfile(
     val avatarId: String = "boy_001",
     val partnerAvatarId: String = "girl_001",
     val accentColorHex: Long = 0xFFFF2D8D,
-    val serverUrl: String = "ws://amorcall.onrender.com/",
+    val serverUrl: String = "wss://amorcall.onrender.com/",
     val isOnboardingCompleted: Boolean = true,
     val isNotificationsMuted: Boolean = false,
     val appTheme: AppTheme = AppTheme.LOVE,

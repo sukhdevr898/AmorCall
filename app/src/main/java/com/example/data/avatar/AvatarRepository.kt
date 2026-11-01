@@ -253,16 +253,28 @@ class AvatarRepository private constructor() {
     }
 
     private fun sanitizeHttpUrl(serverUrl: String): String {
-        var clean = serverUrl.trim()
+        var clean = serverUrl.trim().trimEnd('/')
         if (clean.startsWith("ws://")) {
-            clean = "http://" + clean.substring(5)
+            val host = clean.removePrefix("ws://")
+            clean = if (host.startsWith("localhost") || host.startsWith("10.0.2.2") || host.startsWith("192.168.")) {
+                "http://$host"
+            } else {
+                "https://$host"
+            }
         } else if (clean.startsWith("wss://")) {
-            clean = "https://" + clean.substring(6)
+            clean = "https://" + clean.removePrefix("wss://")
+        } else if (clean.startsWith("http://")) {
+            val host = clean.removePrefix("http://")
+            clean = if (host.startsWith("localhost") || host.startsWith("10.0.2.2") || host.startsWith("192.168.")) {
+                "http://$host"
+            } else {
+                "https://$host"
+            }
         }
         if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
-            clean = "http://$clean"
+            clean = "https://$clean"
         }
-        return clean.trimEnd('/')
+        return clean
     }
 
     companion object {
