@@ -217,20 +217,14 @@ async function dbUpdateAvatar(pairCode, avatarId, avatarUrl) {
     memoryClients.set(pairCode, entry);
   } else {
     entry.avatarId = avatarId;
-    if (avatarUrl) entry.avatarUrl = avatarUrl;
+    entry.avatarUrl = avatarUrl || "";
   }
 
   if (pool && isDbConnected) {
     try {
-      if (avatarUrl) {
-        await pool.query(`
-          UPDATE couples SET avatar_id = $1, avatar_url = $2, updated_at = NOW() WHERE pair_code = $3;
-        `, [avatarId, avatarUrl, pairCode]);
-      } else {
-        await pool.query(`
-          UPDATE couples SET avatar_id = $1, updated_at = NOW() WHERE pair_code = $2;
-        `, [avatarId, pairCode]);
-      }
+      await pool.query(`
+        UPDATE couples SET avatar_id = $1, avatar_url = $2, updated_at = NOW() WHERE pair_code = $3;
+      `, [avatarId, avatarUrl || "", pairCode]);
     } catch (e) {
       console.warn("DB update avatar error:", e.message);
     }
@@ -559,29 +553,29 @@ const server = http.createServer(async (req, res) => {
     const body = await readJsonBody(req);
     const code = (body.pairCode || body.code || parsedUrl.query.code || "").toUpperCase().trim();
     const avatarId = (body.avatarId || "").trim();
+    const clientAvatarUrl = (body.avatarUrl || "").trim();
     if (!code || !avatarId) {
       res.writeHead(400, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ success: false, error: "Missing pairCode or avatarId" }));
     }
-    const exists = getActiveCatalog().some(a => a.id === avatarId);
-    if (!exists) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      return res.end(JSON.stringify({ success: false, error: "Invalid avatarId" }));
-    }
-    await dbUpdateAvatar(code, avatarId);
+    const catMatch = getActiveCatalog().find(a => a.id === avatarId);
+    const resolvedAvatarUrl = clientAvatarUrl || (catMatch ? (catMatch.uploadThingUrl || catMatch.imageUrl) : "");
+    await dbUpdateAvatar(code, avatarId, resolvedAvatarUrl);
     const prof = await dbGetProfile(code);
     if (prof.partnerCode) {
       forwardToTarget(prof.partnerCode, {
         type: "partner_avatar_updated",
         partnerCode: code,
-        partnerAvatarId: avatarId
+        partnerAvatarId: avatarId,
+        partnerAvatarUrl: resolvedAvatarUrl
       });
     }
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({
       success: true,
       avatarId,
-      displayName: prof.userName,
+      avatarUrl: resolvedAvatarUrl,
+      displayName: (prof.fullName && prof.fullName !== "You") ? prof.fullName : prof.userName,
       message: "Avatar updated successfully"
     }));
   }
@@ -595,14 +589,22 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ success: false, error: "Missing code" }));
     }
     const prof = await dbGetProfile(code);
+    let resolvedUrl = prof.avatarUrl;
+    if (!resolvedUrl) {
+      const match = getActiveCatalog().find(a => a.id === prof.avatarId);
+      if (match) resolvedUrl = match.uploadThingUrl || match.imageUrl;
+    }
+    const resolvedName = (prof.fullName && prof.fullName !== "You") ? prof.fullName : ((prof.userName && prof.userName !== "You") ? prof.userName : `User #${prof.pairCode}`);
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({
       success: true,
       partner: {
         code: prof.pairCode,
-        name: prof.userName,
+        name: resolvedName,
+        fullName: prof.fullName,
+        username: prof.username,
         avatarId: prof.avatarId,
-        avatarUrl: prof.avatarUrl || "",
+        avatarUrl: resolvedUrl || "",
         blueTick: !!prof.blueTick,
         greenTick: !!prof.greenTick,
         status: prof.partnerStatus,
@@ -784,13 +786,23 @@ const server = http.createServer(async (req, res) => {
     let partnerInfo = null;
     if (prof.partnerCode) {
       const pProf = await dbGetProfile(prof.partnerCode);
+      let pAvatarUrl = pProf.avatarUrl;
+      if (!pAvatarUrl) {
+        const match = getActiveCatalog().find(a => a.id === pProf.avatarId);
+        if (match) pAvatarUrl = match.uploadThingUrl || match.imageUrl;
+      }
+      const pName = (pProf.fullName && pProf.fullName !== "You") ? pProf.fullName : ((pProf.userName && pProf.userName !== "You") ? pProf.userName : "Partner");
       partnerInfo = {
         code: pProf.pairCode,
-        name: pProf.userName,
+        name: pName,
+        fullName: pProf.fullName,
+        username: pProf.username,
         avatarId: pProf.avatarId,
-        avatarUrl: pProf.avatarUrl || "",
+        avatarUrl: pAvatarUrl || "",
         blueTick: !!pProf.blueTick,
-        greenTick: !!pProf.greenTick
+        greenTick: !!pProf.greenTick,
+        isVerified: !!pProf.isVerified || !!pProf.blueTick,
+        status: pProf.partnerStatus
       };
     }
 
@@ -1274,14 +1286,18 @@ wss.on("connection", (ws, req) => {
 
         case "update_avatar": {
           const avatarId = (data.avatarId || "").trim();
+          const clientAvatarUrl = (data.avatarUrl || "").trim();
           if (registeredCode && avatarId) {
-            await dbUpdateAvatar(registeredCode, avatarId);
+            const catMatch = getActiveCatalog().find(a => a.id === avatarId);
+            const resolvedUrl = clientAvatarUrl || (catMatch ? (catMatch.uploadThingUrl || catMatch.imageUrl) : "");
+            await dbUpdateAvatar(registeredCode, avatarId, resolvedUrl);
             const prof = await dbGetProfile(registeredCode);
             if (prof.partnerCode) {
               forwardToTarget(prof.partnerCode, {
                 type: "partner_avatar_updated",
                 partnerCode: registeredCode,
-                partnerAvatarId: avatarId
+                partnerAvatarId: avatarId,
+                partnerAvatarUrl: resolvedUrl
               });
             }
           }
@@ -1409,9 +1425,17 @@ wss.on("connection", (ws, req) => {
           activeCallSessions.set(callId, session);
 
           const callerProfile = await dbGetProfile(from);
-          const callerDisplayName = (data.callerName && data.callerName !== "You" && data.callerName.trim() !== "")
-            ? data.callerName.trim()
-            : (callerProfile?.fullName || callerProfile?.userName || "Partner");
+          let rawCallerName = (data.callerName && data.callerName.trim() !== "You" && data.callerName.trim() !== "") ? data.callerName.trim() : "";
+          if (!rawCallerName && callerProfile) {
+            rawCallerName = (callerProfile.fullName && callerProfile.fullName !== "You") ? callerProfile.fullName : ((callerProfile.userName && callerProfile.userName !== "You") ? callerProfile.userName : "");
+          }
+          const callerDisplayName = rawCallerName || "Partner";
+
+          let callerAvatarUrl = callerProfile?.avatarUrl || "";
+          if (!callerAvatarUrl && callerProfile?.avatarId) {
+            const match = getActiveCatalog().find(a => a.id === callerProfile.avatarId);
+            if (match) callerAvatarUrl = match.uploadThingUrl || match.imageUrl;
+          }
 
           const delivered = forwardToTarget(target, {
             type: "call_incoming",
@@ -1419,7 +1443,7 @@ wss.on("connection", (ws, req) => {
             from,
             callerName: callerDisplayName,
             callerAvatarId: callerProfile?.avatarId || "boy_001",
-            callerAvatarUrl: callerProfile?.avatarUrl || "",
+            callerAvatarUrl: callerAvatarUrl,
             callerBlueTick: callerProfile ? !!callerProfile.blueTick : false,
             callerGreenTick: callerProfile ? !!callerProfile.greenTick : false,
             callerIsVerified: callerProfile ? (!!callerProfile.isVerified || !!callerProfile.blueTick) : false,

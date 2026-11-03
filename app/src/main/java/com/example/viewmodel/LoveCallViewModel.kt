@@ -139,10 +139,79 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
 
     fun updateSelectedAvatar(avatarId: String, onComplete: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
-            repository.updateAvatarId(avatarId)
+            val resolvedUrl = resolveAvatarUrl(avatarId)
+            val updated = profile.value.copy(
+                avatarId = avatarId,
+                avatarUrl = resolvedUrl,
+                avatarUri = null
+            )
+            repository.saveProfile(updated)
             signalingClient.sendAvatarUpdate(avatarId)
-            val success = avatarRepo.saveAvatarToServer(profile.value.serverUrl, profile.value.myPairCode, avatarId)
+            signalingClient.updateProfile(
+                userName = updated.userName,
+                fullName = updated.fullName,
+                username = updated.username,
+                avatarId = avatarId,
+                avatarUrl = resolvedUrl,
+                statusMsg = updated.statusMsg
+            )
+            val success = avatarRepo.saveAvatarToServer(updated.serverUrl, updated.myPairCode, avatarId)
             onComplete(success)
+        }
+    }
+
+    fun saveUserProfile(
+        displayName: String,
+        fullName: String,
+        username: String,
+        statusMessage: String,
+        selectedAvatarId: String,
+        customPhotoBytes: ByteArray? = null,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            var finalAvatarUrl = resolveAvatarUrl(selectedAvatarId)
+            var finalAvatarUri: String? = null
+
+            if (customPhotoBytes != null) {
+                val b64 = android.util.Base64.encodeToString(customPhotoBytes, android.util.Base64.NO_WRAP)
+                val uploadedUrl = avatarRepo.uploadCustomDp(profile.value.serverUrl, profile.value.myPairCode, b64, "image/jpeg")
+                if (uploadedUrl != null) {
+                    finalAvatarUrl = uploadedUrl
+                }
+            }
+
+            val cleanUserName = displayName.trim().takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+                ?: fullName.trim().takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+                ?: profile.value.userName.takeIf { !it.equals("You", ignoreCase = true) }
+                ?: "User"
+            val cleanFullName = fullName.trim().ifBlank { cleanUserName }
+            val cleanUsername = username.trim().removePrefix("@").ifBlank { cleanUserName.lowercase().replace(" ", "_") }
+            val cleanStatus = statusMessage.trim().ifBlank { "Always together ❤️" }
+
+            val updated = profile.value.copy(
+                userName = cleanUserName,
+                fullName = cleanFullName,
+                username = cleanUsername,
+                statusMsg = cleanStatus,
+                avatarId = selectedAvatarId,
+                avatarUrl = finalAvatarUrl,
+                avatarUri = finalAvatarUri
+            )
+            repository.saveProfile(updated)
+
+            signalingClient.updateProfile(
+                userName = cleanUserName,
+                fullName = cleanFullName,
+                username = cleanUsername,
+                avatarId = selectedAvatarId,
+                avatarUrl = finalAvatarUrl,
+                statusMsg = cleanStatus
+            )
+            signalingClient.sendAvatarUpdate(selectedAvatarId)
+            avatarRepo.saveAvatarToServer(updated.serverUrl, updated.myPairCode, selectedAvatarId)
+
+            onComplete(true)
         }
     }
 
@@ -720,8 +789,16 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
             val myCode = profile.value.myPairCode
             val uploadedUrl = avatarRepo.uploadCustomDp(serverUrl, myCode, base64Data, mimeType)
             if (uploadedUrl != null) {
-                val updated = profile.value.copy(avatarUrl = uploadedUrl)
+                val updated = profile.value.copy(avatarUrl = uploadedUrl, avatarUri = null)
                 repository.saveProfile(updated)
+                signalingClient.updateProfile(
+                    userName = updated.userName,
+                    fullName = updated.fullName,
+                    username = updated.username,
+                    avatarId = updated.avatarId,
+                    avatarUrl = uploadedUrl,
+                    statusMsg = updated.statusMsg
+                )
                 onComplete(true, uploadedUrl)
             } else {
                 onComplete(false, null)
@@ -729,24 +806,123 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun fetchServerDp() {
-        viewModelScope.launch {
+    fun syncPartnerAndOwnProfile() {
+        viewModelScope.launch(Dispatchers.IO) {
             val serverUrl = profile.value.serverUrl
-            val myCode = profile.value.myPairCode
-            val partnerCode = profile.value.partnerPairCode
+            val myCode = profile.value.myPairCode.trim().uppercase()
+            if (myCode.isBlank()) return@launch
 
-            val myDp = avatarRepo.fetchDirectDpUrl(serverUrl, myCode)
-            if (myDp != null && myDp != profile.value.avatarUrl) {
-                repository.saveProfile(profile.value.copy(avatarUrl = myDp))
+            val base = getHttpBase(serverUrl)
+
+            // 1. Sync own profile & verification ticks from server
+            try {
+                val myUrl = java.net.URL("$base/api/profile/me?code=$myCode")
+                val conn = (myUrl.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 6000
+                    readTimeout = 6000
+                    setRequestProperty("Accept", "application/json")
+                }
+                if (conn.responseCode == java.net.HttpURLConnection.HTTP_OK) {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = org.json.JSONObject(body)
+                    if (json.optBoolean("success", false) && json.has("profile")) {
+                        val profObj = json.getJSONObject("profile")
+                        val serverUserName = profObj.optString("userName", "")
+                        val serverFullName = profObj.optString("fullName", "")
+                        val serverUsername = profObj.optString("username", "")
+                        val serverAvatarId = profObj.optString("avatarId", "")
+                        val serverAvatarUrl = profObj.optString("avatarUrl", "")
+                        val serverBlueTick = profObj.optBoolean("blueTick", false)
+                        val serverGreenTick = profObj.optBoolean("greenTick", false)
+                        val serverIsVerified = profObj.optBoolean("isVerified", serverBlueTick)
+                        val serverPartnerCode = profObj.optString("partnerCode", "")
+
+                        var updated = profile.value.copy(
+                            blueTick = serverBlueTick,
+                            greenTick = serverGreenTick,
+                            isVerified = serverIsVerified
+                        )
+                        if (serverAvatarUrl.isNotBlank()) {
+                            updated = updated.copy(avatarUrl = serverAvatarUrl)
+                        } else if (serverAvatarId.isNotBlank()) {
+                            updated = updated.copy(
+                                avatarId = serverAvatarId,
+                                avatarUrl = resolveAvatarUrl(serverAvatarId)
+                            )
+                        }
+                        if (serverFullName.isNotBlank() && !serverFullName.equals("You", ignoreCase = true) && !serverFullName.startsWith("User #")) {
+                            updated = updated.copy(fullName = serverFullName)
+                        }
+                        if (serverUserName.isNotBlank() && !serverUserName.equals("You", ignoreCase = true) && !serverUserName.startsWith("User #")) {
+                            updated = updated.copy(userName = serverUserName)
+                        }
+                        if (serverUsername.isNotBlank() && !serverUsername.equals("duora_user", ignoreCase = true)) {
+                            updated = updated.copy(username = serverUsername)
+                        }
+                        if (serverPartnerCode.isNotBlank() && updated.partnerPairCode.isBlank()) {
+                            updated = updated.copy(partnerPairCode = serverPartnerCode, isPaired = true)
+                        }
+                        repository.saveProfile(updated)
+                    }
+                }
+                conn.disconnect()
+            } catch (e: Exception) {
+                android.util.Log.w("LoveCallViewModel", "syncProfile error: ${e.message}")
             }
 
-            if (partnerCode.isNotBlank()) {
-                val partnerDp = avatarRepo.fetchDirectDpUrl(serverUrl, partnerCode)
-                if (partnerDp != null && partnerDp != profile.value.partnerAvatarUrl) {
-                    repository.saveProfile(profile.value.copy(partnerAvatarUrl = partnerDp))
+            // 2. Sync partner profile & verification ticks from server
+            try {
+                val partnerCode = profile.value.partnerPairCode.trim().uppercase()
+                val statusUrl = java.net.URL("$base/api/pairing/status?code=$myCode")
+                val conn = (statusUrl.openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 6000
+                    readTimeout = 6000
+                    setRequestProperty("Accept", "application/json")
                 }
+                if (conn.responseCode == java.net.HttpURLConnection.HTTP_OK) {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = org.json.JSONObject(body)
+                    if (json.optBoolean("success", false)) {
+                        val isPaired = json.optBoolean("isPaired", false)
+                        val pCode = json.optString("partnerCode", "")
+                        if (isPaired && json.has("partner") && !json.isNull("partner")) {
+                            val pObj = json.getJSONObject("partner")
+                            val pName = pObj.optString("name", "")
+                            val pAvatarId = pObj.optString("avatarId", "girl_001")
+                            var pAvatarUrl = pObj.optString("avatarUrl", "")
+                            if (pAvatarUrl.isBlank() && pAvatarId.isNotBlank()) {
+                                pAvatarUrl = resolveAvatarUrl(pAvatarId)
+                            }
+                            val pBlueTick = pObj.optBoolean("blueTick", false)
+                            val pGreenTick = pObj.optBoolean("greenTick", false)
+
+                            var updated = profile.value.copy(
+                                partnerPairCode = pCode.ifBlank { partnerCode },
+                                isPaired = true,
+                                partnerAvatarId = pAvatarId,
+                                partnerAvatarUrl = pAvatarUrl.ifBlank { null },
+                                partnerBlueTick = pBlueTick,
+                                partnerGreenTick = pGreenTick,
+                                partnerIsVerified = pBlueTick
+                            )
+                            if (pName.isNotBlank() && !pName.equals("You", ignoreCase = true) && !pName.startsWith("User #")) {
+                                updated = updated.copy(partnerName = pName)
+                            }
+                            repository.saveProfile(updated)
+                        }
+                    }
+                }
+                conn.disconnect()
+            } catch (e: Exception) {
+                android.util.Log.w("LoveCallViewModel", "syncPartner error: ${e.message}")
             }
         }
+    }
+
+    fun fetchServerDp() {
+        syncPartnerAndOwnProfile()
     }
 
     private var callTimerJob: Job? = null
@@ -791,6 +967,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
         // Check for app updates from GitHub repository
         checkForUpdates(isManual = false)
 
+        // Sync initial profile and partner data from database
+        syncPartnerAndOwnProfile()
+
         // Observe real-time signaling events
         viewModelScope.launch {
             signalingClient.events.collect { event ->
@@ -801,6 +980,7 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         } else {
                             CallType.VOICE
                         }
+                        val callerAvatar = event.callerAvatarUrl ?: resolveAvatarUrl(event.callerAvatarId)
                         var updated = profile.value.copy(
                             partnerBlueTick = event.callerBlueTick,
                             partnerGreenTick = event.callerGreenTick,
@@ -812,8 +992,8 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         if (event.callerAvatarId.isNotBlank()) {
                             updated = updated.copy(partnerAvatarId = event.callerAvatarId)
                         }
-                        if (event.callerAvatarUrl != null) {
-                            updated = updated.copy(partnerAvatarUrl = event.callerAvatarUrl)
+                        if (callerAvatar.isNotBlank()) {
+                            updated = updated.copy(partnerAvatarUrl = callerAvatar)
                         }
                         repository.saveProfile(updated)
                         triggerIncomingCall(type, callerName = event.callerName, incomingCallId = event.callId)
@@ -870,8 +1050,9 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         if (event.partnerAvatarId.isNotBlank()) {
                             updated = updated.copy(partnerAvatarId = event.partnerAvatarId)
                         }
-                        if (event.partnerAvatarUrl != null) {
-                            updated = updated.copy(partnerAvatarUrl = event.partnerAvatarUrl)
+                        val partnerResolvedAvatar = event.partnerAvatarUrl ?: resolveAvatarUrl(event.partnerAvatarId)
+                        if (partnerResolvedAvatar.isNotBlank()) {
+                            updated = updated.copy(partnerAvatarUrl = partnerResolvedAvatar)
                         }
                         repository.saveProfile(updated)
                     }
@@ -893,19 +1074,24 @@ class LoveCallViewModel(application: Application) : AndroidViewModel(application
                         val updated = profile.value.copy(
                             blueTick = event.blueTick,
                             greenTick = event.greenTick,
+                            isVerified = event.blueTick,
                             avatarUrl = event.avatarUrl ?: profile.value.avatarUrl
                         )
                         repository.saveProfile(updated)
+                        syncPartnerAndOwnProfile()
                     }
                     is SignalingEvent.AccountBlocked -> {
                         val updated = profile.value.copy(isBlocked = true)
                         repository.saveProfile(updated)
                     }
                     is SignalingEvent.PartnerAvatarUpdated -> {
-                        repository.updatePartnerAvatarId(event.avatarId)
-                        if (event.avatarUrl != null) {
-                            repository.saveProfile(profile.value.copy(partnerAvatarUrl = event.avatarUrl))
-                        }
+                        val pAvatar = event.avatarUrl ?: resolveAvatarUrl(event.avatarId)
+                        repository.saveProfile(
+                            profile.value.copy(
+                                partnerAvatarId = event.avatarId,
+                                partnerAvatarUrl = pAvatar
+                            )
+                        )
                     }
                     is SignalingEvent.PairingRequestReceived -> {
                         _incomingPairingRequest.value = IncomingPairingRequest(

@@ -944,10 +944,16 @@ fun HomeScreen(
 
                 // 3. Couple Connection Summary Card
                 item {
+                    val resolvedMyName = profile.fullName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+                        ?: profile.userName.ifBlank { "You" }
+                    val resolvedPartnerName = profile.partnerName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+                        ?: profile.partnerNickname.takeIf { it.isNotBlank() && !it.equals("Sweetheart", ignoreCase = true) }
+                        ?: "Partner"
+
                     CoupleHeroCard(
-                        userName = profile.userName,
+                        userName = resolvedMyName,
                         userCode = profile.myPairCode,
-                        partnerName = profile.partnerName,
+                        partnerName = resolvedPartnerName,
                         partnerNickname = profile.partnerNickname,
                         partnerCode = profile.partnerPairCode,
                         partnerStatus = profile.partnerStatus,

@@ -1080,16 +1080,20 @@ function getAdminHtml(baseUrl) {
       }
 
       container.innerHTML = filtered.map(u => {
-        const userHandle = u.username ? ('@' + u.username) : ('@' + (u.userName || 'user').toLowerCase().replace(/\\s+/g, '_'));
-        const displayName = u.fullName || u.userName || 'User';
-        const partnerName = u.partnerName || 'Partner';
-        const avatarSrc = u.avatarUrl || ('/assets/avatars/' + (u.avatarId.startsWith('girl') ? 'girls/' : 'boys/') + u.avatarId + '.webp');
+        const userHandle = u.username ? ('@' + u.username) : ('@' + (u.userName || 'user').toLowerCase().replace(/\s+/g, '_'));
+        const displayName = (u.fullName && u.fullName !== 'You') ? u.fullName : ((u.userName && u.userName !== 'You') ? u.userName : ('User #' + u.pairCode));
+        const partnerName = u.partnerName || (u.partnerCode ? ('#' + u.partnerCode) : 'Single');
+        let avatarSrc = u.avatarUrl;
+        if (!avatarSrc) {
+          const match = liveCatalog.find(a => a.id === u.avatarId);
+          avatarSrc = match ? (match.uploadThingUrl || match.imageUrl) : 'https://v61nfvcr2l.ufs.sh/f/KhRWxmH15t2WQ0vA94V9fO0xUu14o8YqB2eZlFwXp6Ldrk5T';
+        }
 
         const blueBadge = (u.blueTick || u.isVerified)
-          ? '<img class="badge-icon" src="/assets/blue_tick.png" title="Verified Blue Badge" onerror="this.style.display=\\'none\\'"/>'
+          ? '<img class="badge-icon" src="/assets/blue_tick.png" title="Verified Blue Badge" onerror="this.style.display=\'none\'"/>'
           : '';
         const greenBadge = u.greenTick
-          ? '<img class="badge-icon" src="/assets/green_tick.png" title="Official Admin Green Badge" onerror="this.style.display=\\'none\\'"/>'
+          ? '<img class="badge-icon" src="/assets/green_tick.png" title="Official Admin Green Badge" onerror="this.style.display=\'none\'"/>'
           : '';
 
         let partnerRow = '';
@@ -1100,7 +1104,7 @@ function getAdminHtml(baseUrl) {
               '<span>' + partnerName + '</span>' +
               '<span style="font-family:JetBrains Mono, monospace; font-size:0.72rem; color:var(--text-muted);">#' + u.partnerCode + '</span>' +
             '</div>' +
-            (u.partnerCode ? '<button class="btn btn-outline" style="padding:4px 8px; font-size:0.7rem; color:var(--hot-pink);" onclick="unpairUser(\\'' + u.pairCode + '\\')">Unlink</button>' : '') +
+            (u.partnerCode ? '<button class="btn btn-outline" style="padding:4px 8px; font-size:0.7rem; color:var(--hot-pink);" onclick="unpairUser(\'' + u.pairCode + '\')">Unlink</button>' : '') +
           '</div>';
         } else {
           partnerRow = '<div class="partner-box">' +
@@ -1111,7 +1115,7 @@ function getAdminHtml(baseUrl) {
         return '<div class="user-card ' + (u.isBlocked ? 'blocked' : '') + '">' +
           '<div class="user-top">' +
             '<div class="avatar-wrap">' +
-              '<img class="user-avatar" src="' + avatarSrc + '" onerror="this.src=\\'/assets/avatars/boys/boy_001.webp\\'"/>' +
+              '<img class="user-avatar" src="' + avatarSrc + '" onerror="this.src=\'https://v61nfvcr2l.ufs.sh/f/KhRWxmH15t2WQ0vA94V9fO0xUu14o8YqB2eZlFwXp6Ldrk5T\'"/>' +
               '<span class="status-badge ' + (u.isOnline ? 'online' : 'offline') + '" title="' + (u.isOnline ? 'Online' : 'Offline') + '"></span>' +
             '</div>' +
             '<div class="user-info">' +
@@ -1676,6 +1680,29 @@ async function handleAdminRoutes(req, res, parsedUrl, readJsonBody, dbContext) {
         else {
           entry.blueTick = !!status;
           entry.isVerified = !!status;
+        }
+      }
+
+      if (forwardToTarget) {
+        const clientBlue = type === "blue" ? !!status : !!entry?.blueTick;
+        const clientGreen = type === "green" ? !!status : !!entry?.greenTick;
+        forwardToTarget(code, {
+          type: "registered",
+          pairCode: code,
+          blueTick: clientBlue,
+          greenTick: clientGreen,
+          isVerified: clientBlue
+        });
+        const pCode = entry?.partnerCode;
+        if (pCode) {
+          forwardToTarget(pCode, {
+            type: "partner_status",
+            isOnline: true,
+            partnerCode: code,
+            blueTick: clientBlue,
+            greenTick: clientGreen,
+            isVerified: clientBlue
+          });
         }
       }
 

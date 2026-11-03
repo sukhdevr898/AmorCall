@@ -296,7 +296,9 @@ fun ChatListView(
         Spacer(modifier = Modifier.height(8.dp))
 
         // Partner Conversation Item
-        val partnerNameDisplay = profile.partnerNickname.ifBlank { profile.partnerName.ifBlank { "My Partner" } }
+        val partnerNameDisplay = profile.partnerName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+            ?: profile.partnerNickname.takeIf { it.isNotBlank() && !it.equals("Sweetheart", ignoreCase = true) && !it.equals("You", ignoreCase = true) }
+            ?: "Partner"
         val matchesSearch = searchQuery.isBlank() ||
                 partnerNameDisplay.contains(searchQuery, ignoreCase = true) ||
                 (lastMessage?.content?.contains(searchQuery, ignoreCase = true) == true)
@@ -765,8 +767,11 @@ fun IndividualChatView(
 
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                val headerPartnerName = profile.partnerName.takeIf { it.isNotBlank() && !it.equals("You", ignoreCase = true) }
+                                    ?: profile.partnerNickname.takeIf { it.isNotBlank() && !it.equals("Sweetheart", ignoreCase = true) && !it.equals("You", ignoreCase = true) }
+                                    ?: "Partner"
                                 Text(
-                                    text = profile.partnerName.ifBlank { "My Love ❤️" },
+                                    text = headerPartnerName,
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface

@@ -245,10 +245,10 @@ private fun SettingsMainView(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val avatarUrl = viewModel.resolveAvatarThumbnailUrl(profile.avatarId)
+                val avatarToDisplay = profile.avatarUrl ?: profile.avatarUri ?: viewModel.resolveAvatarThumbnailUrl(profile.avatarId)
                 val painter = rememberAsyncImagePainter(
                     model = ImageRequest.Builder(context)
-                        .data(profile.avatarUri ?: avatarUrl)
+                        .data(avatarToDisplay)
                         .crossfade(true)
                         .build()
                 )
