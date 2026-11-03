@@ -157,9 +157,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   decoration: BoxDecoration(
                     color: DuoraColors.surface,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.override(
-                      border: const BorderSide(color: DuoraColors.borderMuted),
-                    ).border,
+                    border: Border.all(color: DuoraColors.borderMuted),
                   ),
                   child: Row(
                     children: [

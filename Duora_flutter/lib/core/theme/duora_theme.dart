@@ -69,7 +69,7 @@ class DuoraTheme {
         onSurface: DuoraColors.textPrimary,
       ),
       fontFamily: 'Inter',
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: DuoraColors.surfaceCard,
         elevation: 0,
         shape: RoundedRectangleBorder(
