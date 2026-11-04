@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/duora_theme.dart';
 
 enum DuoraTab {
   home,
@@ -17,80 +16,165 @@ class DuoraBottomBar extends StatelessWidget {
   const DuoraBottomBar({
     super.key,
     required this.currentTab,
-    this.unreadChatCount = 0,
+    this.unreadChatCount = 3,
     required this.onTabSelected,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(
-          top: BorderSide(color: Colors.grey.shade200, width: 1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 16,
-            offset: const Offset(0, -4),
+      color: Colors.transparent,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        clipBehavior: Clip.none,
+        children: [
+          // 1. Curved Glassy Navigation Bar Background
+          Container(
+            height: 72,
+            margin: const EdgeInsets.only(left: 16, right: 16, bottom: 18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF2C195E),
+                  Color(0xFF3F207D),
+                  Color(0xFF211452),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(36),
+              border: Border.all(
+                color: const Color(0xFFB057F7).withOpacity(0.35),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF5B3DF5).withOpacity(0.35),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                // 1. Home
+                _NavItem(
+                  label: 'Home',
+                  icon: Icons.home_rounded,
+                  isSelected: currentTab == DuoraTab.home,
+                  onTap: () => onTabSelected(DuoraTab.home),
+                ),
+
+                // 2. Chat
+                _NavItem(
+                  label: 'Chat',
+                  icon: Icons.chat_bubble_outline_rounded,
+                  badgeCount: unreadChatCount,
+                  isSelected: currentTab == DuoraTab.chat,
+                  onTap: () => onNavigateTabOrScreen(DuoraTab.chat),
+                ),
+
+                // Placeholder space for center elevated Calls button
+                const SizedBox(width: 58),
+
+                // 4. Notes
+                _NavItem(
+                  label: 'Notes',
+                  icon: Icons.sticky_note_2_outlined,
+                  isSelected: currentTab == DuoraTab.notes,
+                  onTap: () => onNavigateTabOrScreen(DuoraTab.notes),
+                ),
+
+                // 5. Settings
+                _NavItem(
+                  label: 'Settings',
+                  icon: Icons.settings_rounded,
+                  isSelected: currentTab == DuoraTab.settings,
+                  onTap: () => onNavigateTabOrScreen(DuoraTab.settings),
+                ),
+              ],
+            ),
+          ),
+
+          // 2. Floating Heart Accent above Centerpiece
+          Positioned(
+            bottom: 74,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFFF2D8D).withOpacity(0.6),
+                    blurRadius: 12,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.favorite_rounded,
+                color: Color(0xFFFFB6D5),
+                size: 16,
+              ),
+            ),
+          ),
+
+          // 3. Signature Centerpiece: Elevated Floating Calls Button
+          Positioned(
+            bottom: 28,
+            child: GestureDetector(
+              onTap: () => onTabSelected(DuoraTab.call),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF5B3DF5),
+                      Color(0xFFFF2D8D),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF2D8D).withOpacity(0.55),
+                      blurRadius: 18,
+                      spreadRadius: 2,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.call_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _NavItem(
-                tab: DuoraTab.home,
-                label: 'Home',
-                icon: Icons.home_rounded,
-                isSelected: currentTab == DuoraTab.home,
-                onTap: () => onTabSelected(DuoraTab.home),
-              ),
-              _NavItem(
-                tab: DuoraTab.chat,
-                label: 'Chat',
-                icon: Icons.chat_bubble_rounded,
-                isSelected: currentTab == DuoraTab.chat,
-                badgeCount: unreadChatCount,
-                onTap: () => onTabSelected(DuoraTab.chat),
-              ),
-              _NavItem(
-                tab: DuoraTab.call,
-                label: 'Calls',
-                icon: Icons.call_rounded,
-                isSelected: currentTab == DuoraTab.call,
-                onTap: () => onTabSelected(DuoraTab.call),
-              ),
-              _NavItem(
-                tab: DuoraTab.notes,
-                label: 'Notes',
-                icon: Icons.edit_note_rounded,
-                isSelected: currentTab == DuoraTab.notes,
-                onTap: () => onTabSelected(DuoraTab.notes),
-              ),
-              _NavItem(
-                tab: DuoraTab.settings,
-                label: 'Settings',
-                icon: Icons.settings_rounded,
-                isSelected: currentTab == DuoraTab.settings,
-                onTap: () => onTabSelected(DuoraTab.settings),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
+  }
+
+  void onNavigateTabOrScreen(DuoraTab tab) {
+    onTabSelected(tab);
   }
 }
 
 class _NavItem extends StatelessWidget {
-  final DuoraTab tab;
   final String label;
   final IconData icon;
   final bool isSelected;
@@ -98,7 +182,6 @@ class _NavItem extends StatelessWidget {
   final VoidCallback onTap;
 
   const _NavItem({
-    required this.tab,
     required this.label,
     required this.icon,
     required this.isSelected,
@@ -108,46 +191,56 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final activeColor = DuoraColors.primaryPink;
-    final inactiveColor = const Color(0xFF8B8398);
-
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        padding: isSelected
+            ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
+            : const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: isSelected
+            ? BoxDecoration(
+                color: const Color(0xFF5B3DF5).withOpacity(0.5),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFB057F7).withOpacity(0.6),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF5B3DF5).withOpacity(0.3),
+                    blurRadius: 8,
+                  ),
+                ],
+              )
+            : null,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Stack(
               clipBehavior: Clip.none,
               children: [
-                AnimatedScale(
-                  scale: isSelected ? 1.12 : 1.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    icon,
-                    size: 24,
-                    color: isSelected ? activeColor : inactiveColor,
-                  ),
+                Icon(
+                  icon,
+                  size: isSelected ? 22 : 20,
+                  color: isSelected ? Colors.white : const Color(0xFFB3ADCA),
                 ),
                 if (badgeCount > 0)
                   Positioned(
                     top: -4,
                     right: -8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: DuoraColors.primaryPink,
+                      padding: const EdgeInsets.all(3.5),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF2D8D),
                         shape: BoxShape.circle,
-                        border: Border.all(color: DuoraColors.surface, width: 1.5),
                       ),
                       child: Text(
-                        badgeCount > 99 ? '99+' : badgeCount.toString(),
+                        badgeCount.toString(),
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 9,
+                          fontSize: 8.5,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -155,33 +248,13 @@ class _NavItem extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               label,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? activeColor : inactiveColor,
-              ),
-            ),
-            const SizedBox(height: 4),
-            // Glowing bottom dot / pill indicator
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: isSelected ? 18 : 0,
-              height: 3,
-              decoration: BoxDecoration(
-                color: isSelected ? DuoraColors.primaryPink : Colors.transparent,
-                borderRadius: BorderRadius.circular(2),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: DuoraColors.primaryPink.withOpacity(0.6),
-                          blurRadius: 6,
-                          spreadRadius: 1,
-                        ),
-                      ]
-                    : null,
+                color: isSelected ? Colors.white : const Color(0xFFB3ADCA),
               ),
             ),
           ],

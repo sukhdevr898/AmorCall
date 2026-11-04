@@ -31,7 +31,8 @@ class _MainShellScreenState extends State<MainShellScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: DuoraColors.background,
+      extendBody: true,
+      backgroundColor: const Color(0xFFDCD2F6),
       body: IndexedStack(
         index: _currentTab.index,
         children: [
@@ -44,7 +45,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
       ),
       bottomNavigationBar: DuoraBottomBar(
         currentTab: _currentTab,
-        unreadChatCount: 1,
+        unreadChatCount: 3,
         onTabSelected: _onTabSelected,
       ),
     );
