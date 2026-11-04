@@ -25,14 +25,15 @@ class DuoraBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: DuoraColors.surface.withOpacity(0.95),
-        border: const Border(
-          top: BorderSide(color: DuoraColors.borderMuted, width: 1),
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(
+          top: BorderSide(color: Colors.grey.shade200, width: 1),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.4),
-            blurRadius: 20,
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 16,
             offset: const Offset(0, -4),
           ),
         ],
@@ -108,7 +109,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeColor = DuoraColors.primaryPink;
-    final inactiveColor = DuoraColors.textMuted;
+    final inactiveColor = const Color(0xFF8B8398);
 
     return GestureDetector(
       onTap: onTap,

@@ -15,150 +15,237 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
+  late AnimationController _progressController;
+  late Animation<double> _progressAnimation;
+  bool _navigated = false;
 
   @override
   void initState() {
     super.initState();
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    )..repeat(reverse: true);
 
-    _pulseAnimation = Tween<double>(begin: 0.92, end: 1.08).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    _progressController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2600),
     );
 
-    _initializeApp();
+    _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _progressController, curve: Curves.easeInOut),
+    );
+
+    _progressController.forward();
+
+    _startAppFlow();
   }
 
-  Future<void> _initializeApp() async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-    
-    // Allow splash animation and verify session
-    await Future.wait([
-      authService.checkAuthStatus(),
-      Future.delayed(const Duration(milliseconds: 2200)),
-    ]);
+  Future<void> _startAppFlow() async {
+    // Guaranteed non-blocking auth check
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      await authService.checkAuthStatus().timeout(
+        const Duration(milliseconds: 2000),
+        onTimeout: () {
+          debugPrint('Auth check timed out safely. Continuing to app.');
+        },
+      );
+    } catch (e) {
+      debugPrint('Safe auth check exception: $e');
+    }
 
-    if (!mounted) return;
+    // Wait until progress bar completes
+    await Future.delayed(const Duration(milliseconds: 2700));
+
+    if (!mounted || _navigated) return;
+    _navigated = true;
+
+    final authService = Provider.of<AuthService>(context, listen: false);
 
     if (authService.isAuthenticated) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainShellScreen()),
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const MainShellScreen(),
+          transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+          transitionDuration: const Duration(milliseconds: 400),
+        ),
       );
     } else {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const AuthScreen(initialIsLogin: true)),
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const AuthScreen(initialIsLogin: true),
+          transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+          transitionDuration: const Duration(milliseconds: 400),
+        ),
       );
     }
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
+    _progressController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: DuoraColors.luxuryBackgroundGradient,
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Decorative background light glow
-            Positioned(
-              top: MediaQuery.of(context).size.height * 0.35,
-              child: Container(
-                width: 240,
-                height: 240,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: DuoraColors.primaryPink.withOpacity(0.12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: DuoraColors.primaryPink.withOpacity(0.2),
-                      blurRadius: 90,
-                      spreadRadius: 20,
-                    ),
-                  ],
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 1. Romantic couple sunset in flower field background
+          Image.asset(
+            'assets/images/bg_splash.png',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFFFFB6C1), Color(0xFFFF69B4), Color(0xFFFF1493)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
               ),
             ),
+          ),
 
-            // Pulsing Duora Branding Icon & Name
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+          // 2. Soft romantic pink gradient overlay
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withOpacity(0.1),
+                  Colors.black.withOpacity(0.2),
+                  Colors.black.withOpacity(0.55),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+
+          // 3. Center Branding: Glossy Dual Heart & Duora Logo
+          SafeArea(
+            child: Column(
               children: [
-                ScaleTransition(
-                  scale: _pulseAnimation,
-                  child: Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      gradient: DuoraColors.primaryGradient,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: DuoraColors.primaryPink.withOpacity(0.45),
-                          blurRadius: 28,
-                          offset: const Offset(0, 8),
+                const Spacer(flex: 3),
+
+                // Glossy Dual 3D Heart Symbol
+                Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF2D8D).withOpacity(0.45),
+                        blurRadius: 40,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: Image.asset(
+                    'assets/images/logo_heart.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.favorite_rounded,
+                      size: 90,
+                      color: Color(0xFFFF2D8D),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Duora Always Together Wordmark
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  height: 60,
+                  child: Image.asset(
+                    'assets/images/logo_full_duora.png',
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Duora',
+                          style: TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        Text(
+                          'Always Together',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white70,
+                            letterSpacing: 2.0,
+                          ),
                         ),
                       ],
                     ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.favorite_rounded,
-                        color: Colors.white,
-                        size: 52,
-                      ),
+                  ),
+                ),
+
+                const Spacer(flex: 4),
+
+                // 4. Bottom Status & Pill Loading Progress Bar
+                const Text(
+                  'Bringing you closer...',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                    shadows: [
+                      Shadow(color: Colors.black45, blurRadius: 8),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Pill-shaped animated progress bar
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 48),
+                  child: Container(
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: AnimatedBuilder(
+                      animation: _progressAnimation,
+                      builder: (context, _) {
+                        return FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: _progressAnimation.value,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF2D8D), Color(0xFFFF6584)],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF2D8D).withOpacity(0.8),
+                                  blurRadius: 10,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
-                const SizedBox(height: 32),
-                const Text(
-                  'DUORA',
-                  style: TextStyle(
-                    color: DuoraColors.textPrimary,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 4.0,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Two Hearts • One Space',
-                  style: TextStyle(
-                    color: DuoraColors.textSecondary,
-                    fontSize: 14,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
+
+                const SizedBox(height: 40),
               ],
             ),
-
-            // Bottom loading status indicator
-            const Positioned(
-              bottom: 48,
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  valueColor: AlwaysStoppedAnimation<Color>(DuoraColors.primaryPink),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
